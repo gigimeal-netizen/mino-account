@@ -223,6 +223,20 @@
     flex: 1 1 100%; text-align: right;
   }
 
+  /* Products (제품 & 원가): same row rhythm as the ingredient manager — name+delete on top,
+     portion weight/selling price on a wrapping line, computed cost/margin below. */
+  .product-row{ padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .product-row:last-of-type{ border-bottom: none; }
+  .product-top{ display:flex; align-items:center; gap:8px; }
+  .product-name{ flex: 1 1 auto; min-width: 0; }
+  .product-cost-inputs{ display:flex; align-items:center; gap:6px; flex-wrap: wrap; margin-top: 8px; }
+  .product-weight{ flex: 1 1 90px; min-width: 0; }
+  .product-price{ flex: 1 1 90px; min-width: 0; }
+  .product-cost-result{
+    font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
+    text-align: right; margin-top: 6px;
+  }
+
 
   .pmpm{ display:flex; align-items:center; gap:8px; margin-top: 12px; }
   .pmpm button{
@@ -644,6 +658,14 @@
         <button class="io-btn" id="copyLinkBtn">복사</button>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="productsCard" style="display:none;">
+    <h2>제품 &amp; 원가</h2>
+    <p class="hint" id="recipeCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
+    <p class="hint warn-hint" id="unpricedIngredientsHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
+    <div id="productsList"></div>
+    <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
   </section>
 
   <!--
@@ -1115,6 +1137,10 @@
 
     stampTotal.textContent = fmt(total);
     totalWeightText.textContent = fmt(total) + 'g';
+
+    // Ingredient/ratio edits change the recipe's cost-per-gram — keep the products card (if
+    // it's the one currently shown, i.e. an owned saved recipe is selected) live in sync.
+    if (productsCardEl.style.display !== 'none') refreshProductCosts();
   }
 
   // Engine switch: bread uses the baker's-% engine (flour card, %, base-flour field);
@@ -1324,6 +1350,11 @@
   var shareSelectedBtn = document.getElementById('shareSelectedBtn');
   var deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
   var selectedSharePanelEl = document.getElementById('selectedSharePanel');
+  var productsCardEl = document.getElementById('productsCard');
+  var productsListEl = document.getElementById('productsList');
+  var recipeCostPerGramHintEl = document.getElementById('recipeCostPerGramHint');
+  var unpricedIngredientsHintEl = document.getElementById('unpricedIngredientsHint');
+  var myProducts = []; // products rows for whichever recipe is currently selected
   var toggleLinkBtn = document.getElementById('toggleLinkBtn');
   var linkRowEl = document.getElementById('linkRow');
   var linkUrlTextEl = document.getElementById('linkUrlText');
@@ -1443,6 +1474,40 @@
     if (unitType === 'ea') return 0;
     var grams = (parseFloat(amount) || 0) * gramsPerPurchaseUnit(unitType);
     return grams > 0 ? (parseFloat(price) || 0) / grams : 0;
+  }
+
+  // A recipe's cost-per-gram is scale-invariant — the ratio between ingredients is what
+  // matters, not whatever multiplier/target-total happens to be showing right now, since
+  // both the numerator (cost) and denominator (weight) scale together. So this just needs
+  // the recipe's ratios (state.flours/state.ingredients), not computeFlourWeight()'s actual
+  // current output. price_per_gram of 0 (never priced, or an 'ea'-unit ingredient that can't
+  // be weight-converted) is treated as "unpriced" — contributes 0 cost and flags the result
+  // rather than silently understating it.
+  function computeRecipeCostPerGram(){
+    var totalCost = 0, totalWeight = 0, hasUnpriced = false;
+    function priceFor(row){
+      if (row.ingredientId){
+        var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
+        if (found && found.price_per_gram > 0) return found.price_per_gram;
+      }
+      hasUnpriced = true;
+      return 0;
+    }
+    if (state.type === 'bread'){
+      var BASE = 100; // arbitrary basis (flour bucket = 100) — only the ratio matters
+      state.flours.concat(state.ingredients).forEach(function(row){
+        var w = BASE * (parseFloat(row.pct) || 0) / 100;
+        totalCost += w * priceFor(row);
+        totalWeight += w;
+      });
+    } else {
+      state.ingredients.forEach(function(row){
+        var w = parseFloat(row.weight) || 0;
+        totalCost += w * priceFor(row);
+        totalWeight += w;
+      });
+    }
+    return { costPerGram: totalWeight > 0 ? totalCost / totalWeight : 0, hasUnpriced: hasUnpriced };
   }
 
   function loadMyIngredients(){
@@ -1575,6 +1640,106 @@
         });
       }
     });
+  }
+
+  function loadProducts(recipeId){
+    supabase.from('products').select('*').eq('recipe_id', recipeId).order('created_at').then(function(res){
+      if (res.error){ alert('제품 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myProducts = res.data || [];
+      renderProductsList();
+    });
+  }
+
+  // Re-reads every currently-rendered product row's own inputs (rather than myProducts,
+  // which may lag behind an unsaved keystroke) so cost/margin update live as the user types,
+  // matching the same "recompute into existing nodes" rhythm as updateDisplays() itself.
+  function refreshProductCosts(){
+    var cost = computeRecipeCostPerGram();
+    recipeCostPerGramHintEl.textContent = '이 레시피의 g당 원가: ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g';
+    unpricedIngredientsHintEl.style.display = cost.hasUnpriced ? 'block' : 'none';
+
+    productsListEl.querySelectorAll('.product-row').forEach(function(row){
+      var weightEl = row.querySelector('.product-weight');
+      var priceEl = row.querySelector('.product-price');
+      var resultEl = row.querySelector('.product-cost-result');
+      var weight = parseFloat(weightEl.value) || 0;
+      var price = parseFloat(priceEl.value) || 0;
+      var productCost = Math.round(cost.costPerGram * weight);
+      var margin = price - productCost;
+      var marginRate = price > 0 ? Math.round(margin / price * 100) : null;
+      resultEl.textContent = '원가 ' + productCost + '원 · 마진 ' + margin + '원' +
+        (marginRate !== null ? ' (마진율 ' + marginRate + '%)' : '');
+    });
+  }
+
+  function renderProductsList(){
+    productsListEl.innerHTML = '';
+    myProducts.forEach(function(pd){
+      var row = document.createElement('div');
+      row.className = 'product-row';
+      row.innerHTML =
+        '<div class="product-top">' +
+          '<input class="product-name text-input">' +
+          '<button type="button" class="icon-btn danger product-del" aria-label="제품 삭제">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<polyline points="3 6 5 6 21 6"></polyline>' +
+              '<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>' +
+              '<line x1="10" y1="11" x2="10" y2="17"></line>' +
+              '<line x1="14" y1="11" x2="14" y2="17"></line>' +
+            '</svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="product-cost-inputs">' +
+          '<input class="product-weight" type="number" inputmode="decimal" placeholder="1개당(g)">' +
+          '<span class="unit">g</span>' +
+          '<input class="product-price" type="number" inputmode="decimal" placeholder="판매가">' +
+          '<span class="unit">원</span>' +
+        '</div>' +
+        '<div class="product-cost-result"></div>';
+      productsListEl.appendChild(row);
+
+      var nameEl = row.querySelector('.product-name');
+      var weightEl = row.querySelector('.product-weight');
+      var priceEl = row.querySelector('.product-price');
+      var delBtn = row.querySelector('.product-del');
+
+      nameEl.value = pd.name || '';
+      weightEl.value = pd.portion_weight || 0;
+      priceEl.value = pd.selling_price || 0;
+
+      function saveFields(fields){
+        supabase.from('products').update(fields).eq('id', pd.id).then(function(res){
+          if (res.error){ alert('제품 정보 저장 실패: ' + res.error.message); return; }
+          Object.keys(fields).forEach(function(k){ pd[k] = fields[k]; });
+        });
+      }
+      nameEl.addEventListener('blur', function(){
+        var typed = nameEl.value.trim() || pd.name;
+        nameEl.value = typed;
+        if (typed !== pd.name) saveFields({ name: typed });
+      });
+      function saveWeightPrice(){
+        saveFields({
+          portion_weight: parseFloat(weightEl.value) || 0,
+          selling_price: parseFloat(priceEl.value) || 0
+        });
+      }
+      weightEl.addEventListener('input', refreshProductCosts);
+      priceEl.addEventListener('input', refreshProductCosts);
+      weightEl.addEventListener('blur', saveWeightPrice);
+      priceEl.addEventListener('blur', saveWeightPrice);
+
+      delBtn.addEventListener('click', function(){
+        if (!confirm('"' + (pd.name || '이 제품') + '"을 삭제할까요?')) return;
+        supabase.from('products').delete().eq('id', pd.id).then(function(res){
+          if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+          myProducts = myProducts.filter(function(other){ return other.id !== pd.id; });
+          renderProductsList();
+          showToast('제품을 삭제했어요');
+        });
+      });
+    });
+    refreshProductCosts();
   }
 
   // A flour/ingredient row stores both `ingredientId` (the live link) and a `name` snapshot.
@@ -1713,6 +1878,8 @@
     shareSelectedBtn.style.display = 'none';
     deleteSelectedBtn.style.display = 'none';
     selectedSharePanelEl.style.display = 'none';
+    productsCardEl.style.display = 'none';
+    myProducts = [];
   }
 
   function renderSelectedRecipe(recipe){
@@ -1722,6 +1889,8 @@
     deleteSelectedBtn.style.display = isOwner ? '' : 'none';
     if (!isOwner){
       selectedSharePanelEl.style.display = 'none';
+      productsCardEl.style.display = 'none';
+      myProducts = [];
       return;
     }
     toggleLinkBtn.textContent = recipe.share_token ? '링크 끄기' : '링크 켜기';
@@ -1731,6 +1900,10 @@
     } else {
       linkRowEl.style.display = 'none';
     }
+    // 제품/원가 정보는 저장된 레시피(recipe_id가 있어야 하는)와 소유자에게만 의미가 있다 —
+    // 저장 안 된 새 레시피나 다른 사람 레시피에서는 카드 자체를 숨긴다(위 return 분기).
+    productsCardEl.style.display = 'block';
+    loadProducts(recipe.id);
   }
 
   // Custom searchable dropdown (native <datalist> can't be restyled and can't be
@@ -2014,6 +2187,14 @@
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
       renderIngredientManager(ingredientManagerSearchInput.value);
+    });
+    document.getElementById('addProductBtn').addEventListener('click', function(){
+      if (!currentUser || !selectedRecipeId) return;
+      supabase.from('products').insert({ owner_id: currentUser.id, recipe_id: selectedRecipeId, name: '새 제품' }).select().single().then(function(res){
+        if (res.error){ alert('제품 추가 실패: ' + res.error.message); return; }
+        myProducts.push(res.data);
+        renderProductsList();
+      });
     });
     document.addEventListener('click', function(e){
       if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();

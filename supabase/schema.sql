@@ -53,11 +53,28 @@ create table ingredients (
   updated_at timestamptz not null default now()
 );
 
+-- One recipe (formula/ratio) can back multiple sellable products (different portion sizes/
+-- prices) — see account.html's computeRecipeCostPerGram()/renderProductsList(). Owner-only:
+-- unlike recipes, there's no reason a share-link visitor should see cost/selling-price data.
+create table products (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  name text not null default '새 제품',
+  portion_weight numeric not null default 0, -- 1개당 중량(g)
+  selling_price numeric not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table recipes enable row level security;
 alter table recipe_shares enable row level security;
 alter table ingredients enable row level security;
+alter table products enable row level security;
 
 create policy "owner full access" on ingredients for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "owner full access" on products for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
 -- recipes' "shared read access" policy needs to check recipe_shares, and recipe_shares'
