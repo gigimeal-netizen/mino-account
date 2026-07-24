@@ -496,11 +496,6 @@
           <p class="hint link-url" id="linkUrlText"></p>
           <button class="io-btn" id="copyLinkBtn">복사</button>
         </div>
-        <div class="field-row">
-          <span class="field-label">계정과 공유</span>
-          <input type="email" id="shareEmailInput" class="text-input" placeholder="상대방 이메일" aria-label="공유할 이메일">
-          <button class="io-btn" id="shareEmailBtn">공유</button>
-        </div>
       </div>
     </div>
   </section>
@@ -1173,8 +1168,6 @@
   var linkRowEl = document.getElementById('linkRow');
   var linkUrlTextEl = document.getElementById('linkUrlText');
   var copyLinkBtn = document.getElementById('copyLinkBtn');
-  var shareEmailInput = document.getElementById('shareEmailInput');
-  var shareEmailBtn = document.getElementById('shareEmailBtn');
   var sharedBannerEl = document.getElementById('sharedBanner');
   var subTextEl = document.getElementById('subText');
 
@@ -1374,17 +1367,6 @@
   copyLinkBtn.addEventListener('click', function(){
     copyToClipboard(linkUrlTextEl.textContent);
     showToast('공유 링크를 복사했어요');
-  });
-
-  shareEmailBtn.addEventListener('click', function(){
-    if (!selectedRecipeId) return;
-    var email = (shareEmailInput.value || '').trim();
-    if (!email) return;
-    supabase.rpc('share_recipe_with_email', { p_recipe_id: selectedRecipeId, p_email: email }).then(function(res){
-      if (res.error){ alert('공유 실패: ' + res.error.message); return; }
-      shareEmailInput.value = '';
-      showToast(email + '님과 공유했어요');
-    });
   });
 
   function newRecipe(){
