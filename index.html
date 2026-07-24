@@ -444,37 +444,10 @@
         <div class="field-row">
           <input type="text" id="recipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색 및 불러오기">
           <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
-          <button class="icon-btn" id="shareSelectedBtn" aria-label="공유" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18" cy="5" r="3"></circle>
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="19" r="3"></circle>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </svg>
-          </button>
-          <button class="icon-btn danger" id="deleteSelectedBtn" aria-label="삭제" style="display:none;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-          </button>
         </div>
         <div class="recipe-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
       <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
-      <div class="share-panel" id="selectedSharePanel" style="display:none;">
-        <div class="field-row">
-          <span class="field-label">링크 공유</span>
-          <button class="io-btn" id="toggleLinkBtn">링크 켜기</button>
-        </div>
-        <div class="link-row" id="linkRow" style="display:none;">
-          <p class="hint link-url" id="linkUrlText"></p>
-          <button class="io-btn" id="copyLinkBtn">복사</button>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -556,6 +529,33 @@
           <polyline points="7 3 7 8 15 8"></polyline>
         </svg>
       </button>
+      <button class="icon-btn" id="shareSelectedBtn" aria-label="공유" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"></circle>
+          <circle cx="6" cy="12" r="3"></circle>
+          <circle cx="18" cy="19" r="3"></circle>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+        </svg>
+      </button>
+      <button class="icon-btn danger" id="deleteSelectedBtn" aria-label="삭제" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="share-panel" id="selectedSharePanel" style="display:none;">
+      <div class="field-row">
+        <span class="field-label">링크 공유</span>
+        <button class="io-btn" id="toggleLinkBtn">링크 켜기</button>
+      </div>
+      <div class="link-row" id="linkRow" style="display:none;">
+        <p class="hint link-url" id="linkUrlText"></p>
+        <button class="io-btn" id="copyLinkBtn">복사</button>
+      </div>
     </div>
   </section>
 
