@@ -340,11 +340,16 @@
     background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 10px;
     max-height: 240px; overflow-y: auto; box-shadow: var(--shadow-pop);
   }
+  /* The ingredient name column is only as wide as its narrow grid cell (minmax(0,1fr) next
+     to fixed-width pct/weight/delete columns) — pinning the dropdown to that same width
+     forced its text to wrap one character per line. Let it overlay the row instead: anchor
+     to the left edge only and give it a sane minimum width regardless of the cell it sits in. */
+  .ing-name-combo .combo-dropdown{ right: auto; min-width: 200px; max-width: min(280px, 90vw); }
   .combo-dropdown-item{
     display: block; width: 100%; text-align: left; min-height: 44px;
     padding: 10px 14px; border: none; border-bottom: 1px solid var(--border);
     background: none; font-family: var(--font-body); font-size: 14.5px; color: var(--ink);
-    cursor: pointer;
+    cursor: pointer; word-break: keep-all;
   }
   .combo-dropdown-item:last-child{ border-bottom: none; }
   .combo-dropdown-item:hover, .combo-dropdown-item:focus-visible{
