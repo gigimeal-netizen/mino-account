@@ -260,21 +260,22 @@
     font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
   }
 
-  /* Ingredient rows — pct (de-emphasized, muted) vs weight (the number you actually weigh
-     out, given the accent tint) are deliberately styled apart so the two columns read as
-     different kinds of data at a glance, not just two number boxes side by side. */
+  /* Ingredient rows: name gets its own full-width line so it can never clip regardless of
+     how long it is (this used to be a grid column sharing the row with the number fields,
+     which meant a long name either got clipped or shrunk to an unreadably tiny font — see
+     2026-07-25 fix). The numbers (.ing-row-numbers) sit on their own line below: pct
+     (de-emphasized, muted) vs weight (the number you actually weigh out, given the accent
+     tint) are deliberately styled apart so the two read as different kinds of data at a
+     glance, not just two number boxes side by side. */
   .ing-row{
-    display:grid; grid-template-columns: minmax(0,1fr) 58px 112px 44px;
-    gap: 8px; align-items:center; padding: 12px 0;
+    display:flex; flex-direction:column; gap: 8px; padding: 12px 0;
     border-bottom: 1px solid var(--border);
   }
   .ing-row:last-of-type{ border-bottom: none; }
   .ing-row.flour-row{ background: var(--accent-soft); border-radius: 8px; padding: 12px 8px; margin: -2px -8px 4px; border-bottom:none; }
-  .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 58px 112px 30px 44px; }
-  /* Engine B (confection/other): absolute-weight recipes have no % column at all. */
-  .ing-row.weight-only{ grid-template-columns: minmax(0,1fr) 112px 44px; }
-  .ing-row.weight-only.reorderable{ grid-template-columns: minmax(0,1fr) 112px 30px 44px; }
+  .ing-row-numbers{ display:flex; align-items:center; gap: 8px; }
   .ing-name{
+    width: 100%; display: block;
     font-family: var(--font-body); font-weight: 700; font-size: 14.5px;
     background: transparent; border: none; border-bottom: 1.5px dashed var(--border-strong);
     padding: 6px 2px; color: var(--ink); min-height:36px; min-width: 0;
@@ -282,12 +283,13 @@
   .ing-name:focus{ outline:none; border-bottom-color: var(--accent); }
   .ing-name[readonly]{ border-bottom: none; font-weight: 800; }
   .pct-input{
+    flex: 0 0 58px;
     font-family: var(--font-mono); font-size: 16px; font-weight:700; text-align:right;
     background: var(--bg); border: 1.5px solid var(--border); color: var(--ink-soft);
     border-radius: 8px; padding: 8px 6px; min-height: 44px; min-width: 0;
   }
   .pct-input[readonly]{ background: transparent; border-color: transparent; color: var(--accent); }
-  .weight-cell{ display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
+  .weight-cell{ flex: 1 1 112px; display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
   .weight-input{
     font-family: var(--font-mono); font-weight: 800; font-size: 17px; text-align:right;
     background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 8px;
@@ -303,7 +305,7 @@
   .del-btn:hover{ color: var(--danger); }
   .del-btn:focus-visible{ outline: 2px solid var(--accent); }
 
-  .reorder-btns{ display:flex; flex-direction:column; gap:2px; min-width: 0; }
+  .reorder-btns{ flex: 0 0 30px; display:flex; flex-direction:column; gap:2px; min-width: 0; }
   .reorder-btns button{
     width: 100%; height: 17px; line-height:1; font-size: 10px; padding:0;
     border: 1px solid var(--border-strong); background:var(--bg-elevated); color: var(--ink-soft);
@@ -478,10 +480,9 @@
   .toast.show{ opacity: 1; }
 
   @media (max-width: 360px){
-    .ing-row{ grid-template-columns: minmax(0,1fr) 46px 92px 44px; }
-    .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 46px 92px 26px 44px; }
-    .ing-row.weight-only{ grid-template-columns: minmax(0,1fr) 92px 44px; }
-    .ing-row.weight-only.reorderable{ grid-template-columns: minmax(0,1fr) 92px 26px 44px; }
+    .pct-input{ flex-basis: 46px; }
+    .weight-cell{ flex-basis: 92px; }
+    .reorder-btns{ flex-basis: 26px; }
     h1{ font-size: 26px; }
   }
 </style>
@@ -995,11 +996,13 @@
       var singleFlour = state.flours.length === 1;
       row.innerHTML =
         '<input class="ing-name" value="' + escapeHtml(fl.name) + '" data-idx="' + idx + '" aria-label="밀가루 이름">' +
-        '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
-        '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
-        (state.flours.length > 1
-          ? '<button class="del-btn" data-idx="' + idx + '" aria-label="밀가루 삭제">×</button>'
-          : '<span></span>');
+        '<div class="ing-row-numbers">' +
+          '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
+          '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
+          (state.flours.length > 1
+            ? '<button class="del-btn" data-idx="' + idx + '" aria-label="밀가루 삭제">×</button>'
+            : '') +
+        '</div>';
       flourListEl.appendChild(row);
     });
 
@@ -1053,18 +1056,20 @@
     var isBread = state.type === 'bread';
     state.ingredients.forEach(function(ing, idx){
       var row = document.createElement('div');
-      row.className = 'ing-row reorderable' + (isBread ? '' : ' weight-only');
+      row.className = 'ing-row';
       row.innerHTML =
         '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
-        (isBread
-          ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
-          : '') +
-        '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
-        '<span class="reorder-btns">' +
-        '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
-        '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (idx === state.ingredients.length - 1 ? ' disabled' : '') + '>▼</button>' +
-        '</span>' +
-        '<button class="del-btn" data-idx="' + idx + '" aria-label="재료 삭제">×</button>';
+        '<div class="ing-row-numbers">' +
+          (isBread
+            ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
+            : '') +
+          '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
+          '<span class="reorder-btns">' +
+          '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
+          '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (idx === state.ingredients.length - 1 ? ' disabled' : '') + '>▼</button>' +
+          '</span>' +
+          '<button class="del-btn" data-idx="' + idx + '" aria-label="재료 삭제">×</button>' +
+        '</div>';
       ingListEl.appendChild(row);
     });
 
