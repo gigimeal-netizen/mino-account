@@ -19,6 +19,7 @@ create table recipes (
   portions jsonb not null default '[]',
   flours jsonb not null default '[]',
   ingredients jsonb not null default '[]',
+  notes text not null default '',
   share_token uuid,               -- null = link sharing off
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

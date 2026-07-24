@@ -286,6 +286,12 @@
     padding: 10px; color: var(--ink); min-height: 44px;
   }
   .text-input:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
+  .notes-input{
+    width: 100%; font-family: var(--font-body); font-size: 14px; line-height: 1.6;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
+    padding: 12px; color: var(--ink); resize: vertical; min-height: 88px;
+  }
+  .notes-input:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
   .link-row{ display:flex; align-items:center; gap:8px; margin-top: 10px; }
   .link-url{
     font-family: var(--font-mono); font-size: 12px; word-break: break-all;
@@ -539,6 +545,20 @@
     </p>
   </section>
 
+  <section class="card">
+    <h2>메모</h2>
+    <textarea id="notesInput" class="notes-input" rows="4" placeholder="발효 시간, 굽기 팁처럼 남겨두고 싶은 메모를 적어보세요."></textarea>
+    <div class="toolbar-icons" style="margin-top:12px;">
+      <button class="icon-btn primary" id="saveBtnBottom" aria-label="레시피 저장" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </button>
+    </div>
+  </section>
+
   <!--
     Ad slot placed after the last content card, at the natural end of the scroll — not
     wedged between input rows or buttons, so a stray tap doesn't hit it by mistake.
@@ -636,6 +656,7 @@
   var flourWeightLabel = document.getElementById('flourWeightLabel');
   var toastEl = document.getElementById('toast');
   var recipeNameInput = document.getElementById('recipeName');
+  var notesInput = document.getElementById('notesInput');
 
   function showToast(msg){
     toastEl.textContent = msg;
@@ -1102,6 +1123,7 @@
   var newRecipeBtn = document.getElementById('newRecipeBtn');
   var authHintEl = document.getElementById('authHint');
   var saveBtn = document.getElementById('saveBtn');
+  var saveBtnBottom = document.getElementById('saveBtnBottom');
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
   var libraryCardEl = document.getElementById('libraryCard');
@@ -1134,7 +1156,8 @@
       target_total: state.targetTotal,
       portions: state.portions,
       flours: state.flours,
-      ingredients: state.ingredients
+      ingredients: state.ingredients,
+      notes: notesInput.value || ''
     };
   }
 
@@ -1143,6 +1166,7 @@
   // system starts fresh with its own schema, no recipe.json migration.
   function applyRecipeRowToState(row){
     recipeNameInput.value = row.recipe_name || '';
+    notesInput.value = row.notes || '';
     state.mode = row.mode === 'B' ? 'B' : 'A';
     state.baseFlour = parseFloat(row.base_flour) || 0;
     state.multiplier = parseFloat(row.multiplier) || 1;
@@ -1318,6 +1342,7 @@
 
   function newRecipe(){
     recipeNameInput.value = '새 레시피';
+    notesInput.value = '';
     state.mode = 'A';
     state.baseFlour = 0;
     state.multiplier = 1;
@@ -1371,6 +1396,7 @@
       authRowEl.style.display = 'none';
       loggedInRowEl.style.display = '';
       saveBtn.style.display = '';
+      saveBtnBottom.style.display = '';
       libraryCardEl.style.display = 'block';
       loadMyRecipes();
     } else {
@@ -1380,6 +1406,7 @@
       authRowEl.style.display = '';
       loggedInRowEl.style.display = 'none';
       saveBtn.style.display = 'none';
+      saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
       myRecipes = [];
       recipeSearchInput.value = '';
@@ -1440,6 +1467,10 @@
       if (supabase) supabase.auth.signOut();
     });
     saveBtn.addEventListener('click', function(){
+      if (!currentUser) { alert('먼저 로그인해주세요'); return; }
+      saveCurrentRecipe();
+    });
+    saveBtnBottom.addEventListener('click', function(){
       if (!currentUser) { alert('먼저 로그인해주세요'); return; }
       saveCurrentRecipe();
     });
