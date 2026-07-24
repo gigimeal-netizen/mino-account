@@ -41,6 +41,7 @@ create table ingredients (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
+  category text not null default '',             -- free-text grouping (e.g. 밀가루류/유제품), user-defined
   purchase_amount numeric not null default 0,
   purchase_unit_type text not null default 'g', -- 'g' | 'kg' | 'ml' | 'l' | 'ea'
   purchase_price numeric not null default 0,

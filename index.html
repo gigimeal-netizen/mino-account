@@ -204,6 +204,10 @@
   .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; }
   .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
+  .ing-mgr-category{
+    display: block; width: 100%; margin-top: 6px; font-size: 13px;
+    padding: 7px 10px; min-height: 36px; color: var(--ink-soft);
+  }
   .ingredient-mgr-cost{ display:flex; align-items:center; gap:6px; flex-wrap: wrap; margin-top: 8px; }
   .ing-mgr-amount{ flex: 1 1 70px; min-width: 0; }
   .ing-mgr-unit{
@@ -686,6 +690,7 @@
       <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="닫기" style="font-size:22px;font-weight:700;">×</button>
     </div>
     <div class="modal-body">
+      <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
       <div id="ingredientManagerList"></div>
       <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
       <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
@@ -1308,6 +1313,7 @@
   var ingredientManagerOverlayEl = document.getElementById('ingredientManagerOverlay');
   var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
+  var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
@@ -1450,9 +1456,21 @@
   // (add/deactivate change the list), each row wired independently right after it's built —
   // there's no reorder/index concern here (unlike ing-row), so each row just closes over its
   // own `ig` record directly instead of going through a data-idx pass like buildIngRows().
-  function renderIngredientManager(){
+  function renderIngredientManager(query){
     ingredientManagerListEl.innerHTML = '';
-    myIngredients.forEach(function(ig){
+    var q = (query || '').trim().toLowerCase();
+    var visible = myIngredients.filter(function(ig){
+      if (!q) return true;
+      return (ig.name || '').toLowerCase().indexOf(q) !== -1 ||
+             (ig.category || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (visible.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = q ? '검색 결과가 없어요' : '아직 등록된 재료가 없어요 — 아래에서 추가해보세요.';
+      ingredientManagerListEl.appendChild(empty);
+    }
+    visible.forEach(function(ig){
       var row = document.createElement('div');
       row.className = 'ingredient-mgr-row';
       var options = ['g','kg','ml','l','ea'].map(function(u){
@@ -1463,6 +1481,7 @@
           '<input class="ing-mgr-name text-input">' +
           '<button type="button" class="io-btn ing-mgr-toggle"></button>' +
         '</div>' +
+        '<input class="ing-mgr-category" placeholder="카테고리 (예: 유제품)">' +
         '<div class="ingredient-mgr-cost">' +
           '<input class="ing-mgr-amount" type="number" inputmode="decimal" step="0.1">' +
           '<select class="ing-mgr-unit">' + options + '</select>' +
@@ -1473,6 +1492,7 @@
       ingredientManagerListEl.appendChild(row);
 
       var nameEl = row.querySelector('.ing-mgr-name');
+      var categoryEl = row.querySelector('.ing-mgr-category');
       var amountEl = row.querySelector('.ing-mgr-amount');
       var unitEl = row.querySelector('.ing-mgr-unit');
       var priceEl = row.querySelector('.ing-mgr-price');
@@ -1480,6 +1500,7 @@
       var toggleBtn = row.querySelector('.ing-mgr-toggle');
 
       nameEl.value = ig.name || '';
+      categoryEl.value = ig.category || '';
       amountEl.value = ig.purchase_amount || 0;
       priceEl.value = ig.purchase_price || 0;
       toggleBtn.textContent = ig.is_active === false ? '복원' : '사용중지';
@@ -1505,6 +1526,10 @@
         var typed = nameEl.value.trim() || ig.name;
         nameEl.value = typed;
         if (typed !== ig.name) saveFields({ name: typed });
+      });
+      categoryEl.addEventListener('blur', function(){
+        var typed = categoryEl.value.trim();
+        if (typed !== (ig.category || '')) saveFields({ category: typed });
       });
       function saveCost(){
         saveFields({
@@ -1875,6 +1900,7 @@
   // instead of a small anchored popover — open/close are one function each so every trigger
   // (menu button, close button, backdrop click, Escape, logout) stays in sync.
   function openIngredientManagerModal(){
+    ingredientManagerSearchInput.value = ''; // don't carry over a filter from the last time this was open
     renderIngredientManager();
     ingredientManagerOverlayEl.style.display = 'flex';
     document.body.style.overflow = 'hidden'; // lock background scroll while the modal is up
@@ -1963,8 +1989,11 @@
       supabase.from('ingredients').insert({ owner_id: currentUser.id, name: '새 재료' }).select().single().then(function(res){
         if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
         myIngredients.push(res.data);
-        renderIngredientManager();
+        renderIngredientManager(ingredientManagerSearchInput.value);
       });
+    });
+    ingredientManagerSearchInput.addEventListener('input', function(){
+      renderIngredientManager(ingredientManagerSearchInput.value);
     });
     document.addEventListener('click', function(e){
       if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();
