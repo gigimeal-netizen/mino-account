@@ -82,7 +82,6 @@
   }
   .recipe-name:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
 
-  .io-row{ display:flex; gap:8px; margin-top: 10px; }
   .io-btn{
     flex:1; padding: 10px 12px; border-radius: 10px;
     border: 1.5px solid var(--border-strong); background: var(--bg-elevated);
@@ -108,6 +107,11 @@
   .icon-btn svg{ width:20px; height:20px; display:block; }
   .icon-btn:hover{ border-color: var(--accent); color: var(--accent); }
   .icon-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+  .icon-btn.primary{ background: var(--accent); border-color: var(--accent); color: #fff; }
+  .icon-btn.primary:hover{ color: #fff; opacity: 0.9; }
+  .icon-btn.danger{ color: var(--danger); border-color: var(--danger); }
+  .icon-btn.danger:hover{ background: var(--danger-soft); }
+  .toolbar-icons{ display:flex; gap:8px; margin-top: 10px; }
   /* Which icon shows follows data-theme purely in CSS — dark (default) shows the moon,
      light shows the sun; applyTheme() in JS only needs to set the attribute. */
   .theme-toggle .icon-sun{ display:none; }
@@ -295,13 +299,6 @@
     border-radius: 999px; padding: 2px 8px; margin-left: 6px; white-space: nowrap;
   }
   .lib-actions{ display:flex; gap:6px; flex:0 0 auto; }
-  .lib-btn{
-    font-family: var(--font-display); font-weight: 800; font-size: 12.5px;
-    border-radius: 8px; padding: 8px 10px; cursor:pointer; min-height: 44px;
-    border: 1.5px solid var(--border-strong); background: var(--bg-elevated); color: var(--ink);
-  }
-  .lib-btn:hover{ border-color: var(--accent); color: var(--accent); }
-  .lib-btn.danger:hover{ border-color: var(--danger); color: var(--danger); }
 
   /* Sharing panel for the recipe currently selected via the search box */
   .share-panel{ padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
@@ -441,9 +438,20 @@
 
   <section class="card recipe-toolbar">
     <input class="recipe-name" id="recipeName" value="기본 바게트 반죽" aria-label="레시피 이름">
-    <div class="io-row">
-      <button class="io-btn" id="newRecipeBtn">+ 새 레시피</button>
-      <button class="io-btn primary" id="saveBtn" style="display:none;">저장</button>
+    <div class="toolbar-icons">
+      <button class="icon-btn" id="newRecipeBtn" aria-label="새 레시피 만들기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+      <button class="icon-btn primary" id="saveBtn" aria-label="레시피 저장" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </button>
     </div>
 
     <div id="libraryCard" style="display:none;">
@@ -460,8 +468,23 @@
       <div class="lib-row" id="selectedRecipeRow" style="display:none;">
         <span class="lib-name" id="selectedRecipeName"></span>
         <span class="lib-actions">
-          <button class="lib-btn" id="shareSelectedBtn">공유</button>
-          <button class="lib-btn danger" id="deleteSelectedBtn">삭제</button>
+          <button class="icon-btn" id="shareSelectedBtn" aria-label="공유">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+          </button>
+          <button class="icon-btn danger" id="deleteSelectedBtn" aria-label="삭제">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
         </span>
       </div>
       <div class="share-panel" id="selectedSharePanel" style="display:none;">
