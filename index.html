@@ -1895,7 +1895,13 @@
       closeAccountMenu();
       var showing = ingredientManagerCardEl.style.display !== 'none';
       ingredientManagerCardEl.style.display = showing ? 'none' : 'block';
-      if (!showing) renderIngredientManager();
+      if (!showing) {
+        renderIngredientManager();
+        // This card sits near the bottom of the page (after the notes card), well below
+        // where the account menu trigger is — without this, opening it from the top looks
+        // like nothing happened because the newly-visible card is off-screen.
+        ingredientManagerCardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
     document.getElementById('addIngredientMasterBtn').addEventListener('click', function(){
       if (!currentUser) return;
