@@ -12,6 +12,7 @@ create table recipes (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   recipe_name text not null default '이름 없는 레시피',
+  recipe_type text not null default 'bread', -- 'bread' (baker's %) | 'confection' | 'other' (both: absolute weight)
   mode text not null default 'A',
   base_flour numeric not null default 0,
   multiplier numeric not null default 1,

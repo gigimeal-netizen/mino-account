@@ -226,6 +226,9 @@
   .ing-row:last-of-type{ border-bottom: none; }
   .ing-row.flour-row{ background: var(--accent-soft); border-radius: 8px; padding: 12px 8px; margin: -2px -8px 4px; border-bottom:none; }
   .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 58px 112px 30px 44px; }
+  /* Engine B (confection/other): absolute-weight recipes have no % column at all. */
+  .ing-row.weight-only{ grid-template-columns: minmax(0,1fr) 112px 44px; }
+  .ing-row.weight-only.reorderable{ grid-template-columns: minmax(0,1fr) 112px 30px 44px; }
   .ing-name{
     font-family: var(--font-body); font-weight: 700; font-size: 14.5px;
     background: transparent; border: none; border-bottom: 1.5px dashed var(--border-strong);
@@ -364,6 +367,8 @@
   @media (max-width: 360px){
     .ing-row{ grid-template-columns: minmax(0,1fr) 46px 92px 44px; }
     .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 46px 92px 26px 44px; }
+    .ing-row.weight-only{ grid-template-columns: minmax(0,1fr) 92px 44px; }
+    .ing-row.weight-only.reorderable{ grid-template-columns: minmax(0,1fr) 92px 26px 44px; }
     h1{ font-size: 26px; }
   }
 </style>
@@ -424,12 +429,19 @@
   <section class="card recipe-toolbar">
     <div class="toolbar-icons">
       <input class="recipe-name" id="recipeName" value="기본 바게트 반죽" aria-label="레시피 이름">
-      <button class="icon-btn" id="newRecipeBtn" aria-label="새 레시피 만들기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-      </button>
+      <div class="account-chip-wrap" id="newRecipeWrap">
+        <button class="icon-btn" id="newRecipeBtn" aria-label="새 레시피 만들기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <div class="account-menu" id="newRecipeMenu" style="display:none;">
+          <button class="menu-btn" id="newBreadBtn">제빵 (베이커스 %)</button>
+          <button class="menu-btn" id="newConfectionBtn">제과 (절대 중량)</button>
+          <button class="menu-btn" id="newOtherBtn">기타 (절대 중량)</button>
+        </div>
+      </div>
       <button class="icon-btn" id="saveBtn" aria-label="레시피 저장" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
@@ -465,7 +477,7 @@
 
   <section class="card" id="modeAPanel">
     <h2>기준 밀가루량 &amp; 배율</h2>
-    <div class="field-row">
+    <div class="field-row" id="baseFlourRow">
       <span class="field-label">기준 밀가루</span>
       <input type="number" inputmode="decimal" id="baseFlour" value="1000" min="0" step="10">
       <span class="unit">g</span>
@@ -476,7 +488,7 @@
       <button id="multPlus" aria-label="배율 늘리기">+</button>
       <span class="unit">배</span>
     </div>
-    <p class="hint">기준 밀가루량에 배율을 곱해 전체 반죽을 스케일합니다.</p>
+    <p class="hint" id="modeAHint">기준 밀가루량에 배율을 곱해 전체 반죽을 스케일합니다.</p>
   </section>
 
   <section class="card" id="modeBPanel" style="display:none;">
@@ -486,7 +498,7 @@
       <input type="number" inputmode="decimal" id="targetTotal" value="3000" min="0" step="10">
       <span class="unit">g</span>
     </div>
-    <p class="hint">원하는 총 무게를 입력하면 재료 비율에 맞춰 밀가루량을 역산합니다.</p>
+    <p class="hint" id="modeBHint">원하는 총 무게를 입력하면 재료 비율에 맞춰 밀가루량을 역산합니다.</p>
 
     <div id="portionList"></div>
     <button class="add-btn" id="addPortionBtn">+ 반죽 분할 추가</button>
@@ -505,18 +517,20 @@
   </section>
 
   <section class="card">
-    <h2>재료 (밀가루 기준 %)</h2>
+    <h2 id="ingCardTitle">재료 (밀가루 기준 %)</h2>
     <div id="ingList"></div>
     <button class="add-btn" id="addIngBtn">+ 재료 추가</button>
-    <p class="hint">퍼센트나 중량, 편한 쪽을 입력하면 서로 자동 계산돼요.</p>
-    <p class="hint">
-      베이커스 퍼센트가 처음이신가요?
-      <button class="link" id="pctInfoBtn">퍼센트란?</button>
-    </p>
-    <p class="hint" id="pctInfo" style="display:none;">
-      밀가루 무게를 100%로 두고, 다른 재료는 밀가루 대비 비율(%)로 표시하는 방식이에요.
-      예: 수분율 65% = 밀가루 1000g일 때 물 650g.
-    </p>
+    <p class="hint" id="ingHint">퍼센트나 중량, 편한 쪽을 입력하면 서로 자동 계산돼요.</p>
+    <div id="pctInfoBlock">
+      <p class="hint">
+        베이커스 퍼센트가 처음이신가요?
+        <button class="link" id="pctInfoBtn">퍼센트란?</button>
+      </p>
+      <p class="hint" id="pctInfo" style="display:none;">
+        밀가루 무게를 100%로 두고, 다른 재료는 밀가루 대비 비율(%)로 표시하는 방식이에요.
+        예: 수분율 65% = 밀가루 1000g일 때 물 650g.
+      </p>
+    </div>
   </section>
 
   <section class="card">
@@ -585,7 +599,7 @@
       <span class="u">TOTAL g</span>
     </div>
     <div class="footer-text">
-      <div class="footer-label">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
+      <div class="footer-label" id="footerFlourLabel">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
       <div class="footer-value" id="totalWeightText">0g</div>
       <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
     </div>
@@ -624,6 +638,7 @@
 
   var state = {
     mode: 'A',
+    type: 'bread', // 'bread' (engine A: baker's %) | 'confection' | 'other' (engine B: absolute weight)
     flours: [
       { name: '밀가루', pct: 100 }
     ],
@@ -659,6 +674,13 @@
   var toastEl = document.getElementById('toast');
   var recipeNameInput = document.getElementById('recipeName');
   var notesInput = document.getElementById('notesInput');
+  var baseFlourRowEl = document.getElementById('baseFlourRow');
+  var modeAHintEl = document.getElementById('modeAHint');
+  var modeBHintEl = document.getElementById('modeBHint');
+  var ingCardTitleEl = document.getElementById('ingCardTitle');
+  var ingHintEl = document.getElementById('ingHint');
+  var pctInfoBlockEl = document.getElementById('pctInfoBlock');
+  var footerFlourLabelEl = document.getElementById('footerFlourLabel');
 
   function showToast(msg){
     toastEl.textContent = msg;
@@ -682,6 +704,15 @@
       var totalPct = 100 + state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.pct)||0); }, 0);
       return state.targetTotal / (totalPct/100);
     }
+  }
+
+  // Engine B (confection/other) has no flour bucket to anchor off — each ingredient's
+  // stored `weight` is its amount at scale=1, and the displayed number is that times a
+  // scale factor: the multiplier directly in Mode A, or targetTotal/currentTotal in Mode B.
+  function computeEngineBScale(){
+    if (state.mode === 'A') return state.multiplier;
+    var total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0); }, 0);
+    return total > 0 ? state.targetTotal / total : 0;
   }
 
   function pctFromWeight(weight, flourWeight){
@@ -848,12 +879,15 @@
 
   function buildIngRows(){
     ingListEl.innerHTML = '';
+    var isBread = state.type === 'bread';
     state.ingredients.forEach(function(ing, idx){
       var row = document.createElement('div');
-      row.className = 'ing-row reorderable';
+      row.className = 'ing-row reorderable' + (isBread ? '' : ' weight-only');
       row.innerHTML =
         '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
-        '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">' +
+        (isBread
+          ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
+          : '') +
         '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
         '<span class="reorder-btns">' +
         '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
@@ -870,17 +904,25 @@
         fitDigits(el, 14.5);
       });
     });
-    ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        state.ingredients[+el.dataset.idx].pct = el.value;
-        updateDisplays();
+    if (isBread){
+      ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+        el.addEventListener('input', function(){
+          state.ingredients[+el.dataset.idx].pct = el.value;
+          updateDisplays();
+        });
+        attachRefreshOnBlur(el);
       });
-      attachRefreshOnBlur(el);
-    });
+    }
     ingListEl.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
       el.addEventListener('input', function(){
-        var flourWeight = computeFlourWeight();
-        state.ingredients[+el.dataset.idx].pct = pctFromWeight(el.value, flourWeight);
+        if (isBread){
+          var flourWeight = computeFlourWeight();
+          state.ingredients[+el.dataset.idx].pct = pctFromWeight(el.value, flourWeight);
+        } else {
+          var scale = computeEngineBScale();
+          var typed = parseFloat(el.value) || 0;
+          state.ingredients[+el.dataset.idx].weight = scale > 0 ? typed / scale : typed;
+        }
         updateDisplays();
       });
       attachRefreshOnBlur(el);
@@ -924,48 +966,80 @@
       if (pQtyEl) fitDigits(pQtyEl);
     });
 
-    var flourWeight = computeFlourWeight();
-    if (!isFinite(flourWeight) || flourWeight < 0) flourWeight = 0;
+    var total;
+    if (state.type === 'bread'){
+      var flourWeight = computeFlourWeight();
+      if (!isFinite(flourWeight) || flourWeight < 0) flourWeight = 0;
 
-    state.flours.forEach(function(fl, idx){
-      var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-      var pctEl = flourListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
-      var wEl = flourListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
-      if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(fl.pct);
-      if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
-      if (pctEl) fitDigits(pctEl);
-      if (wEl) fitDigits(wEl);
-    });
+      state.flours.forEach(function(fl, idx){
+        var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
+        var pctEl = flourListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
+        var wEl = flourListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+        if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(fl.pct);
+        if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
+        if (pctEl) fitDigits(pctEl);
+        if (wEl) fitDigits(wEl);
+      });
 
-    state.ingredients.forEach(function(ing, idx){
-      var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-      var pctEl = ingListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
-      var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
-      if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(ing.pct);
-      if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
-      if (pctEl) fitDigits(pctEl);
-      if (wEl) fitDigits(wEl);
-    });
+      state.ingredients.forEach(function(ing, idx){
+        var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
+        var pctEl = ingListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
+        var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+        if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(ing.pct);
+        if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
+        if (pctEl) fitDigits(pctEl);
+        if (wEl) fitDigits(wEl);
+      });
 
-    var flourPctSum = state.flours.reduce(function(s,f){ return s + (parseFloat(f.pct)||0); }, 0);
-    var flourWarn = Math.abs(flourPctSum - 100) > 0.05;
-    flourPctWarningEl.style.display = flourWarn ? 'block' : 'none';
-    flourPctSumEl.textContent = Math.round(flourPctSum * 10) / 10;
-    flourCardEl.classList.toggle('invalid', flourWarn);
+      var flourPctSum = state.flours.reduce(function(s,f){ return s + (parseFloat(f.pct)||0); }, 0);
+      var flourWarn = Math.abs(flourPctSum - 100) > 0.05;
+      flourPctWarningEl.style.display = flourWarn ? 'block' : 'none';
+      flourPctSumEl.textContent = Math.round(flourPctSum * 10) / 10;
+      flourCardEl.classList.toggle('invalid', flourWarn);
 
-    var total = flourWeight + state.ingredients.reduce(function(s,i){
-      return s + flourWeight * ((parseFloat(i.pct)||0)/100);
-    }, 0);
+      total = flourWeight + state.ingredients.reduce(function(s,i){
+        return s + flourWeight * ((parseFloat(i.pct)||0)/100);
+      }, 0);
+      flourWeightLabel.textContent = fmt(flourWeight) + 'g';
+    } else {
+      var scale = computeEngineBScale();
+      state.ingredients.forEach(function(ing, idx){
+        var w = (parseFloat(ing.weight)||0) * scale;
+        var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+        if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
+        if (wEl) fitDigits(wEl);
+      });
+      total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
+    }
 
     stampTotal.textContent = fmt(total);
     totalWeightText.textContent = fmt(total) + 'g';
-    flourWeightLabel.textContent = fmt(flourWeight) + 'g';
   }
 
   function escapeHtml(s){
     var d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  // Engine switch: bread uses the baker's-% engine (flour card, %, base-flour field);
+  // confection/other use the absolute-weight engine (no flour bucket, just ingredient
+  // weights scaled by multiplier or target-total). Only toggles static card visibility/
+  // copy — buildIngRows()/updateDisplays() do the actual per-type rendering/math.
+  function applyEngineUI(){
+    var isBread = state.type === 'bread';
+    flourCardEl.style.display = isBread ? '' : 'none';
+    baseFlourRowEl.style.display = isBread ? '' : 'none';
+    modeAHintEl.textContent = isBread
+      ? '기준 밀가루량에 배율을 곱해 전체 반죽을 스케일합니다.'
+      : '전체 재료 무게에 배율을 곱해 스케일합니다.';
+    modeBHintEl.textContent = isBread
+      ? '원하는 총 무게를 입력하면 재료 비율에 맞춰 밀가루량을 역산합니다.'
+      : '입력한 재료 무게 비율을 유지한 채 목표 총량에 맞춰 스케일합니다.';
+    ingCardTitleEl.textContent = isBread ? '재료 (밀가루 기준 %)' : '재료 (절대 중량)';
+    ingHintEl.style.display = isBread ? '' : 'none';
+    pctInfoBlockEl.style.display = isBread ? '' : 'none';
+    footerFlourLabelEl.style.display = isBread ? '' : 'none';
   }
 
   // Mode toggle
@@ -1029,7 +1103,7 @@
 
   // Add ingredient
   document.getElementById('addIngBtn').addEventListener('click', function(){
-    state.ingredients.push({ name: '재료', pct: 0 });
+    state.ingredients.push(state.type === 'bread' ? { name: '재료', pct: 0 } : { name: '재료', weight: 0 });
     render();
     var rows = ingListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
@@ -1044,19 +1118,29 @@
 
   // Copy results
   document.getElementById('copyBtn').addEventListener('click', function(){
-    var flourWeight = computeFlourWeight();
     var lines = [recipeNameInput.value, ''];
-    state.flours.forEach(function(fl){
-      var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-      lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
-    });
-    state.ingredients.forEach(function(ing){
-      var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-      lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
-    });
-    var total = flourWeight + state.ingredients.reduce(function(s,i){
-      return s + flourWeight * ((parseFloat(i.pct)||0)/100);
-    }, 0);
+    var total;
+    if (state.type === 'bread'){
+      var flourWeight = computeFlourWeight();
+      state.flours.forEach(function(fl){
+        var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
+        lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
+      });
+      state.ingredients.forEach(function(ing){
+        var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
+        lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
+      });
+      total = flourWeight + state.ingredients.reduce(function(s,i){
+        return s + flourWeight * ((parseFloat(i.pct)||0)/100);
+      }, 0);
+    } else {
+      var scale = computeEngineBScale();
+      state.ingredients.forEach(function(ing){
+        var w = (parseFloat(ing.weight)||0) * scale;
+        lines.push(ing.name + '  ' + fmt(w) + 'g');
+      });
+      total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
+    }
     lines.push('');
     if (state.portions.length > 0){
       lines.push('반죽 분할  ' + state.portions.map(function(p){ return fmt(p.weight) + 'g×' + p.qty + '개'; }).join(' + ') + '  =  ' + fmt(state.targetTotal) + 'g');
@@ -1178,6 +1262,7 @@
   function serializeCurrentRecipe(){
     return {
       recipe_name: recipeNameInput.value || '이름 없는 레시피',
+      recipe_type: state.type,
       mode: state.mode,
       base_flour: state.baseFlour,
       multiplier: state.multiplier,
@@ -1195,6 +1280,7 @@
   function applyRecipeRowToState(row){
     recipeNameInput.value = row.recipe_name || '';
     notesInput.value = row.notes || '';
+    state.type = (row.recipe_type === 'confection' || row.recipe_type === 'other') ? row.recipe_type : 'bread';
     state.mode = row.mode === 'B' ? 'B' : 'A';
     state.baseFlour = parseFloat(row.base_flour) || 0;
     state.multiplier = parseFloat(row.multiplier) || 1;
@@ -1203,19 +1289,27 @@
       if (typeof p === 'number') return { weight: p, qty: 1 };
       return { weight: parseFloat(p && p.weight) || 0, qty: parseFloat(p && p.qty) || 1 };
     });
-    state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
-      return { name: String(f && f.name || ''), pct: roundPct(f && f.pct) };
-    });
-    if (state.flours.length === 0) state.flours = [{ name: '밀가루', pct: 100 }];
-    state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-      return { name: String(i && i.name || ''), pct: roundPct(i && i.pct) };
-    });
+    if (state.type === 'bread'){
+      state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
+        return { name: String(f && f.name || ''), pct: roundPct(f && f.pct) };
+      });
+      if (state.flours.length === 0) state.flours = [{ name: '밀가루', pct: 100 }];
+      state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
+        return { name: String(i && i.name || ''), pct: roundPct(i && i.pct) };
+      });
+    } else {
+      state.flours = [];
+      state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
+        return { name: String(i && i.name || ''), weight: parseFloat(i && i.weight) || 0 };
+      });
+    }
 
     baseFlourInput.value = state.baseFlour;
     multInput.value = state.multiplier;
     targetTotalInput.value = state.targetTotal;
 
     applyModeUI();
+    applyEngineUI();
     suppressDirtyTracking = true;
     render();
     suppressDirtyTracking = false;
@@ -1371,7 +1465,8 @@
     showToast('공유 링크를 복사했어요');
   });
 
-  function newRecipe(){
+  function newRecipe(type){
+    state.type = type || 'bread';
     recipeNameInput.value = '새 레시피';
     notesInput.value = '';
     state.mode = 'A';
@@ -1379,24 +1474,48 @@
     state.multiplier = 1;
     state.targetTotal = 0;
     state.portions = [];
-    state.flours = [{ name: '밀가루', pct: 100 }];
-    state.ingredients = [
-      { name: '물', pct: 0 },
-      { name: '소금', pct: 0 },
-      { name: '이스트', pct: 0 }
-    ];
+    if (state.type === 'bread'){
+      state.flours = [{ name: '밀가루', pct: 100 }];
+      state.ingredients = [
+        { name: '물', pct: 0 },
+        { name: '소금', pct: 0 },
+        { name: '이스트', pct: 0 }
+      ];
+    } else {
+      state.flours = [];
+      state.ingredients = [
+        { name: '재료 1', weight: 0 },
+        { name: '재료 2', weight: 0 }
+      ];
+    }
     baseFlourInput.value = state.baseFlour;
     multInput.value = state.multiplier;
     targetTotalInput.value = state.targetTotal;
     recipeSearchInput.value = '';
     clearSelectedRecipe();
     applyModeUI();
+    applyEngineUI();
     suppressDirtyTracking = true;
     render();
     suppressDirtyTracking = false;
     markClean();
   }
-  newRecipeBtn.addEventListener('click', newRecipe);
+
+  var newRecipeMenuEl = document.getElementById('newRecipeMenu');
+  function closeNewRecipeMenu(){
+    newRecipeMenuEl.style.display = 'none';
+  }
+  newRecipeBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    closeAccountMenu();
+    newRecipeMenuEl.style.display = newRecipeMenuEl.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#newRecipeWrap')) closeNewRecipeMenu();
+  });
+  document.getElementById('newBreadBtn').addEventListener('click', function(){ closeNewRecipeMenu(); newRecipe('bread'); });
+  document.getElementById('newConfectionBtn').addEventListener('click', function(){ closeNewRecipeMenu(); newRecipe('confection'); });
+  document.getElementById('newOtherBtn').addEventListener('click', function(){ closeNewRecipeMenu(); newRecipe('other'); });
 
   function saveCurrentRecipe(){
     var payload = serializeCurrentRecipe();
@@ -1475,6 +1594,7 @@
 
   function initAccountMode(){
     accountChipBtn.addEventListener('click', function(){
+      closeNewRecipeMenu();
       accountMenuEl.style.display = accountMenuEl.style.display === 'none' ? 'block' : 'none';
     });
     document.addEventListener('click', function(e){
