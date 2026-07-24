@@ -348,23 +348,23 @@
   }
   .link-row .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
 
-  /* Generic searchable-dropdown combo box: originally built just for "내 레시피" (replaces
-     the browser's native <datalist> popup, which can't be styled/opened on demand), now
-     also reused per-row for the ingredient picker (see .ing-name-combo below). */
+  /* Generic searchable-dropdown combo box: originally built just for "내 레시피", now also
+     reused for the cost-calc modal's recipe picker and its per-ingredient DB linker
+     (.ing-link-combo below) — never for the recipe editor itself, which keeps plain
+     free-text ing-name inputs so linking a recipe's ingredients to the cost DB doesn't
+     interrupt writing the recipe. */
   .recipe-combo{ position: relative; }
-  .ing-name-combo{ position: relative; min-width: 0; }
-  .ing-name-combo .ing-name{ width: 100%; display: block; }
+  .ing-link-combo{ position: relative; flex: 1 1 auto; min-width: 0; }
   .combo-toggle{ flex: 0 0 auto; padding: 10px 14px; font-size: 12px; }
   .combo-dropdown{
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
     background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 10px;
     max-height: 240px; overflow-y: auto; box-shadow: var(--shadow-pop);
   }
-  /* The ingredient name column is only as wide as its narrow grid cell (minmax(0,1fr) next
-     to fixed-width pct/weight/delete columns) — pinning the dropdown to that same width
-     forced its text to wrap one character per line. Let it overlay the row instead: anchor
-     to the left edge only and give it a sane minimum width regardless of the cell it sits in. */
-  .ing-name-combo .combo-dropdown{ right: auto; min-width: 200px; max-width: min(280px, 90vw); }
+  /* The ingredient-link combo can sit in a narrow cell next to the (up to 40%-wide) name
+     label — anchor its dropdown to the left edge with its own minimum width instead of
+     letting it get squeezed narrow enough to wrap candidate names one character per line. */
+  .ing-link-combo .combo-dropdown{ right: auto; min-width: 200px; max-width: min(280px, 90vw); }
   .combo-dropdown-item{
     display: block; width: 100%; text-align: left; min-height: 44px;
     padding: 10px 14px; border: none; border-bottom: 1px solid var(--border);
@@ -377,7 +377,6 @@
   }
   .combo-dropdown-item.combo-add-new{ color: var(--accent); font-weight: 700; }
   .combo-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
-  .ing-name[data-unresolved]{ border-bottom-color: var(--danger); }
 
   /* Modal overlay (재료 관리): the first true "leaves the calculator" screen in this file —
      unlike the small popovers above, this dims and covers everything behind it. Bottom-sheet
@@ -404,6 +403,35 @@
     letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
   }
   .modal-body{ padding: 18px; }
+  .modal-body h3{
+    font-family: var(--font-display); font-size: 13px; font-weight: 800;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+    margin: 18px 0 10px;
+  }
+  .modal-body h3:first-of-type{ margin-top: 0; }
+  #costRecipeNameHeading{
+    font-family: var(--font-display); font-size: 17px; font-weight: 800;
+    text-transform: none; letter-spacing: normal; color: var(--ink); margin: 0 0 10px;
+  }
+  .cost-recipe-combo{ position: relative; }
+
+  /* 원가 계산 모달의 재료 연결 목록: 이름(레시피 그대로, 읽기 전용) + 재료DB 링크 콤보. */
+  .cost-ing-row{
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .cost-ing-row:last-of-type{ border-bottom: none; }
+  .cost-ing-name{
+    flex: 0 0 auto; max-width: 40%; font-weight: 700; font-size: 14.5px;
+    color: var(--ink); overflow-wrap: break-word;
+  }
+  .ing-link-input{
+    width: 100%; display: block; font-family: var(--font-body); font-size: 14px;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
+    padding: 9px 10px; min-height: 40px; color: var(--ink);
+  }
+  .ing-link-input[data-unresolved]{ border-color: var(--danger); }
+
   @media (min-width: 560px){
     .modal-overlay{ align-items: center; padding: 20px; }
     .modal-panel{ border-radius: 16px; }
@@ -500,6 +528,7 @@
             </div>
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
+              <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
             </div>
             <p class="hint" id="authHint" style="display:none;"></p>
@@ -660,14 +689,6 @@
     </div>
   </section>
 
-  <section class="card" id="productsCard" style="display:none;">
-    <h2>제품 &amp; 원가</h2>
-    <p class="hint" id="recipeCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
-    <p class="hint warn-hint" id="unpricedIngredientsHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
-    <div id="productsList"></div>
-    <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
-  </section>
-
   <!--
     Ad slot placed after the last content card, at the natural end of the scroll — not
     wedged between input rows or buttons, so a stray tap doesn't hit it by mistake.
@@ -718,6 +739,40 @@
       <div id="ingredientManagerList"></div>
       <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
       <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
+    </div>
+  </div>
+</div>
+
+<!--
+  원가 계산 모달 — 레시피 작성 화면과 완전히 분리된 별도 화면. 재료 이름(레시피에 쓰인 그대로,
+  예: "버터")과 원가 계산용 재료DB 연결(예: "앵커버터")은 여기서만 다룬다 — 레시피 편집 화면의
+  재료 이름 칸은 이 연결과 무관하게 항상 그대로 표시된다.
+-->
+<div class="modal-overlay" id="costCalcOverlay" style="display:none;">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-label="원가 계산">
+    <div class="modal-header">
+      <h2>원가 계산</h2>
+      <button class="icon-btn" id="closeCostCalcBtn" aria-label="닫기" style="font-size:22px;font-weight:700;">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="cost-recipe-combo">
+        <div class="field-row">
+          <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색">
+          <button type="button" class="io-btn combo-toggle" id="costRecipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
+        </div>
+        <div class="combo-dropdown" id="costRecipeDropdown" style="display:none;"></div>
+      </div>
+      <p class="hint" id="costNoRecipeHint">레시피를 선택하면 재료 연결과 원가를 확인할 수 있어요.</p>
+      <div id="costCalcBody" style="display:none;">
+        <h3 id="costRecipeNameHeading"></h3>
+        <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
+        <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
+        <div id="costIngredientsList"></div>
+        <div class="toolbar-divider"></div>
+        <h3>제품 &amp; 원가</h3>
+        <div id="costProductsList"></div>
+        <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
+      </div>
     </div>
   </div>
 </div>
@@ -939,7 +994,7 @@
       row.className = 'ing-row flour-row';
       var singleFlour = state.flours.length === 1;
       row.innerHTML =
-        '<div class="ing-name-combo"><input class="ing-name" data-idx="' + idx + '" aria-label="밀가루 이름"><div class="combo-dropdown" style="display:none;"></div></div>' +
+        '<input class="ing-name" value="' + escapeHtml(fl.name) + '" data-idx="' + idx + '" aria-label="밀가루 이름">' +
         '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
         '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
         (state.flours.length > 1
@@ -948,14 +1003,12 @@
       flourListEl.appendChild(row);
     });
 
-    flourListEl.querySelectorAll('.ing-name-combo').forEach(function(wrap, idx){
-      var input = wrap.querySelector('.ing-name');
-      var dropdown = wrap.querySelector('.combo-dropdown');
-      attachIngredientCombo(input, dropdown, state.flours[idx], function(){
-        fitDigits(input, 14.5);
-        updateDisplays();
+    flourListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
+      fitDigits(el, 14.5);
+      el.addEventListener('input', function(){
+        state.flours[+el.dataset.idx].name = el.value;
+        fitDigits(el, 14.5);
       });
-      fitDigits(input, 14.5);
     });
     flourListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
       el.addEventListener('input', function(){
@@ -1002,7 +1055,7 @@
       var row = document.createElement('div');
       row.className = 'ing-row reorderable' + (isBread ? '' : ' weight-only');
       row.innerHTML =
-        '<div class="ing-name-combo"><input class="ing-name" data-idx="' + idx + '" aria-label="재료 이름"><div class="combo-dropdown" style="display:none;"></div></div>' +
+        '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
         (isBread
           ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
           : '') +
@@ -1015,14 +1068,12 @@
       ingListEl.appendChild(row);
     });
 
-    ingListEl.querySelectorAll('.ing-name-combo').forEach(function(wrap, idx){
-      var input = wrap.querySelector('.ing-name');
-      var dropdown = wrap.querySelector('.combo-dropdown');
-      attachIngredientCombo(input, dropdown, state.ingredients[idx], function(){
-        fitDigits(input, 14.5);
-        updateDisplays();
+    ingListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
+      fitDigits(el, 14.5);
+      el.addEventListener('input', function(){
+        state.ingredients[+el.dataset.idx].name = el.value;
+        fitDigits(el, 14.5);
       });
-      fitDigits(input, 14.5);
     });
     if (isBread){
       ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
@@ -1137,10 +1188,12 @@
 
     stampTotal.textContent = fmt(total);
     totalWeightText.textContent = fmt(total) + 'g';
+  }
 
-    // Ingredient/ratio edits change the recipe's cost-per-gram — keep the products card (if
-    // it's the one currently shown, i.e. an owned saved recipe is selected) live in sync.
-    if (productsCardEl.style.display !== 'none') refreshProductCosts();
+  function escapeHtml(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
   }
 
   // Engine switch: bread uses the baker's-% engine (flour card, %, base-flour field);
@@ -1246,11 +1299,11 @@
       var flourWeight = computeFlourWeight();
       state.flours.forEach(function(fl){
         var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-        lines.push(resolveIngredientName(fl) + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
+        lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
       });
       state.ingredients.forEach(function(ing){
         var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-        lines.push(resolveIngredientName(ing) + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
+        lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
       });
       total = flourWeight + state.ingredients.reduce(function(s,i){
         return s + flourWeight * ((parseFloat(i.pct)||0)/100);
@@ -1259,7 +1312,7 @@
       var scale = computeEngineBScale();
       state.ingredients.forEach(function(ing){
         var w = (parseFloat(ing.weight)||0) * scale;
-        lines.push(resolveIngredientName(ing) + '  ' + fmt(w) + 'g');
+        lines.push(ing.name + '  ' + fmt(w) + 'g');
       });
       total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
     }
@@ -1342,6 +1395,20 @@
   var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
+  var openCostCalcBtn = document.getElementById('openCostCalcBtn');
+  var costCalcOverlayEl = document.getElementById('costCalcOverlay');
+  var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
+  var costRecipeSearchInput = document.getElementById('costRecipeSearchInput');
+  var costRecipeDropdownEl = document.getElementById('costRecipeDropdown');
+  var costRecipeDropdownToggleBtn = document.getElementById('costRecipeDropdownToggle');
+  var costNoRecipeHintEl = document.getElementById('costNoRecipeHint');
+  var costCalcBodyEl = document.getElementById('costCalcBody');
+  var costRecipeNameHeadingEl = document.getElementById('costRecipeNameHeading');
+  var costCostPerGramHintEl = document.getElementById('costCostPerGramHint');
+  var costUnpricedHintEl = document.getElementById('costUnpricedHint');
+  var costIngredientsListEl = document.getElementById('costIngredientsList');
+  var costProductsListEl = document.getElementById('costProductsList');
+  var costModalRecipe = null; // independent working copy of whichever recipe is loaded in the cost-calc modal
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
@@ -1350,11 +1417,7 @@
   var shareSelectedBtn = document.getElementById('shareSelectedBtn');
   var deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
   var selectedSharePanelEl = document.getElementById('selectedSharePanel');
-  var productsCardEl = document.getElementById('productsCard');
-  var productsListEl = document.getElementById('productsList');
-  var recipeCostPerGramHintEl = document.getElementById('recipeCostPerGramHint');
-  var unpricedIngredientsHintEl = document.getElementById('unpricedIngredientsHint');
-  var myProducts = []; // products rows for whichever recipe is currently selected
+  var myProducts = []; // products rows for whichever recipe is currently loaded in the cost-calc modal
   var toggleLinkBtn = document.getElementById('toggleLinkBtn');
   var linkRowEl = document.getElementById('linkRow');
   var linkUrlTextEl = document.getElementById('linkUrlText');
@@ -1479,11 +1542,15 @@
   // A recipe's cost-per-gram is scale-invariant — the ratio between ingredients is what
   // matters, not whatever multiplier/target-total happens to be showing right now, since
   // both the numerator (cost) and denominator (weight) scale together. So this just needs
-  // the recipe's ratios (state.flours/state.ingredients), not computeFlourWeight()'s actual
-  // current output. price_per_gram of 0 (never priced, or an 'ea'-unit ingredient that can't
-  // be weight-converted) is treated as "unpriced" — contributes 0 cost and flags the result
-  // rather than silently understating it.
-  function computeRecipeCostPerGram(){
+  // the recipe's ratios (recipeLike.flours/recipeLike.ingredients), not the actual current
+  // output of whatever calculator session happens to have this recipe open. Takes a plain
+  // { type, flours, ingredients } rather than reading global state, since the cost-calc
+  // modal loads its own independent copy of whichever recipe is picked there — it has
+  // nothing to do with whatever recipe (if any) is currently open in the main editor.
+  // price_per_gram of 0 (never priced, or an 'ea'-unit ingredient that can't be weight-
+  // converted) is treated as "unpriced" — contributes 0 cost and flags the result rather
+  // than silently understating it.
+  function computeRecipeCostPerGramFor(recipeLike){
     var totalCost = 0, totalWeight = 0, hasUnpriced = false;
     function priceFor(row){
       if (row.ingredientId){
@@ -1493,15 +1560,15 @@
       hasUnpriced = true;
       return 0;
     }
-    if (state.type === 'bread'){
+    if (recipeLike.type === 'bread'){
       var BASE = 100; // arbitrary basis (flour bucket = 100) — only the ratio matters
-      state.flours.concat(state.ingredients).forEach(function(row){
+      recipeLike.flours.concat(recipeLike.ingredients).forEach(function(row){
         var w = BASE * (parseFloat(row.pct) || 0) / 100;
         totalCost += w * priceFor(row);
         totalWeight += w;
       });
     } else {
-      state.ingredients.forEach(function(row){
+      recipeLike.ingredients.forEach(function(row){
         var w = parseFloat(row.weight) || 0;
         totalCost += w * priceFor(row);
         totalWeight += w;
@@ -1652,13 +1719,16 @@
 
   // Re-reads every currently-rendered product row's own inputs (rather than myProducts,
   // which may lag behind an unsaved keystroke) so cost/margin update live as the user types,
-  // matching the same "recompute into existing nodes" rhythm as updateDisplays() itself.
+  // matching the same "recompute into existing nodes" rhythm updateDisplays() itself uses
+  // for the main calculator. costModalRecipe is the cost-calc modal's own independent copy
+  // of whichever recipe is currently loaded there (see openCostCalcRecipe()).
   function refreshProductCosts(){
-    var cost = computeRecipeCostPerGram();
-    recipeCostPerGramHintEl.textContent = '이 레시피의 g당 원가: ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g';
-    unpricedIngredientsHintEl.style.display = cost.hasUnpriced ? 'block' : 'none';
+    if (!costModalRecipe) return;
+    var cost = computeRecipeCostPerGramFor(costModalRecipe);
+    costCostPerGramHintEl.textContent = '이 레시피의 g당 원가: ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g';
+    costUnpricedHintEl.style.display = cost.hasUnpriced ? 'block' : 'none';
 
-    productsListEl.querySelectorAll('.product-row').forEach(function(row){
+    costProductsListEl.querySelectorAll('.product-row').forEach(function(row){
       var weightEl = row.querySelector('.product-weight');
       var priceEl = row.querySelector('.product-price');
       var resultEl = row.querySelector('.product-cost-result');
@@ -1673,7 +1743,7 @@
   }
 
   function renderProductsList(){
-    productsListEl.innerHTML = '';
+    costProductsListEl.innerHTML = '';
     myProducts.forEach(function(pd){
       var row = document.createElement('div');
       row.className = 'product-row';
@@ -1696,7 +1766,7 @@
           '<span class="unit">원</span>' +
         '</div>' +
         '<div class="product-cost-result"></div>';
-      productsListEl.appendChild(row);
+      costProductsListEl.appendChild(row);
 
       var nameEl = row.querySelector('.product-name');
       var weightEl = row.querySelector('.product-weight');
@@ -1742,12 +1812,6 @@
     refreshProductCosts();
   }
 
-  // A flour/ingredient row stores both `ingredientId` (the live link) and a `name` snapshot.
-  // Prefer the ingredient master's current name (so renaming it there updates every recipe
-  // for the owner) but fall back to the snapshot when unresolved (never picked, or a
-  // migrated legacy row that didn't auto-match) or when viewing as someone who can't see
-  // the owner's `ingredients` table at all (a share-link visitor) — this is why renaming an
-  // ingredient won't retroactively update an already-shared link until the owner re-saves.
   // A row only counts as "resolved" if its ingredientId actually exists in the master list —
   // deactivated ingredients still exist (so this stays resolved), but a stale/orphaned id
   // (e.g. from direct DB edits outside this app) correctly falls back to the warning state.
@@ -1755,14 +1819,6 @@
     var exists = row.ingredientId && myIngredients.some(function(ig){ return ig.id === row.ingredientId; });
     if (exists) inputEl.removeAttribute('data-unresolved');
     else inputEl.setAttribute('data-unresolved', '');
-  }
-
-  function resolveIngredientName(row){
-    if (row.ingredientId){
-      var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
-      if (found) return found.name;
-    }
-    return row.name || '';
   }
 
   // Legacy rows (saved before ingredient-DB linking existed) only have a `name`. On load,
@@ -1777,24 +1833,23 @@
     return row;
   }
 
-  // Reused by buildFlourRows()/buildIngRows() for every flour/ingredient name field: a
-  // searchable combo box (same "focus shows everything, typing filters" pattern as the
-  // "내 레시피" search box) that links the row to a personal ingredient master list instead
-  // of a bare free-text name. Falls back to plain text editing (no dropdown, ingredientId
-  // stays null) when signed out or Supabase isn't configured — a share-link visitor never
-  // has an `ingredients` table to search, so this keeps working exactly like before there.
-  function attachIngredientCombo(inputEl, dropdownEl, row, onChange){
-    inputEl.value = resolveIngredientName(row);
-    markResolved(inputEl, row);
-
-    if (!currentUser || !supabase){
-      inputEl.addEventListener('input', function(){
-        row.name = inputEl.value;
-        row.ingredientId = null;
-        if (onChange) onChange();
-      });
-      return;
+  // Reused only by the "원가 계산" modal's ingredient-link list: same show-everything-on-
+  // focus/filter-on-type search pattern the recipe editor's ingredient combo used to have,
+  // but this one NEVER touches row.name — it only ever sets row.ingredientId. That split is
+  // the whole point of this screen: a recipe can keep a short generic name ("버터") while
+  // being linked to a specific costed ingredient ("앵커버터") for cost calculation, without
+  // the recipe's own display ever getting silently renamed to the specific brand name.
+  function attachIngredientLinker(inputEl, dropdownEl, row, onChange){
+    function linkedName(){
+      if (row.ingredientId){
+        var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
+        if (found) return found.name;
+      }
+      return '';
     }
+    inputEl.value = linkedName();
+    inputEl.placeholder = '재료 선택';
+    markResolved(inputEl, row);
 
     function closeDropdown(){ dropdownEl.style.display = 'none'; }
     function renderList(showAll){
@@ -1817,7 +1872,6 @@
         item.textContent = ig.name;
         item.addEventListener('click', function(){
           row.ingredientId = ig.id;
-          row.name = ig.name;
           inputEl.value = ig.name;
           inputEl.removeAttribute('data-unresolved');
           closeDropdown();
@@ -1836,7 +1890,6 @@
             if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
             myIngredients.push(res.data);
             row.ingredientId = res.data.id;
-            row.name = res.data.name;
             inputEl.value = res.data.name;
             inputEl.removeAttribute('data-unresolved');
             closeDropdown();
@@ -1852,20 +1905,20 @@
     }
 
     inputEl.addEventListener('focus', function(){ openDropdown(true); });
-    inputEl.addEventListener('input', function(){
-      row.name = inputEl.value;
-      row.ingredientId = null;
-      inputEl.setAttribute('data-unresolved', '');
-      openDropdown(false);
-      if (onChange) onChange();
+    inputEl.addEventListener('input', function(){ openDropdown(false); }); // typing only filters — never saved as row.name/ingredientId until a candidate is picked
+    inputEl.addEventListener('blur', function(){
+      // Canceling a search (clicking away without picking anything) should restore the
+      // display to whatever's actually linked, not leave stray typed text showing.
+      inputEl.value = linkedName();
     });
   }
 
-  // Ingredient combos are rebuilt on every render() (rows come and go), so a single
-  // document-level closer (attached once, here) handles closing whichever one is open
-  // instead of each attachIngredientCombo() call adding its own permanent listener.
+  // Ingredient linkers are rebuilt every time the cost-calc modal renders a recipe's
+  // ingredient list, so a single document-level closer (attached once, here) handles closing
+  // whichever one is open instead of each attachIngredientLinker() call adding its own
+  // permanent listener.
   document.addEventListener('click', function(e){
-    document.querySelectorAll('.ing-name-combo').forEach(function(wrap){
+    document.querySelectorAll('.ing-link-combo').forEach(function(wrap){
       if (!wrap.contains(e.target)) {
         var dd = wrap.querySelector('.combo-dropdown');
         if (dd) dd.style.display = 'none';
@@ -1878,8 +1931,6 @@
     shareSelectedBtn.style.display = 'none';
     deleteSelectedBtn.style.display = 'none';
     selectedSharePanelEl.style.display = 'none';
-    productsCardEl.style.display = 'none';
-    myProducts = [];
   }
 
   function renderSelectedRecipe(recipe){
@@ -1889,8 +1940,6 @@
     deleteSelectedBtn.style.display = isOwner ? '' : 'none';
     if (!isOwner){
       selectedSharePanelEl.style.display = 'none';
-      productsCardEl.style.display = 'none';
-      myProducts = [];
       return;
     }
     toggleLinkBtn.textContent = recipe.share_token ? '링크 끄기' : '링크 켜기';
@@ -1900,10 +1949,6 @@
     } else {
       linkRowEl.style.display = 'none';
     }
-    // 제품/원가 정보는 저장된 레시피(recipe_id가 있어야 하는)와 소유자에게만 의미가 있다 —
-    // 저장 안 된 새 레시피나 다른 사람 레시피에서는 카드 자체를 숨긴다(위 return 분기).
-    productsCardEl.style.display = 'block';
-    loadProducts(recipe.id);
   }
 
   // Custom searchable dropdown (native <datalist> can't be restyled and can't be
@@ -2111,6 +2156,127 @@
     if (e.key === 'Escape' && ingredientManagerOverlayEl.style.display !== 'none') closeIngredientManagerModal();
   });
 
+  function openCostCalcModal(){
+    costRecipeSearchInput.value = '';
+    closeCostRecipeDropdown();
+    costModalRecipe = null;
+    costCalcBodyEl.style.display = 'none';
+    costNoRecipeHintEl.style.display = 'block';
+    costCalcOverlayEl.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    closeCostCalcBtn.focus();
+  }
+  function closeCostCalcModal(){
+    costCalcOverlayEl.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+  closeCostCalcBtn.addEventListener('click', closeCostCalcModal);
+  costCalcOverlayEl.addEventListener('click', function(e){
+    if (e.target === costCalcOverlayEl) closeCostCalcModal();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && costCalcOverlayEl.style.display !== 'none') closeCostCalcModal();
+  });
+
+  // Recipe picker inside the modal — same show-everything-on-focus/filter-on-type pattern as
+  // "내 레시피" (loadRecipeByName() et al.), but its own instance, and only offers recipes
+  // this user owns (RLS only allows the owner to write flours/ingredients/products back, so
+  // a shared-with-me recipe would just fail to save here anyway).
+  function renderCostRecipeDropdown(showAll){
+    var q = showAll ? '' : costRecipeSearchInput.value.trim().toLowerCase();
+    var matches = myRecipes.filter(function(r){
+      return currentUser && r.owner_id === currentUser.id && (!q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1);
+    });
+    costRecipeDropdownEl.innerHTML = '';
+    if (matches.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'combo-dropdown-empty';
+      empty.textContent = '일치하는 레시피가 없어요';
+      costRecipeDropdownEl.appendChild(empty);
+      return;
+    }
+    matches.forEach(function(r){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'combo-dropdown-item';
+      item.textContent = r.recipe_name || '이름 없는 레시피';
+      item.addEventListener('click', function(){
+        closeCostRecipeDropdown();
+        costRecipeSearchInput.value = '';
+        openCostCalcRecipe(r);
+      });
+      costRecipeDropdownEl.appendChild(item);
+    });
+  }
+  function openCostRecipeDropdown(showAll){
+    renderCostRecipeDropdown(showAll);
+    costRecipeDropdownEl.style.display = 'block';
+  }
+  function closeCostRecipeDropdown(){
+    costRecipeDropdownEl.style.display = 'none';
+  }
+  costRecipeSearchInput.addEventListener('focus', function(){ openCostRecipeDropdown(true); });
+  costRecipeSearchInput.addEventListener('input', function(){ openCostRecipeDropdown(false); });
+  costRecipeDropdownToggleBtn.addEventListener('click', function(){
+    if (costRecipeDropdownEl.style.display === 'none') { costRecipeSearchInput.focus(); openCostRecipeDropdown(true); }
+    else closeCostRecipeDropdown();
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('.cost-recipe-combo')) closeCostRecipeDropdown();
+  });
+
+  // Loads an independent working copy of the picked recipe's flours/ingredients — this never
+  // touches the main calculator's `state`, so linking ingredients here is safe regardless of
+  // whatever recipe (if any) is currently open in the editor behind this modal.
+  function openCostCalcRecipe(recipe){
+    costModalRecipe = {
+      id: recipe.id,
+      type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
+      flours: (Array.isArray(recipe.flours) ? recipe.flours : []).map(function(f){ return Object.assign({}, f); }),
+      ingredients: (Array.isArray(recipe.ingredients) ? recipe.ingredients : []).map(function(i){ return Object.assign({}, i); })
+    };
+    costRecipeNameHeadingEl.textContent = recipe.recipe_name || '이름 없는 레시피';
+    costNoRecipeHintEl.style.display = 'none';
+    costCalcBodyEl.style.display = 'block';
+    renderCostIngredientsList();
+    loadProducts(recipe.id);
+  }
+
+  // Persists just the ingredient-DB links back to this recipe's row — the recipe's own
+  // `name`/`pct`/`weight` fields are carried through untouched (this modal never edits them).
+  function saveCostRecipeLinks(){
+    if (!costModalRecipe) return;
+    supabase.from('recipes').update({
+      flours: costModalRecipe.flours,
+      ingredients: costModalRecipe.ingredients
+    }).eq('id', costModalRecipe.id).then(function(res){
+      if (res.error){ alert('재료 연결 저장 실패: ' + res.error.message); return; }
+      // Keep myRecipes in sync so re-opening this recipe (here or in the main editor) reflects the new links.
+      var cached = myRecipes.find(function(r){ return r.id === costModalRecipe.id; });
+      if (cached){ cached.flours = costModalRecipe.flours; cached.ingredients = costModalRecipe.ingredients; }
+    });
+  }
+
+  function renderCostIngredientsList(){
+    costIngredientsListEl.innerHTML = '';
+    costModalRecipe.flours.concat(costModalRecipe.ingredients).forEach(function(row){
+      var rowEl = document.createElement('div');
+      rowEl.className = 'cost-ing-row';
+      rowEl.innerHTML =
+        '<div class="cost-ing-name"></div>' +
+        '<div class="ing-link-combo"><input class="ing-link-input" autocomplete="off"><div class="combo-dropdown" style="display:none;"></div></div>';
+      costIngredientsListEl.appendChild(rowEl);
+      rowEl.querySelector('.cost-ing-name').textContent = row.name || '';
+      var input = rowEl.querySelector('.ing-link-input');
+      var dropdown = rowEl.querySelector('.combo-dropdown');
+      attachIngredientLinker(input, dropdown, row, function(){
+        saveCostRecipeLinks();
+        refreshProductCosts();
+      });
+    });
+    refreshProductCosts();
+  }
+
   function applyAuthUI(){
     closeAccountMenu();
     if (currentUser){
@@ -2137,6 +2303,7 @@
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
       closeIngredientManagerModal();
+      closeCostCalcModal();
       myRecipes = [];
       myIngredients = [];
       recipeSearchInput.value = '';
@@ -2177,6 +2344,10 @@
       closeAccountMenu();
       openIngredientManagerModal();
     });
+    openCostCalcBtn.addEventListener('click', function(){
+      closeAccountMenu();
+      openCostCalcModal();
+    });
     document.getElementById('addIngredientMasterBtn').addEventListener('click', function(){
       if (!currentUser) return;
       supabase.from('ingredients').insert({ owner_id: currentUser.id, name: '새 재료' }).select().single().then(function(res){
@@ -2189,8 +2360,8 @@
       renderIngredientManager(ingredientManagerSearchInput.value);
     });
     document.getElementById('addProductBtn').addEventListener('click', function(){
-      if (!currentUser || !selectedRecipeId) return;
-      supabase.from('products').insert({ owner_id: currentUser.id, recipe_id: selectedRecipeId, name: '새 제품' }).select().single().then(function(res){
+      if (!currentUser || !costModalRecipe) return;
+      supabase.from('products').insert({ owner_id: currentUser.id, recipe_id: costModalRecipe.id, name: '새 제품' }).select().single().then(function(res){
         if (res.error){ alert('제품 추가 실패: ' + res.error.message); return; }
         myProducts.push(res.data);
         renderProductsList();
