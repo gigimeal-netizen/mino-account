@@ -193,14 +193,6 @@
     flex: 0 0 auto; min-width: 72px; text-align: right;
   }
 
-  .stepper-row{ display:flex; gap:8px; margin-top: 12px; flex-wrap: wrap; }
-  .chip{
-    font-family: var(--font-mono); font-weight: 700; font-size: 14px;
-    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); color: var(--ink);
-    border-radius: 999px; padding: 9px 16px; cursor:pointer; min-height: 44px;
-  }
-  .chip[aria-pressed="true"]{ background: var(--accent); border-color: var(--accent); color: #fff; }
-  .chip:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
 
   .pmpm{ display:flex; align-items:center; gap:8px; margin-top: 12px; }
   .pmpm button{
@@ -497,13 +489,6 @@
       <span class="field-label">기준 밀가루</span>
       <input type="number" inputmode="decimal" id="baseFlour" value="1000" min="0" step="10">
       <span class="unit">g</span>
-    </div>
-    <div class="stepper-row" id="multChips">
-      <button class="chip" data-mult="1">×1</button>
-      <button class="chip" data-mult="1.5">×1.5</button>
-      <button class="chip" data-mult="2" aria-pressed="true">×2</button>
-      <button class="chip" data-mult="3">×3</button>
-      <button class="chip" data-mult="custom">직접입력</button>
     </div>
     <div class="pmpm">
       <button id="multMinus" aria-label="배율 줄이기">−</button>
@@ -981,7 +966,6 @@
   });
   multInput.addEventListener('input', function(){
     state.multiplier = parseFloat(multInput.value) || 0;
-    document.querySelectorAll('#multChips .chip').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
     updateDisplays();
   });
   document.getElementById('multMinus').addEventListener('click', function(){
@@ -993,20 +977,6 @@
     state.multiplier = Math.round((state.multiplier + 0.5)*10)/10;
     multInput.value = state.multiplier;
     updateDisplays();
-  });
-  document.querySelectorAll('#multChips .chip').forEach(function(chip){
-    chip.addEventListener('click', function(){
-      document.querySelectorAll('#multChips .chip').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
-      if (chip.dataset.mult === 'custom'){
-        chip.setAttribute('aria-pressed','true');
-        multInput.focus();
-        return;
-      }
-      chip.setAttribute('aria-pressed','true');
-      state.multiplier = parseFloat(chip.dataset.mult);
-      multInput.value = state.multiplier;
-      updateDisplays();
-    });
   });
 
   // Mode B input
@@ -1192,10 +1162,6 @@
     baseFlourInput.value = state.baseFlour;
     multInput.value = state.multiplier;
     targetTotalInput.value = state.targetTotal;
-    document.querySelectorAll('#multChips .chip').forEach(function(c){
-      var isPreset = c.dataset.mult !== 'custom' && parseFloat(c.dataset.mult) === state.multiplier;
-      c.setAttribute('aria-pressed', isPreset ? 'true' : 'false');
-    });
 
     applyModeUI();
     render();
@@ -1362,10 +1328,6 @@
     baseFlourInput.value = state.baseFlour;
     multInput.value = state.multiplier;
     targetTotalInput.value = state.targetTotal;
-    document.querySelectorAll('#multChips .chip').forEach(function(c){
-      var isPreset = c.dataset.mult !== 'custom' && parseFloat(c.dataset.mult) === state.multiplier;
-      c.setAttribute('aria-pressed', isPreset ? 'true' : 'false');
-    });
     recipeSearchInput.value = '';
     clearSelectedRecipe();
     applyModeUI();
