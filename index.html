@@ -102,7 +102,7 @@
     display:flex; align-items:center; justify-content:center; flex:0 0 auto;
     width:44px; height:44px; padding:0; border-radius:999px;
     border: 1.5px solid var(--border-strong); background: var(--bg-elevated); color: var(--ink);
-    cursor:pointer;
+    cursor:pointer; transition: background-color .15s ease, color .15s ease, border-color .15s ease;
   }
   .icon-btn svg{ width:20px; height:20px; display:block; }
   .icon-btn:hover{ border-color: var(--accent); color: var(--accent); }
@@ -429,7 +429,7 @@
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
       </button>
-      <button class="icon-btn primary" id="saveBtn" aria-label="레시피 저장" style="display:none;">
+      <button class="icon-btn" id="saveBtn" aria-label="레시피 저장" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -522,7 +522,7 @@
     <h2>메모</h2>
     <textarea id="notesInput" class="notes-input" rows="4" placeholder="발효 시간, 굽기 팁처럼 남겨두고 싶은 메모를 적어보세요."></textarea>
     <div class="toolbar-icons" style="margin-top:12px;">
-      <button class="icon-btn primary" id="saveBtnBottom" aria-label="레시피 저장" style="display:none;">
+      <button class="icon-btn" id="saveBtnBottom" aria-label="레시피 저장" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -905,6 +905,7 @@
   // Lightweight refresh: recomputes derived numbers and writes them into existing
   // DOM nodes (never rebuilds), so the field the user is actively typing in keeps focus.
   function updateDisplays(){
+    markDirty(); // account.html-only addition: every real edit runs through here eventually
     if (state.flours.length === 1) state.flours[0].pct = 100;
     syncTargetTotalFromPortions();
     if (state.portions.length > 0 && document.activeElement !== targetTotalInput){
@@ -1143,6 +1144,25 @@
 
   var selectedRecipeId = null; // id of the recipe currently loaded via the search box
 
+  // Unsaved-changes indicator: both save buttons sit as plain neutral icon-btns until
+  // something actually changes, then turn accent-filled (the same "primary" look used
+  // everywhere else in this app for "the highlighted action here") so it's obvious there's
+  // something to save. suppressDirtyTracking wraps the render() calls that fire when
+  // *loading* a recipe (applyRecipeRowToState/newRecipe) — those aren't user edits.
+  var isDirty = false;
+  var suppressDirtyTracking = false;
+  function markDirty(){
+    if (suppressDirtyTracking || isDirty) return;
+    isDirty = true;
+    saveBtn.classList.add('primary');
+    saveBtnBottom.classList.add('primary');
+  }
+  function markClean(){
+    isDirty = false;
+    saveBtn.classList.remove('primary');
+    saveBtnBottom.classList.remove('primary');
+  }
+
   function shareUrl(token){
     return location.origin + location.pathname + '?share=' + token;
   }
@@ -1188,7 +1208,10 @@
     targetTotalInput.value = state.targetTotal;
 
     applyModeUI();
+    suppressDirtyTracking = true;
     render();
+    suppressDirtyTracking = false;
+    markClean();
   }
 
   function loadMyRecipes(){
@@ -1360,7 +1383,10 @@
     recipeSearchInput.value = '';
     clearSelectedRecipe();
     applyModeUI();
+    suppressDirtyTracking = true;
     render();
+    suppressDirtyTracking = false;
+    markClean();
   }
   newRecipeBtn.addEventListener('click', newRecipe);
 
@@ -1376,6 +1402,7 @@
       if (res.error){ alert('저장 실패: ' + res.error.message); return; }
       selectedRecipeId = res.data.id;
       recipeSearchInput.value = '';
+      markClean();
       loadMyRecipes();
       showToast('레시피를 저장했어요');
     });
@@ -1411,6 +1438,7 @@
       myRecipes = [];
       recipeSearchInput.value = '';
       clearSelectedRecipe();
+      markClean();
     }
   }
 
@@ -1453,7 +1481,9 @@
     // doesn't dispatch an input event.)
     recipeNameInput.addEventListener('input', function(){
       if (selectedRecipeId) clearSelectedRecipe();
+      markDirty();
     });
+    notesInput.addEventListener('input', markDirty);
 
     // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
     // the OAuth round trip completes — which can land back on the site root instead of
