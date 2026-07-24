@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0B0C0E">
+<title>제빵 계산기 · 내 계정</title>
+<!-- Google AdSense — account.html only (see CLAUDE.md for why the other two pages stay
+     dependency-free). Replace ca-pub-YOUR-PUBLISHER-ID with the real publisher ID once
+     the AdSense account is approved; must match the value used in the <ins> tag below. -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR-PUBLISHER-ID" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg: #0B0C0E;
+    --bg-card: #17181C;
+    --bg-elevated: #202127;
+    --ink: #EDEDF0;
+    --ink-soft: #8B8D98;
+    --accent: #5E6AD2;
+    --accent-soft: rgba(94,106,210,0.16);
+    --danger: #E5484D;
+    --danger-soft: rgba(229,72,77,0.16);
+    --success: #3DD68C;
+    --border: #232429;
+    --border-strong: #34363D;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-pop: 0 8px 24px rgba(0,0,0,0.45);
+    --shadow-footer: 0 -8px 24px rgba(0,0,0,0.4);
+    --font-display: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+  }
+  /* Light variant of the same design language (not the old bakery palette) — toggled by
+     JS setting data-theme on <html> and remembered in localStorage. Every rule below
+     already reads these as var()s, so this override block is the only place theme values
+     live; nothing else needs a light-specific copy. */
+  html[data-theme="light"]{
+    --bg: #F5F6F8;
+    --bg-card: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --ink: #1C1C1F;
+    --ink-soft: #6B6F76;
+    --accent: #5E6AD2;
+    --accent-soft: rgba(94,106,210,0.10);
+    --danger: #E5484D;
+    --danger-soft: rgba(229,72,77,0.10);
+    --success: #1F9D55;
+    --border: #E4E5E9;
+    --border-strong: #D3D5DB;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.05), 0 1px 1px rgba(0,0,0,0.03);
+    --shadow-pop: 0 8px 24px rgba(0,0,0,0.12);
+    --shadow-footer: 0 -8px 24px rgba(0,0,0,0.08);
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  body{ padding-bottom: 132px; /* room for sticky footer */ }
+  .wrap{ max-width: 580px; margin: 0 auto; padding: 28px 18px 24px; }
+
+  header{ padding: 6px 2px 20px; }
+  .eyebrow{
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-soft); margin: 0 0 4px;
+  }
+  h1{
+    font-family: var(--font-display); font-weight: 900; font-size: 30px;
+    letter-spacing: -0.01em; margin: 0; line-height: 1.15;
+  }
+  .sub{ color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
+
+  .recipe-name{
+    width:100%; margin: 16px 0 0; padding: 12px 14px;
+    font-family: var(--font-display); font-weight: 800; font-size: 17px;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong);
+    border-radius: 10px; color: var(--ink);
+  }
+  .recipe-name:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
+
+  .io-row{ display:flex; gap:8px; margin-top: 10px; }
+  .io-btn{
+    flex:1; padding: 10px 12px; border-radius: 10px;
+    border: 1.5px solid var(--border-strong); background: var(--bg-elevated);
+    font-family: var(--font-display); font-weight: 800; font-size: 13px;
+    color: var(--ink); cursor:pointer; min-height: 44px;
+  }
+  .io-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .io-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+  .io-btn:disabled{ opacity: 0.45; cursor: default; }
+  .io-btn:disabled:hover{ border-color: var(--border-strong); color: var(--ink); }
+  .io-btn.primary{ background: var(--accent); border-color: var(--accent); color: #fff; }
+  .io-btn.primary:hover{ color: #fff; opacity: 0.9; }
+
+  /* Header: title + tucked-away account menu, instead of full-width login/logout rows */
+  .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .header-actions{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  .icon-btn{
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+    width:44px; height:44px; padding:0; border-radius:999px;
+    border: 1.5px solid var(--border-strong); background: var(--bg-elevated); color: var(--ink);
+    cursor:pointer;
+  }
+  .icon-btn svg{ width:20px; height:20px; display:block; }
+  .icon-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .icon-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+  /* Which icon shows follows data-theme purely in CSS — dark (default) shows the moon,
+     light shows the sun; applyTheme() in JS only needs to set the attribute. */
+  .theme-toggle .icon-sun{ display:none; }
+  html[data-theme="light"] .theme-toggle .icon-sun{ display:block; }
+  html[data-theme="light"] .theme-toggle .icon-moon{ display:none; }
+  .account-chip-wrap{ position:relative; flex:0 0 auto; }
+  .account-menu{
+    position:absolute; right:0; top: calc(100% + 6px); z-index: 20; min-width: 190px;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 10px;
+    box-shadow: var(--shadow-pop); padding: 8px;
+  }
+  .menu-btn{
+    display:block; width:100%; padding: 10px 12px; margin-top: 4px; min-height: 44px;
+    border: 1.5px solid var(--border-strong); border-radius: 8px; background: var(--bg-card);
+    font-family: var(--font-display); font-weight: 700; font-size: 13px;
+    color: var(--ink); cursor:pointer; text-align:left;
+  }
+  .menu-btn:first-child{ margin-top: 0; }
+  .menu-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .menu-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  /* Recipe toolbar: name + new/save always visible; search/share/delete only once logged in */
+  .recipe-toolbar > .recipe-name{ margin-top: 0; }
+  .toolbar-divider{ border-top: 1px solid var(--border); margin: 16px 0; }
+
+  /* Segmented mode toggle */
+  .mode-toggle{
+    display:flex; gap:6px; background: var(--bg-card);
+    border: 1.5px solid var(--border-strong); border-radius: 12px; padding: 6px;
+    margin-top: 20px;
+  }
+  .mode-btn{
+    flex:1; border:none; background:transparent; padding: 12px 6px;
+    font-family: var(--font-display); font-weight: 800; font-size: 14px;
+    color: var(--ink-soft); border-radius: 8px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    min-height: 52px; justify-content:center;
+  }
+  .mode-btn .tag{ font-size: 10.5px; font-weight: 600; letter-spacing:0.03em; opacity:0.75; }
+  .mode-btn[aria-pressed="true"]{
+    background: var(--ink); color: var(--bg-card);
+  }
+  .mode-btn[aria-pressed="true"] .tag{ color: var(--bg); opacity:0.85;}
+  .mode-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  section.card{
+    background: var(--bg-card); border: 1.5px solid var(--border);
+    border-radius: 14px; padding: 20px 18px; margin-top: 18px;
+    box-shadow: var(--shadow-card);
+  }
+  .card h2{
+    font-family: var(--font-display); font-size: 13px; font-weight: 800;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+    margin: 0 0 14px;
+  }
+
+  .field-row{ display:flex; align-items:center; gap:10px; }
+  .field-row + .field-row{ margin-top: 14px; }
+  .field-label{ font-size: 14px; font-weight: 600; flex: 0 0 auto; min-width: 92px; }
+  input[type="number"]{
+    font-family: var(--font-mono); font-weight: 700; font-size: 21px;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
+    padding: 11px 10px; width: 100%; color: var(--ink); min-height: 48px;
+  }
+  input[type="number"]:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
+  input[type="number"][readonly]{ background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .unit{ font-family: var(--font-mono); font-size: 14px; color: var(--ink-soft); flex:0 0 auto; }
+
+  .portion-row{
+    display:flex; align-items:center; gap:6px; flex-wrap: wrap;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .portion-row:last-of-type{ border-bottom: none; }
+  .portion-weight{ flex: 1 1 80px; min-width: 0; }
+  .portion-qty{ flex: 0 1 64px; min-width: 0; }
+  .portion-sep{ font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); flex: 0 0 auto; }
+  .portion-subtotal{
+    font-family: var(--font-mono); font-weight: 800; font-size: 15px; color: var(--accent);
+    flex: 0 0 auto; min-width: 72px; text-align: right;
+  }
+
+  .stepper-row{ display:flex; gap:8px; margin-top: 12px; flex-wrap: wrap; }
+  .chip{
+    font-family: var(--font-mono); font-weight: 700; font-size: 14px;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); color: var(--ink);
+    border-radius: 999px; padding: 9px 16px; cursor:pointer; min-height: 44px;
+  }
+  .chip[aria-pressed="true"]{ background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .pmpm{ display:flex; align-items:center; gap:8px; margin-top: 12px; }
+  .pmpm button{
+    width: 44px; height: 44px; border-radius: 8px; border: 1.5px solid var(--border-strong);
+    background: var(--bg-elevated); font-size: 20px; font-weight: 800; color: var(--ink); cursor:pointer;
+  }
+  .pmpm button:focus-visible{ outline: 3px solid var(--accent); outline-offset:2px; }
+  .pmpm input{ text-align:center; }
+
+  /* Ad slot: kept visually separate from the recipe cards (no card background/border)
+     so it never reads as part of the calculator's own content. */
+  .ad-slot{ margin-top: 18px; text-align:center; }
+  .ad-label{
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-soft); margin: 0 0 6px;
+  }
+
+  .hint{ font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; line-height:1.5; }
+  .hint button.link{
+    background:none; border:none; padding:0; color: var(--accent);
+    font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
+  }
+
+  /* Ingredient rows — pct (de-emphasized, muted) vs weight (the number you actually weigh
+     out, given the accent tint) are deliberately styled apart so the two columns read as
+     different kinds of data at a glance, not just two number boxes side by side. */
+  .ing-row{
+    display:grid; grid-template-columns: minmax(0,1fr) 58px 112px 44px;
+    gap: 8px; align-items:center; padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ing-row:last-of-type{ border-bottom: none; }
+  .ing-row.flour-row{ background: var(--accent-soft); border-radius: 8px; padding: 12px 8px; margin: -2px -8px 4px; border-bottom:none; }
+  .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 58px 112px 30px 44px; }
+  .ing-name{
+    font-family: var(--font-body); font-weight: 700; font-size: 14.5px;
+    background: transparent; border: none; border-bottom: 1.5px dashed var(--border-strong);
+    padding: 6px 2px; color: var(--ink); min-height:36px; min-width: 0;
+  }
+  .ing-name:focus{ outline:none; border-bottom-color: var(--accent); }
+  .ing-name[readonly]{ border-bottom: none; font-weight: 800; }
+  .pct-input{
+    font-family: var(--font-mono); font-size: 16px; font-weight:700; text-align:right;
+    background: var(--bg); border: 1.5px solid var(--border); color: var(--ink-soft);
+    border-radius: 8px; padding: 8px 6px; min-height: 44px; min-width: 0;
+  }
+  .pct-input[readonly]{ background: transparent; border-color: transparent; color: var(--accent); }
+  .weight-cell{ display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
+  .weight-input{
+    font-family: var(--font-mono); font-weight: 800; font-size: 17px; text-align:right;
+    background: var(--accent-soft); border: 1.5px solid var(--accent); border-radius: 8px;
+    padding: 8px 6px; min-height: 44px; width: 100%; min-width:0; color: var(--ink);
+  }
+  .weight-input:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
+  .weight-unit{ font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); flex:0 0 auto; }
+  .flour-row .weight-input{ color: var(--accent); border-color: var(--accent); }
+  .del-btn{
+    background: none; border: none; color: var(--ink-soft); font-size: 22px;
+    width: 44px; height: 44px; cursor: pointer; border-radius: 6px;
+  }
+  .del-btn:hover{ color: var(--danger); }
+  .del-btn:focus-visible{ outline: 2px solid var(--accent); }
+
+  .reorder-btns{ display:flex; flex-direction:column; gap:2px; min-width: 0; }
+  .reorder-btns button{
+    width: 100%; height: 17px; line-height:1; font-size: 10px; padding:0;
+    border: 1px solid var(--border-strong); background:var(--bg-elevated); color: var(--ink-soft);
+    border-radius: 4px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .reorder-btns button:hover:not(:disabled){ color: var(--accent); border-color: var(--accent); }
+  .reorder-btns button:disabled{ opacity: 0.3; cursor:default; }
+  .reorder-btns button:focus-visible{ outline: 2px solid var(--accent); }
+
+  .add-btn{
+    width:100%; margin-top: 12px; padding: 12px; border-radius: 10px;
+    border: 1.5px dashed var(--border-strong); background: transparent;
+    font-family: var(--font-display); font-weight: 800; font-size: 14px;
+    color: var(--ink-soft); cursor:pointer;
+  }
+  .add-btn:hover{ border-color: var(--accent); color: var(--accent); }
+
+  .warn-hint{ color: var(--danger); font-weight: 700; }
+  #flourCard.invalid{ border-color: var(--danger); }
+
+  .lib-row{
+    display:flex; align-items:center; gap:8px; padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .lib-name{
+    flex:1; min-width:0; font-weight: 700; font-size: 14.5px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .lib-badge{
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+    color: var(--accent); background: var(--accent-soft);
+    border-radius: 999px; padding: 2px 8px; margin-left: 6px; white-space: nowrap;
+  }
+  .lib-actions{ display:flex; gap:6px; flex:0 0 auto; }
+  .lib-btn{
+    font-family: var(--font-display); font-weight: 800; font-size: 12.5px;
+    border-radius: 8px; padding: 8px 10px; cursor:pointer; min-height: 44px;
+    border: 1.5px solid var(--border-strong); background: var(--bg-elevated); color: var(--ink);
+  }
+  .lib-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .lib-btn.danger:hover{ border-color: var(--danger); color: var(--danger); }
+
+  /* Sharing panel for the recipe currently selected via the search box */
+  .share-panel{ padding: 10px 0 12px; border-bottom: 1px solid var(--border); }
+  .share-panel:last-child{ border-bottom: none; }
+  .text-input{
+    font-family: var(--font-body); font-size: 14px; flex: 1 1 auto; min-width: 0;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
+    padding: 10px; color: var(--ink); min-height: 44px;
+  }
+  .text-input:focus{ outline: 3px solid var(--accent); outline-offset: 1px; }
+  .link-row{ display:flex; align-items:center; gap:8px; margin-top: 10px; }
+  .link-url{
+    font-family: var(--font-mono); font-size: 12px; word-break: break-all;
+    background: var(--accent-soft); border-radius: 8px; padding: 8px 10px;
+    margin: 0; flex: 1 1 auto; min-width: 0;
+  }
+  .link-row .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
+
+  /* Custom searchable dropdown for "내 레시피" (replaces the browser's native <datalist>
+     popup, which can't be styled and can't be opened/closed on demand). */
+  .recipe-combo{ position: relative; }
+  .combo-toggle{ flex: 0 0 auto; padding: 10px 14px; font-size: 12px; }
+  .recipe-dropdown{
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 10px;
+    max-height: 240px; overflow-y: auto; box-shadow: var(--shadow-pop);
+  }
+  .recipe-dropdown-item{
+    display: block; width: 100%; text-align: left; min-height: 44px;
+    padding: 10px 14px; border: none; border-bottom: 1px solid var(--border);
+    background: none; font-family: var(--font-body); font-size: 14.5px; color: var(--ink);
+    cursor: pointer;
+  }
+  .recipe-dropdown-item:last-child{ border-bottom: none; }
+  .recipe-dropdown-item:hover, .recipe-dropdown-item:focus-visible{
+    background: var(--accent-soft); outline: none;
+  }
+  .recipe-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
+
+  /* Sticky footer stamp */
+  .footer{
+    position: fixed; left:0; right:0; bottom:0;
+    background: var(--bg-elevated); color: var(--ink);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; gap:14px;
+    border-top: 1px solid var(--border);
+    box-shadow: var(--shadow-footer);
+  }
+  .footer-inner{ max-width: 580px; margin: 0 auto; width:100%; display:flex; align-items:center; gap:14px; }
+  .stamp{
+    flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%;
+    border: 3px solid var(--accent); color: var(--accent);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background: var(--accent-soft);
+  }
+  .stamp .num{ font-family: var(--font-mono); font-weight: 900; font-size: 20px; line-height:1; }
+  .stamp .u{ font-family: var(--font-mono); font-size: 9px; letter-spacing:0.06em; margin-top:2px; }
+  .footer-text{ flex:1; min-width:0; }
+  .footer-label{ font-size: 11px; letter-spacing:0.06em; text-transform:uppercase; color: var(--ink-soft); }
+  .footer-value{ font-family: var(--font-mono); font-weight: 800; font-size: 21px; margin-top:2px; }
+  .copy-btn{
+    flex: 0 0 auto; background: var(--accent); color: #fff; border:none;
+    padding: 12px 14px; border-radius: 10px; font-family: var(--font-display);
+    font-weight: 800; font-size: 13px; cursor:pointer; min-height: 44px;
+  }
+  .copy-btn:active{ transform: scale(0.97); }
+  .copy-btn.copied{ background: var(--success); color:#fff; }
+
+  .toast{
+    position: fixed; left:50%; bottom: 150px; transform: translateX(-50%);
+    background: var(--bg-elevated); color: var(--ink); border: 1px solid var(--border-strong);
+    padding: 10px 18px; border-radius: 999px;
+    font-size: 13px; font-weight:700; opacity:0; pointer-events:none;
+    box-shadow: var(--shadow-pop);
+    transition: opacity 0.25s ease;
+  }
+  .toast.show{ opacity: 1; }
+
+  @media (max-width: 360px){
+    .ing-row{ grid-template-columns: minmax(0,1fr) 46px 92px 44px; }
+    .ing-row.reorderable{ grid-template-columns: minmax(0,1fr) 46px 92px 26px 44px; }
+    h1{ font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-row">
+      <div>
+        <p class="eyebrow">MINO · 계량 도구 · 내 계정</p>
+        <h1>제빵 계산기</h1>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn theme-toggle" id="themeToggleBtn" aria-label="화면 모드 전환">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <line x1="12" y1="2" x2="12" y2="4"></line>
+            <line x1="12" y1="20" x2="12" y2="22"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="2" y1="12" x2="4" y2="12"></line>
+            <line x1="20" y1="12" x2="22" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+          </svg>
+        </button>
+        <div class="account-chip-wrap">
+          <button class="icon-btn account-chip" id="accountChipBtn" aria-label="로그인">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </button>
+          <div class="account-menu" id="accountMenu" style="display:none;">
+            <div id="authRow">
+              <button class="menu-btn" id="googleBtn">Google로 로그인</button>
+              <button class="menu-btn" id="kakaoBtn">카카오로 로그인</button>
+            </div>
+            <div id="loggedInRow" style="display:none;">
+              <button class="menu-btn" id="logoutBtn">로그아웃</button>
+            </div>
+            <p class="hint" id="authHint" style="display:none;"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="sub" id="subText">구글이나 카카오 계정으로 로그인해서 내 레시피를 저장하고 공유해요.</p>
+    <p class="hint" id="sharedBanner" style="display:none;">공유된 레시피를 읽기 전용으로 보고 있어요. 저장하려면 본인 계정으로 로그인한 뒤 새로 저장해주세요.</p>
+  </header>
+
+  <section class="card recipe-toolbar">
+    <input class="recipe-name" id="recipeName" value="기본 바게트 반죽" aria-label="레시피 이름">
+    <div class="io-row">
+      <button class="io-btn" id="newRecipeBtn">+ 새 레시피</button>
+      <button class="io-btn primary" id="saveBtn" style="display:none;">저장</button>
+    </div>
+
+    <div id="libraryCard" style="display:none;">
+      <div class="toolbar-divider"></div>
+      <div class="recipe-combo">
+        <div class="field-row">
+          <input type="text" id="recipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색 및 불러오기">
+          <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
+        </div>
+        <div class="recipe-dropdown" id="recipeDropdown" style="display:none;"></div>
+      </div>
+      <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
+
+      <div class="lib-row" id="selectedRecipeRow" style="display:none;">
+        <span class="lib-name" id="selectedRecipeName"></span>
+        <span class="lib-actions">
+          <button class="lib-btn" id="shareSelectedBtn">공유</button>
+          <button class="lib-btn danger" id="deleteSelectedBtn">삭제</button>
+        </span>
+      </div>
+      <div class="share-panel" id="selectedSharePanel" style="display:none;">
+        <div class="field-row">
+          <span class="field-label">링크 공유</span>
+          <button class="io-btn" id="toggleLinkBtn">링크 켜기</button>
+        </div>
+        <div class="link-row" id="linkRow" style="display:none;">
+          <p class="hint link-url" id="linkUrlText"></p>
+          <button class="io-btn" id="copyLinkBtn">복사</button>
+        </div>
+        <div class="field-row">
+          <span class="field-label">계정과 공유</span>
+          <input type="email" id="shareEmailInput" class="text-input" placeholder="상대방 이메일" aria-label="공유할 이메일">
+          <button class="io-btn" id="shareEmailBtn">공유</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="mode-toggle" role="group" aria-label="계산 모드 선택">
+    <button class="mode-btn" id="modeABtn" aria-pressed="true">
+      배율 조정
+      <span class="tag">기준량 × 배수</span>
+    </button>
+    <button class="mode-btn" id="modeBBtn" aria-pressed="false">
+      총 반죽량 기준
+      <span class="tag">목표 무게 역산</span>
+    </button>
+  </div>
+
+  <section class="card" id="modeAPanel">
+    <h2>기준 밀가루량 &amp; 배율</h2>
+    <div class="field-row">
+      <span class="field-label">기준 밀가루</span>
+      <input type="number" inputmode="decimal" id="baseFlour" value="1000" min="0" step="10">
+      <span class="unit">g</span>
+    </div>
+    <div class="stepper-row" id="multChips">
+      <button class="chip" data-mult="1">×1</button>
+      <button class="chip" data-mult="1.5">×1.5</button>
+      <button class="chip" data-mult="2" aria-pressed="true">×2</button>
+      <button class="chip" data-mult="3">×3</button>
+      <button class="chip" data-mult="custom">직접입력</button>
+    </div>
+    <div class="pmpm">
+      <button id="multMinus" aria-label="배율 줄이기">−</button>
+      <input type="number" inputmode="decimal" id="multInput" value="2" step="0.1" min="0.1" style="max-width:100px;">
+      <button id="multPlus" aria-label="배율 늘리기">+</button>
+      <span class="unit">배</span>
+    </div>
+    <p class="hint">기준 밀가루량에 배율을 곱해 전체 반죽을 스케일합니다.</p>
+  </section>
+
+  <section class="card" id="modeBPanel" style="display:none;">
+    <h2>목표 총 반죽량</h2>
+    <div class="field-row">
+      <span class="field-label">총 반죽량</span>
+      <input type="number" inputmode="decimal" id="targetTotal" value="3000" min="0" step="10">
+      <span class="unit">g</span>
+    </div>
+    <p class="hint">원하는 총 무게를 입력하면 재료 비율에 맞춰 밀가루량을 역산합니다.</p>
+
+    <div id="portionList"></div>
+    <button class="add-btn" id="addPortionBtn">+ 반죽 분할 추가</button>
+    <p class="hint" id="portionSumHint" style="display:none;">
+      분할 합계 <span id="portionSum">0</span>g가 총 반죽량에 반영돼요 (직접 입력 비활성화)
+    </p>
+  </section>
+
+  <section class="card" id="flourCard">
+    <h2>밀가루 (합계 100%)</h2>
+    <div id="flourList"></div>
+    <button class="add-btn" id="addFlourBtn">+ 밀가루 종류 추가</button>
+    <p class="hint warn-hint" id="flourPctWarning" style="display:none;">
+      밀가루 비율 합계가 100%가 아니에요 (현재 <span id="flourPctSum">100</span>%)
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>재료 (밀가루 기준 %)</h2>
+    <div id="ingList"></div>
+    <button class="add-btn" id="addIngBtn">+ 재료 추가</button>
+    <p class="hint">퍼센트나 중량, 편한 쪽을 입력하면 서로 자동 계산돼요.</p>
+    <p class="hint">
+      베이커스 퍼센트가 처음이신가요?
+      <button class="link" id="pctInfoBtn">퍼센트란?</button>
+    </p>
+    <p class="hint" id="pctInfo" style="display:none;">
+      밀가루 무게를 100%로 두고, 다른 재료는 밀가루 대비 비율(%)로 표시하는 방식이에요.
+      예: 수분율 65% = 밀가루 1000g일 때 물 650g.
+    </p>
+  </section>
+
+  <!--
+    Ad slot placed after the last content card, at the natural end of the scroll — not
+    wedged between input rows or buttons, so a stray tap doesn't hit it by mistake. Replace
+    ca-pub-YOUR-PUBLISHER-ID (both here and in the <head> loader script) and
+    YOUR-AD-SLOT-ID with the real values from the AdSense dashboard once approved.
+  -->
+  <div class="ad-slot">
+    <p class="ad-label">광고</p>
+    <ins class="adsbygoogle"
+         style="display:block"
+         data-ad-client="ca-pub-YOUR-PUBLISHER-ID"
+         data-ad-slot="YOUR-AD-SLOT-ID"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="footer-inner">
+    <div class="stamp">
+      <span class="num" id="stampTotal">0</span>
+      <span class="u">TOTAL g</span>
+    </div>
+    <div class="footer-text">
+      <div class="footer-label">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
+      <div class="footer-value" id="totalWeightText">0g</div>
+    </div>
+    <button class="copy-btn" id="copyBtn">결과 복사</button>
+  </div>
+</div>
+<div class="toast" id="toast">복사되었습니다</div>
+
+<!--
+  This page's account/save/share features need a live login+database round trip, so —
+  unlike index.html/manager.html, which stay dependency-free for spotty bakery-floor wifi —
+  it deliberately loads the Supabase client from a CDN. See CLAUDE.md and
+  supabase/schema.sql for why this is scoped to this one page only.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+(function(){
+  // Light/dark toggle: :root holds the dark theme (this app's default); a `data-theme`
+  // attribute on <html> switches to the light override block in <style>. This is the one
+  // deliberate exception to "no localStorage" — it's a display preference, not recipe
+  // data, so it's fine for it to survive a refresh even though nothing else does.
+  var THEME_KEY = 'mino-theme';
+  var themeToggleBtn = document.getElementById('themeToggleBtn');
+  var themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  function applyTheme(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    themeToggleBtn.setAttribute('aria-label', theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환');
+    themeColorMeta.setAttribute('content', theme === 'dark' ? '#0B0C0E' : '#F5F6F8');
+  }
+  applyTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
+  themeToggleBtn.addEventListener('click', function(){
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+
+  var state = {
+    mode: 'A',
+    flours: [
+      { name: '밀가루', pct: 100 }
+    ],
+    baseFlour: 1000,
+    multiplier: 2,
+    targetTotal: 3000,
+    portions: [],
+    ingredients: [
+      { name: '물', pct: 65 },
+      { name: '소금', pct: 2 },
+      { name: '이스트', pct: 1 }
+    ]
+  };
+
+  var flourListEl = document.getElementById('flourList');
+  var ingListEl = document.getElementById('ingList');
+  var portionListEl = document.getElementById('portionList');
+  var portionSumHintEl = document.getElementById('portionSumHint');
+  var portionSumEl = document.getElementById('portionSum');
+  var flourCardEl = document.getElementById('flourCard');
+  var flourPctWarningEl = document.getElementById('flourPctWarning');
+  var flourPctSumEl = document.getElementById('flourPctSum');
+  var modeABtn = document.getElementById('modeABtn');
+  var modeBBtn = document.getElementById('modeBBtn');
+  var modeAPanel = document.getElementById('modeAPanel');
+  var modeBPanel = document.getElementById('modeBPanel');
+  var baseFlourInput = document.getElementById('baseFlour');
+  var multInput = document.getElementById('multInput');
+  var targetTotalInput = document.getElementById('targetTotal');
+  var stampTotal = document.getElementById('stampTotal');
+  var totalWeightText = document.getElementById('totalWeightText');
+  var flourWeightLabel = document.getElementById('flourWeightLabel');
+  var toastEl = document.getElementById('toast');
+  var recipeNameInput = document.getElementById('recipeName');
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(function(){ toastEl.classList.remove('show'); }, 1600);
+  }
+
+  function roundWeight(g){
+    if (g < 10) return Math.round(g * 10) / 10;
+    return Math.round(g);
+  }
+  function fmt(g){
+    var r = roundWeight(g);
+    return (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
+  }
+
+  function computeFlourWeight(){
+    if (state.mode === 'A'){
+      return state.baseFlour * state.multiplier;
+    } else {
+      var totalPct = 100 + state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.pct)||0); }, 0);
+      return state.targetTotal / (totalPct/100);
+    }
+  }
+
+  function pctFromWeight(weight, flourWeight){
+    if (!flourWeight) return 0;
+    return roundPct((parseFloat(weight)||0) / flourWeight * 100);
+  }
+
+  // Weight↔% conversions produce float noise (e.g. 2.1999999999999997) that, left
+  // unrounded, makes the % field show a long digit string and visually clip in its
+  // narrow column. Round to 2 decimals — plenty of precision for a percentage, and
+  // clean enough to never overflow.
+  function roundPct(p){
+    return Math.round((parseFloat(p)||0) * 100) / 100;
+  }
+
+  // % / weight boxes are a fixed width, but recipes can scale up to numbers with far
+  // more digits than the box was sized for (e.g. a 26000g batch). Rather than clip the
+  // text, shrink the font as the value gets longer so it always stays fully visible.
+  // Also used for name fields (baseSize 14.5) since long ingredient names clip the same way.
+  function fitDigits(el, baseSize){
+    var base = baseSize || 15;
+    var len = (el.value || '').toString().length;
+    el.style.fontSize = len <= 4 ? '' : Math.max(10, base - (len - 4) * 1.2) + 'px';
+  }
+
+  function attachRefreshOnBlur(el){
+    el.addEventListener('blur', function(){ updateDisplays(); });
+  }
+
+  // With a single flour type, its % is trivially 100 (nothing to split with) — editing its
+  // weight is really editing the recipe's total flour weight, so drive that anchor instead
+  // (baseFlour in Mode A, targetTotal in Mode B) rather than treating it as a % of itself.
+  function setTotalFlourWeight(target){
+    if (state.mode === 'A'){
+      state.baseFlour = state.multiplier ? target / state.multiplier : target;
+      baseFlourInput.value = fmt(state.baseFlour);
+    } else {
+      var totalPct = 100 + state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.pct)||0); }, 0);
+      state.targetTotal = target * (totalPct/100);
+      targetTotalInput.value = fmt(state.targetTotal);
+    }
+  }
+
+  // Full structural rebuild: only needed when rows are added/removed, or on first load.
+  function render(){
+    buildFlourRows();
+    buildIngRows();
+    buildPortionRows();
+    updateDisplays();
+  }
+
+  // Mode B can build up the target total from several dough portions — e.g. "200g × 130개"
+  // for a batch of identically-sized units — instead of one number. Whenever any portions
+  // exist, their summed (weight × qty) is the source of truth for state.targetTotal and the
+  // plain input becomes a readonly display of that sum.
+  function portionSubtotal(p){
+    return (parseFloat(p.weight)||0) * (parseFloat(p.qty)||0);
+  }
+  function syncTargetTotalFromPortions(){
+    if (state.portions.length > 0){
+      state.targetTotal = state.portions.reduce(function(s,p){ return s + portionSubtotal(p); }, 0);
+    }
+    targetTotalInput.readOnly = state.portions.length > 0;
+  }
+
+  function buildPortionRows(){
+    portionListEl.innerHTML = '';
+    state.portions.forEach(function(p, idx){
+      var row = document.createElement('div');
+      row.className = 'portion-row';
+      row.innerHTML =
+        '<input class="portion-weight" type="number" inputmode="decimal" step="10" value="' + p.weight + '" data-idx="' + idx + '" aria-label="분할 무게" placeholder="분할g">' +
+        '<span class="portion-sep">g ×</span>' +
+        '<input class="portion-qty" type="number" inputmode="decimal" step="1" value="' + p.qty + '" data-idx="' + idx + '" aria-label="수량" placeholder="수량">' +
+        '<span class="portion-sep">개 =</span>' +
+        '<span class="portion-subtotal" data-idx="' + idx + '">' + fmt(portionSubtotal(p)) + 'g</span>' +
+        '<button class="del-btn" data-idx="' + idx + '" aria-label="분할 삭제">×</button>';
+      portionListEl.appendChild(row);
+    });
+
+    portionListEl.querySelectorAll('.portion-weight[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        state.portions[+el.dataset.idx].weight = parseFloat(el.value) || 0;
+        syncTargetTotalFromPortions();
+        updateDisplays();
+      });
+    });
+    portionListEl.querySelectorAll('.portion-qty[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        state.portions[+el.dataset.idx].qty = parseFloat(el.value) || 0;
+        syncTargetTotalFromPortions();
+        updateDisplays();
+      });
+    });
+    portionListEl.querySelectorAll('.del-btn[data-idx]').forEach(function(el){
+      el.addEventListener('click', function(){
+        state.portions.splice(+el.dataset.idx, 1);
+        syncTargetTotalFromPortions();
+        render();
+      });
+    });
+  }
+
+  function buildFlourRows(){
+    flourListEl.innerHTML = '';
+    state.flours.forEach(function(fl, idx){
+      var row = document.createElement('div');
+      row.className = 'ing-row flour-row';
+      var singleFlour = state.flours.length === 1;
+      row.innerHTML =
+        '<input class="ing-name" value="' + escapeHtml(fl.name) + '" data-idx="' + idx + '" aria-label="밀가루 이름">' +
+        '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
+        '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
+        (state.flours.length > 1
+          ? '<button class="del-btn" data-idx="' + idx + '" aria-label="밀가루 삭제">×</button>'
+          : '<span></span>');
+      flourListEl.appendChild(row);
+    });
+
+    flourListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
+      fitDigits(el, 14.5);
+      el.addEventListener('input', function(){
+        state.flours[+el.dataset.idx].name = el.value;
+        fitDigits(el, 14.5);
+      });
+    });
+    flourListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        if (state.flours.length === 1) return; // % is pinned to 100 with a single flour type
+        state.flours[+el.dataset.idx].pct = el.value;
+        updateDisplays();
+      });
+      attachRefreshOnBlur(el);
+    });
+    flourListEl.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        // Editing one flour's weight in grams means "this type weighs X" — the other
+        // flour types keep their current gram amounts, so the total (and hence each
+        // type's %) is recomputed from the sum of grams, not from a fixed total split.
+        var idx = +el.dataset.idx;
+        var flourWeight = computeFlourWeight();
+        var weights = state.flours.map(function(f, i){
+          return i === idx ? (parseFloat(el.value) || 0) : flourWeight * (parseFloat(f.pct)||0) / 100;
+        });
+        var newTotal = weights.reduce(function(s,w){ return s + w; }, 0);
+        state.flours.forEach(function(f, i){
+          f.pct = pctFromWeight(weights[i], newTotal);
+        });
+        setTotalFlourWeight(newTotal);
+        updateDisplays();
+      });
+      attachRefreshOnBlur(el);
+    });
+    flourListEl.querySelectorAll('.del-btn').forEach(function(el){
+      el.addEventListener('click', function(){
+        if (state.flours.length > 1){
+          state.flours.splice(+el.dataset.idx, 1);
+          if (state.flours.length === 1) state.flours[0].pct = 100;
+          render();
+        }
+      });
+    });
+  }
+
+  function buildIngRows(){
+    ingListEl.innerHTML = '';
+    state.ingredients.forEach(function(ing, idx){
+      var row = document.createElement('div');
+      row.className = 'ing-row reorderable';
+      row.innerHTML =
+        '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
+        '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">' +
+        '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
+        '<span class="reorder-btns">' +
+        '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
+        '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (idx === state.ingredients.length - 1 ? ' disabled' : '') + '>▼</button>' +
+        '</span>' +
+        '<button class="del-btn" data-idx="' + idx + '" aria-label="재료 삭제">×</button>';
+      ingListEl.appendChild(row);
+    });
+
+    ingListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
+      fitDigits(el, 14.5);
+      el.addEventListener('input', function(){
+        state.ingredients[+el.dataset.idx].name = el.value;
+        fitDigits(el, 14.5);
+      });
+    });
+    ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        state.ingredients[+el.dataset.idx].pct = el.value;
+        updateDisplays();
+      });
+      attachRefreshOnBlur(el);
+    });
+    ingListEl.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
+      el.addEventListener('input', function(){
+        var flourWeight = computeFlourWeight();
+        state.ingredients[+el.dataset.idx].pct = pctFromWeight(el.value, flourWeight);
+        updateDisplays();
+      });
+      attachRefreshOnBlur(el);
+    });
+    ingListEl.querySelectorAll('.reorder-btns button').forEach(function(el){
+      el.addEventListener('click', function(){
+        var idx = +el.dataset.idx;
+        var newIdx = idx + (+el.dataset.dir);
+        if (newIdx < 0 || newIdx >= state.ingredients.length) return;
+        var tmp = state.ingredients[idx];
+        state.ingredients[idx] = state.ingredients[newIdx];
+        state.ingredients[newIdx] = tmp;
+        render();
+      });
+    });
+    ingListEl.querySelectorAll('.del-btn').forEach(function(el){
+      el.addEventListener('click', function(){
+        state.ingredients.splice(+el.dataset.idx, 1);
+        render();
+      });
+    });
+  }
+
+  // Lightweight refresh: recomputes derived numbers and writes them into existing
+  // DOM nodes (never rebuilds), so the field the user is actively typing in keeps focus.
+  function updateDisplays(){
+    if (state.flours.length === 1) state.flours[0].pct = 100;
+    syncTargetTotalFromPortions();
+    if (state.portions.length > 0 && document.activeElement !== targetTotalInput){
+      targetTotalInput.value = fmt(state.targetTotal);
+    }
+    portionSumHintEl.style.display = state.portions.length > 0 ? 'block' : 'none';
+    portionSumEl.textContent = fmt(state.targetTotal);
+    state.portions.forEach(function(p, idx){
+      var subtotalEl = portionListEl.querySelector('.portion-subtotal[data-idx="' + idx + '"]');
+      if (subtotalEl) subtotalEl.textContent = fmt(portionSubtotal(p)) + 'g';
+      var pWeightEl = portionListEl.querySelector('.portion-weight[data-idx="' + idx + '"]');
+      var pQtyEl = portionListEl.querySelector('.portion-qty[data-idx="' + idx + '"]');
+      if (pWeightEl) fitDigits(pWeightEl);
+      if (pQtyEl) fitDigits(pQtyEl);
+    });
+
+    var flourWeight = computeFlourWeight();
+    if (!isFinite(flourWeight) || flourWeight < 0) flourWeight = 0;
+
+    state.flours.forEach(function(fl, idx){
+      var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
+      var pctEl = flourListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
+      var wEl = flourListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+      if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(fl.pct);
+      if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
+      if (pctEl) fitDigits(pctEl);
+      if (wEl) fitDigits(wEl);
+    });
+
+    state.ingredients.forEach(function(ing, idx){
+      var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
+      var pctEl = ingListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
+      var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+      if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(ing.pct);
+      if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
+      if (pctEl) fitDigits(pctEl);
+      if (wEl) fitDigits(wEl);
+    });
+
+    var flourPctSum = state.flours.reduce(function(s,f){ return s + (parseFloat(f.pct)||0); }, 0);
+    var flourWarn = Math.abs(flourPctSum - 100) > 0.05;
+    flourPctWarningEl.style.display = flourWarn ? 'block' : 'none';
+    flourPctSumEl.textContent = Math.round(flourPctSum * 10) / 10;
+    flourCardEl.classList.toggle('invalid', flourWarn);
+
+    var total = flourWeight + state.ingredients.reduce(function(s,i){
+      return s + flourWeight * ((parseFloat(i.pct)||0)/100);
+    }, 0);
+
+    stampTotal.textContent = fmt(total);
+    totalWeightText.textContent = fmt(total) + 'g';
+    flourWeightLabel.textContent = fmt(flourWeight) + 'g';
+  }
+
+  function escapeHtml(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Mode toggle
+  function applyModeUI(){
+    modeABtn.setAttribute('aria-pressed', state.mode === 'A');
+    modeBBtn.setAttribute('aria-pressed', state.mode === 'B');
+    modeAPanel.style.display = state.mode === 'A' ? '' : 'none';
+    modeBPanel.style.display = state.mode === 'B' ? '' : 'none';
+  }
+  function setMode(m){
+    state.mode = m;
+    applyModeUI();
+    updateDisplays();
+  }
+  modeABtn.addEventListener('click', function(){ setMode('A'); });
+  modeBBtn.addEventListener('click', function(){ setMode('B'); });
+
+  // Mode A inputs
+  baseFlourInput.addEventListener('input', function(){
+    state.baseFlour = parseFloat(baseFlourInput.value) || 0;
+    updateDisplays();
+  });
+  multInput.addEventListener('input', function(){
+    state.multiplier = parseFloat(multInput.value) || 0;
+    document.querySelectorAll('#multChips .chip').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+    updateDisplays();
+  });
+  document.getElementById('multMinus').addEventListener('click', function(){
+    state.multiplier = Math.max(0.1, Math.round((state.multiplier - 0.5)*10)/10);
+    multInput.value = state.multiplier;
+    updateDisplays();
+  });
+  document.getElementById('multPlus').addEventListener('click', function(){
+    state.multiplier = Math.round((state.multiplier + 0.5)*10)/10;
+    multInput.value = state.multiplier;
+    updateDisplays();
+  });
+  document.querySelectorAll('#multChips .chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      document.querySelectorAll('#multChips .chip').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+      if (chip.dataset.mult === 'custom'){
+        chip.setAttribute('aria-pressed','true');
+        multInput.focus();
+        return;
+      }
+      chip.setAttribute('aria-pressed','true');
+      state.multiplier = parseFloat(chip.dataset.mult);
+      multInput.value = state.multiplier;
+      updateDisplays();
+    });
+  });
+
+  // Mode B input
+  targetTotalInput.addEventListener('input', function(){
+    state.targetTotal = parseFloat(targetTotalInput.value) || 0;
+    updateDisplays();
+  });
+
+  // Add dough portion (Mode B: sums weight × qty into the target total)
+  document.getElementById('addPortionBtn').addEventListener('click', function(){
+    state.portions.push({ weight: 0, qty: 1 });
+    render();
+    var rows = portionListEl.querySelectorAll('.portion-weight[data-idx]');
+    var last = rows[rows.length-1];
+    if (last){ last.focus(); last.select(); }
+  });
+
+  // Add flour type
+  document.getElementById('addFlourBtn').addEventListener('click', function(){
+    state.flours.push({ name: '밀가루', pct: 0 });
+    render();
+    var rows = flourListEl.querySelectorAll('.ing-name[data-idx]');
+    var last = rows[rows.length-1];
+    if (last){ last.focus(); last.select(); }
+  });
+
+  // Add ingredient
+  document.getElementById('addIngBtn').addEventListener('click', function(){
+    state.ingredients.push({ name: '재료', pct: 0 });
+    render();
+    var rows = ingListEl.querySelectorAll('.ing-name[data-idx]');
+    var last = rows[rows.length-1];
+    if (last){ last.focus(); last.select(); }
+  });
+
+  // Percent info toggle
+  document.getElementById('pctInfoBtn').addEventListener('click', function(){
+    var el = document.getElementById('pctInfo');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  });
+
+  // Copy results
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    var flourWeight = computeFlourWeight();
+    var lines = [recipeNameInput.value, ''];
+    state.flours.forEach(function(fl){
+      var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
+      lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
+    });
+    state.ingredients.forEach(function(ing){
+      var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
+      lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
+    });
+    var total = flourWeight + state.ingredients.reduce(function(s,i){
+      return s + flourWeight * ((parseFloat(i.pct)||0)/100);
+    }, 0);
+    lines.push('');
+    if (state.portions.length > 0){
+      lines.push('반죽 분할  ' + state.portions.map(function(p){ return fmt(p.weight) + 'g×' + p.qty + '개'; }).join(' + ') + '  =  ' + fmt(state.targetTotal) + 'g');
+    }
+    lines.push('총 반죽량  ' + fmt(total) + 'g');
+    var text = lines.join('\n');
+
+    var btn = document.getElementById('copyBtn');
+    var showCopyToast = function(){
+      showToast('복사되었습니다');
+      btn.textContent = '복사됨';
+      btn.classList.add('copied');
+      setTimeout(function(){ btn.textContent = '결과 복사'; btn.classList.remove('copied'); }, 1600);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(showCopyToast).catch(function(){
+        fallbackCopy(text); showCopyToast();
+      });
+    } else {
+      fallbackCopy(text); showCopyToast();
+    }
+  });
+
+  function fallbackCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  function copyToClipboard(text){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).catch(function(){ fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  // --- Supabase-backed personal recipe library + sharing ---
+  // This page is the account-based sibling of index.html/manager.html: instead of a shared
+  // recipe.json file, each user's recipes live in Supabase (Google login via Supabase Auth,
+  // storage/sharing via Postgres + RLS). See supabase/schema.sql for the table/policy/RPC
+  // definitions this code calls, and CLAUDE.md for why this page alone loads an external
+  // script. Replace the two constants below with your own Supabase project's values —
+  // the anon key is meant to be public; row-level security is what actually protects data.
+  var SUPABASE_URL = 'https://yavvgybctuirnoewnaoc.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhdnZneWJjdHVpcm5vZXduYW9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MzMyNDYsImV4cCI6MjEwMDQwOTI0Nn0.UMoauNNx-50nsGUIFL5O_IgM_W2rGkKwBg992-uTmoQ';
+
+  var supabaseConfigured = SUPABASE_URL.indexOf('YOUR-PROJECT') === -1 && SUPABASE_ANON_KEY.indexOf('YOUR-ANON-KEY') === -1;
+  var supabase = (window.supabase && supabaseConfigured)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  var currentUser = null;
+  var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
+  var sharedViewToken = new URLSearchParams(location.search).get('share');
+
+  var accountChipBtn = document.getElementById('accountChipBtn');
+  var accountMenuEl = document.getElementById('accountMenu');
+  var googleBtn = document.getElementById('googleBtn');
+  var kakaoBtn = document.getElementById('kakaoBtn');
+  var logoutBtn = document.getElementById('logoutBtn');
+  var newRecipeBtn = document.getElementById('newRecipeBtn');
+  var authHintEl = document.getElementById('authHint');
+  var saveBtn = document.getElementById('saveBtn');
+  var authRowEl = document.getElementById('authRow');
+  var loggedInRowEl = document.getElementById('loggedInRow');
+  var libraryCardEl = document.getElementById('libraryCard');
+  var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
+  var recipeSearchInput = document.getElementById('recipeSearchInput');
+  var recipeDropdownEl = document.getElementById('recipeDropdown');
+  var recipeDropdownToggleBtn = document.getElementById('recipeDropdownToggle');
+  var selectedRecipeRowEl = document.getElementById('selectedRecipeRow');
+  var selectedRecipeNameEl = document.getElementById('selectedRecipeName');
+  var shareSelectedBtn = document.getElementById('shareSelectedBtn');
+  var deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+  var selectedSharePanelEl = document.getElementById('selectedSharePanel');
+  var toggleLinkBtn = document.getElementById('toggleLinkBtn');
+  var linkRowEl = document.getElementById('linkRow');
+  var linkUrlTextEl = document.getElementById('linkUrlText');
+  var copyLinkBtn = document.getElementById('copyLinkBtn');
+  var shareEmailInput = document.getElementById('shareEmailInput');
+  var shareEmailBtn = document.getElementById('shareEmailBtn');
+  var sharedBannerEl = document.getElementById('sharedBanner');
+  var subTextEl = document.getElementById('subText');
+
+  var selectedRecipeId = null; // id of the recipe currently loaded via the search box
+
+  function shareUrl(token){
+    return location.origin + location.pathname + '?share=' + token;
+  }
+
+  function serializeCurrentRecipe(){
+    return {
+      recipe_name: recipeNameInput.value || '이름 없는 레시피',
+      mode: state.mode,
+      base_flour: state.baseFlour,
+      multiplier: state.multiplier,
+      target_total: state.targetTotal,
+      portions: state.portions,
+      flours: state.flours,
+      ingredients: state.ingredients
+    };
+  }
+
+  // Same shape as manager.html's applyRecipeToState(), but reading a Supabase row
+  // (snake_case columns) instead of a recipe.json entry (camelCase) — this account
+  // system starts fresh with its own schema, no recipe.json migration.
+  function applyRecipeRowToState(row){
+    recipeNameInput.value = row.recipe_name || '';
+    state.mode = row.mode === 'B' ? 'B' : 'A';
+    state.baseFlour = parseFloat(row.base_flour) || 0;
+    state.multiplier = parseFloat(row.multiplier) || 1;
+    state.targetTotal = parseFloat(row.target_total) || 0;
+    state.portions = (Array.isArray(row.portions) ? row.portions : []).map(function(p){
+      if (typeof p === 'number') return { weight: p, qty: 1 };
+      return { weight: parseFloat(p && p.weight) || 0, qty: parseFloat(p && p.qty) || 1 };
+    });
+    state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
+      return { name: String(f && f.name || ''), pct: roundPct(f && f.pct) };
+    });
+    if (state.flours.length === 0) state.flours = [{ name: '밀가루', pct: 100 }];
+    state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
+      return { name: String(i && i.name || ''), pct: roundPct(i && i.pct) };
+    });
+
+    baseFlourInput.value = state.baseFlour;
+    multInput.value = state.multiplier;
+    targetTotalInput.value = state.targetTotal;
+    document.querySelectorAll('#multChips .chip').forEach(function(c){
+      var isPreset = c.dataset.mult !== 'custom' && parseFloat(c.dataset.mult) === state.multiplier;
+      c.setAttribute('aria-pressed', isPreset ? 'true' : 'false');
+    });
+
+    applyModeUI();
+    render();
+  }
+
+  function loadMyRecipes(){
+    supabase.from('recipes').select('*').order('updated_at', { ascending: false }).then(function(res){
+      if (res.error){ alert('레시피 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myRecipes = res.data || [];
+      libraryEmptyHintEl.style.display = myRecipes.length ? 'none' : 'block';
+      // Keep the selected recipe's panel (share token, owner badge) in sync after a
+      // save/delete/share round trip, instead of silently going stale.
+      if (selectedRecipeId){
+        var stillThere = myRecipes.find(function(r){ return r.id === selectedRecipeId; });
+        if (stillThere) renderSelectedRecipe(stillThere);
+        else clearSelectedRecipe();
+      }
+    });
+  }
+
+  function clearSelectedRecipe(){
+    selectedRecipeId = null;
+    selectedRecipeRowEl.style.display = 'none';
+    selectedSharePanelEl.style.display = 'none';
+  }
+
+  function renderSelectedRecipe(recipe){
+    selectedRecipeId = recipe.id;
+    var isOwner = currentUser && recipe.owner_id === currentUser.id;
+    selectedRecipeNameEl.textContent = (recipe.recipe_name || '이름 없는 레시피') + (isOwner ? '' : ' (공유받음)');
+    selectedRecipeRowEl.style.display = 'flex';
+    shareSelectedBtn.style.display = isOwner ? '' : 'none';
+    deleteSelectedBtn.style.display = isOwner ? '' : 'none';
+    if (!isOwner){
+      selectedSharePanelEl.style.display = 'none';
+      return;
+    }
+    toggleLinkBtn.textContent = recipe.share_token ? '링크 끄기' : '링크 켜기';
+    if (recipe.share_token){
+      linkUrlTextEl.textContent = shareUrl(recipe.share_token);
+      linkRowEl.style.display = 'flex';
+    } else {
+      linkRowEl.style.display = 'none';
+    }
+  }
+
+  // Custom searchable dropdown (native <datalist> can't be restyled and can't be
+  // opened/closed on demand — this replaces it with a plain styled list).
+  function loadRecipeByName(name){
+    var recipe = myRecipes.find(function(r){ return r.recipe_name === name; });
+    if (!recipe){ clearSelectedRecipe(); return; }
+    applyRecipeRowToState(recipe);
+    renderSelectedRecipe(recipe);
+    showToast('레시피를 불러왔어요');
+  }
+
+  // "Opening" the dropdown (via the toggle button, or by focusing the search box) always
+  // starts from the FULL recipe list, regardless of whatever name is currently sitting in
+  // the box (e.g. right after loading a recipe) — only actually typing new characters
+  // narrows it down. This keeps "browse everything" and "filter by name" as two separate
+  // actions instead of the leftover loaded-recipe name silently hiding the rest of the list.
+  function renderRecipeDropdown(showAll){
+    var q = showAll ? '' : recipeSearchInput.value.trim().toLowerCase();
+    var matches = myRecipes.filter(function(r){
+      return !q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1;
+    });
+    recipeDropdownEl.innerHTML = '';
+    if (matches.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'recipe-dropdown-empty';
+      empty.textContent = '일치하는 레시피가 없어요';
+      recipeDropdownEl.appendChild(empty);
+      return;
+    }
+    matches.forEach(function(r){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'recipe-dropdown-item';
+      item.textContent = r.recipe_name || '이름 없는 레시피';
+      item.addEventListener('click', function(){
+        recipeSearchInput.value = r.recipe_name || '';
+        closeRecipeDropdown();
+        loadRecipeByName(r.recipe_name);
+      });
+      recipeDropdownEl.appendChild(item);
+    });
+  }
+
+  function openRecipeDropdown(showAll){
+    renderRecipeDropdown(showAll);
+    recipeDropdownEl.style.display = 'block';
+  }
+  function closeRecipeDropdown(){
+    recipeDropdownEl.style.display = 'none';
+  }
+
+  recipeSearchInput.addEventListener('focus', function(){ openRecipeDropdown(true); });
+  recipeSearchInput.addEventListener('input', function(){
+    openRecipeDropdown(false); // now the user is actively typing, so filter for real
+    loadRecipeByName(recipeSearchInput.value); // auto-loads on an exact typed match too
+  });
+  recipeDropdownToggleBtn.addEventListener('click', function(){
+    if (recipeDropdownEl.style.display === 'none') { recipeSearchInput.focus(); openRecipeDropdown(true); }
+    else closeRecipeDropdown();
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('.recipe-combo')) closeRecipeDropdown();
+  });
+
+  deleteSelectedBtn.addEventListener('click', function(){
+    if (!selectedRecipeId) return;
+    if (!confirm('이 레시피를 삭제할까요?')) return;
+    supabase.from('recipes').delete().eq('id', selectedRecipeId).then(function(res){
+      if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+      recipeSearchInput.value = '';
+      clearSelectedRecipe();
+      loadMyRecipes();
+      showToast('레시피를 삭제했어요');
+    });
+  });
+
+  shareSelectedBtn.addEventListener('click', function(){
+    selectedSharePanelEl.style.display = selectedSharePanelEl.style.display === 'none' ? 'block' : 'none';
+  });
+
+  toggleLinkBtn.addEventListener('click', function(){
+    if (!selectedRecipeId) return;
+    var recipe = myRecipes.find(function(r){ return r.id === selectedRecipeId; });
+    var enable = !(recipe && recipe.share_token);
+    supabase.rpc('set_recipe_share_token', { p_recipe_id: selectedRecipeId, p_enable: enable }).then(function(res){
+      if (res.error){ alert('공유 링크 설정 실패: ' + res.error.message); return; }
+      if (recipe) recipe.share_token = res.data;
+      if (enable){
+        linkUrlTextEl.textContent = shareUrl(res.data);
+        linkRowEl.style.display = 'flex';
+        toggleLinkBtn.textContent = '링크 끄기';
+        copyToClipboard(shareUrl(res.data));
+        showToast('공유 링크를 복사했어요');
+      } else {
+        linkRowEl.style.display = 'none';
+        toggleLinkBtn.textContent = '링크 켜기';
+        showToast('공유 링크를 껐어요');
+      }
+    });
+  });
+
+  copyLinkBtn.addEventListener('click', function(){
+    copyToClipboard(linkUrlTextEl.textContent);
+    showToast('공유 링크를 복사했어요');
+  });
+
+  shareEmailBtn.addEventListener('click', function(){
+    if (!selectedRecipeId) return;
+    var email = (shareEmailInput.value || '').trim();
+    if (!email) return;
+    supabase.rpc('share_recipe_with_email', { p_recipe_id: selectedRecipeId, p_email: email }).then(function(res){
+      if (res.error){ alert('공유 실패: ' + res.error.message); return; }
+      shareEmailInput.value = '';
+      showToast(email + '님과 공유했어요');
+    });
+  });
+
+  function newRecipe(){
+    recipeNameInput.value = '새 레시피';
+    state.mode = 'A';
+    state.baseFlour = 0;
+    state.multiplier = 1;
+    state.targetTotal = 0;
+    state.portions = [];
+    state.flours = [{ name: '밀가루', pct: 100 }];
+    state.ingredients = [
+      { name: '물', pct: 0 },
+      { name: '소금', pct: 0 },
+      { name: '이스트', pct: 0 }
+    ];
+    baseFlourInput.value = state.baseFlour;
+    multInput.value = state.multiplier;
+    targetTotalInput.value = state.targetTotal;
+    document.querySelectorAll('#multChips .chip').forEach(function(c){
+      var isPreset = c.dataset.mult !== 'custom' && parseFloat(c.dataset.mult) === state.multiplier;
+      c.setAttribute('aria-pressed', isPreset ? 'true' : 'false');
+    });
+    recipeSearchInput.value = '';
+    clearSelectedRecipe();
+    applyModeUI();
+    render();
+  }
+  newRecipeBtn.addEventListener('click', newRecipe);
+
+  function saveCurrentRecipe(){
+    var payload = serializeCurrentRecipe();
+    var existing = myRecipes.find(function(r){
+      return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name;
+    });
+    var query = existing
+      ? supabase.from('recipes').update(payload).eq('id', existing.id).select().single()
+      : supabase.from('recipes').insert(Object.assign({ owner_id: currentUser.id }, payload)).select().single();
+    query.then(function(res){
+      if (res.error){ alert('저장 실패: ' + res.error.message); return; }
+      selectedRecipeId = res.data.id;
+      recipeSearchInput.value = res.data.recipe_name;
+      loadMyRecipes();
+      showToast('레시피를 저장했어요');
+    });
+  }
+
+  function closeAccountMenu(){
+    accountMenuEl.style.display = 'none';
+  }
+
+  function applyAuthUI(){
+    closeAccountMenu();
+    if (currentUser){
+      var label = currentUser.email || currentUser.id;
+      accountChipBtn.setAttribute('aria-label', '내 계정 (' + label + ')');
+      accountChipBtn.title = label;
+      logoutBtn.textContent = '로그아웃 (' + label + ')';
+      authRowEl.style.display = 'none';
+      loggedInRowEl.style.display = '';
+      saveBtn.style.display = '';
+      libraryCardEl.style.display = 'block';
+      loadMyRecipes();
+    } else {
+      accountChipBtn.setAttribute('aria-label', '로그인');
+      accountChipBtn.title = '';
+      authRowEl.style.display = '';
+      loggedInRowEl.style.display = 'none';
+      saveBtn.style.display = 'none';
+      libraryCardEl.style.display = 'none';
+      myRecipes = [];
+      recipeSearchInput.value = '';
+      clearSelectedRecipe();
+    }
+  }
+
+  function initSharedView(){
+    // Landing for a `?share=<token>` link: pre-fills the calculator from the one recipe
+    // the token points to. Login/save controls stay put (wired separately by
+    // initAccountMode(), which always runs) — a signed-out visitor just gets to look, but
+    // logging in and hitting "레시피 저장" saves this same state as a new recipe under
+    // their own account, which is how a shared recipe gets "copied in".
+    subTextEl.style.display = 'none';
+    sharedBannerEl.style.display = 'block';
+
+    if (!supabase){
+      sharedBannerEl.textContent = 'Supabase 설정이 안 돼 있어서 공유 링크를 열 수 없어요.';
+      return;
+    }
+    supabase.rpc('get_recipe_by_share_token', { p_token: sharedViewToken }).then(function(res){
+      if (res.error || !res.data || !res.data.length){
+        sharedBannerEl.textContent = '공유 링크를 찾을 수 없어요 (잘못됐거나 공유가 꺼졌을 수 있어요).';
+        return;
+      }
+      applyRecipeRowToState(res.data[0]);
+    });
+  }
+
+  function initAccountMode(){
+    accountChipBtn.addEventListener('click', function(){
+      accountMenuEl.style.display = accountMenuEl.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', function(e){
+      if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();
+    });
+
+    // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
+    // the OAuth round trip completes — which can land back on the site root instead of
+    // this page. Pin it to this exact URL (this same string must also be added to
+    // Supabase's Authentication → URL Configuration → Redirect URLs allow-list).
+    var loginRedirect = location.origin + location.pathname;
+    googleBtn.addEventListener('click', function(){
+      if (supabase) supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: loginRedirect } });
+    });
+    kakaoBtn.addEventListener('click', function(){
+      if (supabase) supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: loginRedirect } });
+    });
+    logoutBtn.addEventListener('click', function(){
+      if (supabase) supabase.auth.signOut();
+    });
+    saveBtn.addEventListener('click', function(){
+      if (!currentUser) { alert('먼저 로그인해주세요'); return; }
+      saveCurrentRecipe();
+    });
+
+    if (!supabase){
+      accountChipBtn.setAttribute('aria-label', '로그인 불가');
+      accountChipBtn.title = '로그인 불가';
+      authHintEl.textContent = supabaseConfigured
+        ? '로그인 서비스를 불러오지 못했어요. 인터넷 연결을 확인해주세요.'
+        : '계정 기능을 쓰려면 이 파일의 SUPABASE_URL/SUPABASE_ANON_KEY를 채워주세요.';
+      authHintEl.style.display = 'block';
+      googleBtn.disabled = true;
+      kakaoBtn.disabled = true;
+      return;
+    }
+
+    supabase.auth.onAuthStateChange(function(_event, session){
+      currentUser = session ? session.user : null;
+      applyAuthUI();
+    });
+    supabase.auth.getSession().then(function(res){
+      currentUser = res.data.session ? res.data.session.user : null;
+      applyAuthUI();
+    });
+  }
+
+  initAccountMode();
+  if (sharedViewToken) initSharedView();
+
+  render();
+})();
+</script>
+</body>
+</html>
