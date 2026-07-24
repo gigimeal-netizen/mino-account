@@ -359,6 +359,36 @@
   .combo-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
   .ing-name[data-unresolved]{ border-bottom-color: var(--danger); }
 
+  /* Modal overlay (재료 관리): the first true "leaves the calculator" screen in this file —
+     unlike the small popovers above, this dims and covers everything behind it. Bottom-sheet
+     on narrow screens (matches this app's mobile-first design language), a centered dialog
+     from 560px up. */
+  .modal-overlay{
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .modal-panel{
+    background: var(--bg-card); border: 1.5px solid var(--border-strong);
+    border-radius: 16px 16px 0 0; width: 100%; max-width: 480px;
+    max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-pop);
+  }
+  .modal-header{
+    position: sticky; top: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .modal-header h2{
+    margin: 0; font-family: var(--font-display); font-size: 13px; font-weight: 800;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .modal-body{ padding: 18px; }
+  @media (min-width: 560px){
+    .modal-overlay{ align-items: center; padding: 20px; }
+    .modal-panel{ border-radius: 16px; }
+  }
+
   /* Sticky footer stamp */
   .footer{
     position: fixed; left:0; right:0; bottom:0;
@@ -610,13 +640,6 @@
     </div>
   </section>
 
-  <section class="card" id="ingredientManagerCard" style="display:none;">
-    <h2>재료 관리</h2>
-    <div id="ingredientManagerList"></div>
-    <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
-    <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
-  </section>
-
   <!--
     Ad slot placed after the last content card, at the natural end of the scroll — not
     wedged between input rows or buttons, so a stray tap doesn't hit it by mistake.
@@ -651,6 +674,24 @@
   </div>
 </div>
 <div class="toast" id="toast">복사되었습니다</div>
+
+<!--
+  재료 관리 모달 — .wrap 바깥, 계산기와 완전히 분리된 화면으로 뜨도록 body 직속 오버레이로 둔다.
+  (이 페이지의 첫 진짜 모달: 계정 메뉴/레시피 검색 드롭다운은 작은 팝오버일 뿐 배경을 가리지 않는다.)
+-->
+<div class="modal-overlay" id="ingredientManagerOverlay" style="display:none;">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-label="재료 관리">
+    <div class="modal-header">
+      <h2>재료 관리</h2>
+      <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="닫기" style="font-size:22px;font-weight:700;">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="ingredientManagerList"></div>
+      <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
+      <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
+    </div>
+  </div>
+</div>
 
 <!--
   This page's account/save/share features need a live login+database round trip, so —
@@ -1264,7 +1305,8 @@
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
   var manageIngredientsBtn = document.getElementById('manageIngredientsBtn');
-  var ingredientManagerCardEl = document.getElementById('ingredientManagerCard');
+  var ingredientManagerOverlayEl = document.getElementById('ingredientManagerOverlay');
+  var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
@@ -1829,6 +1871,27 @@
     accountMenuEl.style.display = 'none';
   }
 
+  // 재료 관리 modal: the first screen in this file that fully covers/dims the calculator
+  // instead of a small anchored popover — open/close are one function each so every trigger
+  // (menu button, close button, backdrop click, Escape, logout) stays in sync.
+  function openIngredientManagerModal(){
+    renderIngredientManager();
+    ingredientManagerOverlayEl.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // lock background scroll while the modal is up
+    closeIngredientManagerBtn.focus();
+  }
+  function closeIngredientManagerModal(){
+    ingredientManagerOverlayEl.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+  closeIngredientManagerBtn.addEventListener('click', closeIngredientManagerModal);
+  ingredientManagerOverlayEl.addEventListener('click', function(e){
+    if (e.target === ingredientManagerOverlayEl) closeIngredientManagerModal(); // backdrop only, not the panel
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && ingredientManagerOverlayEl.style.display !== 'none') closeIngredientManagerModal();
+  });
+
   function applyAuthUI(){
     closeAccountMenu();
     if (currentUser){
@@ -1854,7 +1917,7 @@
       saveBtn.style.display = 'none';
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
-      ingredientManagerCardEl.style.display = 'none';
+      closeIngredientManagerModal();
       myRecipes = [];
       myIngredients = [];
       recipeSearchInput.value = '';
@@ -1893,15 +1956,7 @@
 
     manageIngredientsBtn.addEventListener('click', function(){
       closeAccountMenu();
-      var showing = ingredientManagerCardEl.style.display !== 'none';
-      ingredientManagerCardEl.style.display = showing ? 'none' : 'block';
-      if (!showing) {
-        renderIngredientManager();
-        // This card sits near the bottom of the page (after the notes card), well below
-        // where the account menu trigger is — without this, opening it from the top looks
-        // like nothing happened because the newly-visible card is off-screen.
-        ingredientManagerCardEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      openIngredientManagerModal();
     });
     document.getElementById('addIngredientMasterBtn').addEventListener('click', function(){
       if (!currentUser) return;
