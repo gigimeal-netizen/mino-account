@@ -94,6 +94,8 @@
   .io-btn:disabled:hover{ border-color: var(--border-strong); color: var(--ink); }
   .io-btn.primary{ background: var(--accent); border-color: var(--accent); color: #fff; }
   .io-btn.primary:hover{ color: #fff; opacity: 0.9; }
+  .io-btn.danger{ color: var(--danger); border-color: var(--danger); }
+  .io-btn.danger:hover{ background: var(--danger-soft); }
 
   /* Header: title + tucked-away account menu, instead of full-width login/logout rows */
   .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
@@ -201,7 +203,7 @@
      the flour/ingredient rows need. */
   .ingredient-mgr-row{ padding: 12px 0; border-bottom: 1px solid var(--border); }
   .ingredient-mgr-row:last-of-type{ border-bottom: none; }
-  .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; }
+  .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
   .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
   .ing-mgr-category{
@@ -1480,6 +1482,9 @@
         '<div class="ingredient-mgr-top">' +
           '<input class="ing-mgr-name text-input">' +
           '<button type="button" class="io-btn ing-mgr-toggle"></button>' +
+          (ig.is_active === false
+            ? '<button type="button" class="io-btn danger ing-mgr-delete">완전 삭제</button>'
+            : '') +
         '</div>' +
         '<input class="ing-mgr-category" placeholder="카테고리 (예: 유제품)">' +
         '<div class="ingredient-mgr-cost">' +
@@ -1550,10 +1555,25 @@
         supabase.from('ingredients').update({ is_active: nextActive }).eq('id', ig.id).then(function(res){
           if (res.error){ alert('상태 변경 실패: ' + res.error.message); return; }
           ig.is_active = nextActive;
-          toggleBtn.textContent = nextActive ? '사용중지' : '복원';
-          toggleBtn.classList.toggle('danger', nextActive);
+          // Re-render (rather than patch this one button) so "완전 삭제" appears/disappears
+          // along with the active/inactive state — it's only offered once deactivated first,
+          // as a light safety rail against permanently deleting something still in use.
+          renderIngredientManager(ingredientManagerSearchInput.value);
         });
       });
+
+      var deleteBtn = row.querySelector('.ing-mgr-delete');
+      if (deleteBtn){
+        deleteBtn.addEventListener('click', function(){
+          if (!confirm('"' + (ig.name || '이 재료') + '"를 완전히 삭제할까요? 이 재료를 쓰던 레시피가 있다면 그 안의 이름은 남지만 다시 연결할 수 없게 돼요.')) return;
+          supabase.from('ingredients').delete().eq('id', ig.id).then(function(res){
+            if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+            myIngredients = myIngredients.filter(function(other){ return other.id !== ig.id; });
+            renderIngredientManager(ingredientManagerSearchInput.value);
+            showToast('재료를 삭제했어요');
+          });
+        });
+      }
     });
   }
 
