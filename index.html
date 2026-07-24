@@ -1214,6 +1214,11 @@
     if (!recipe){ clearSelectedRecipe(); return; }
     applyRecipeRowToState(recipe);
     renderSelectedRecipe(recipe);
+    // The recipe-name field above already displays what's loaded, so the search box's
+    // only job is finding something — clear it back to a blank "search again" state
+    // instead of also mirroring the name (that was the same redundancy the old
+    // "selected recipe" row had, just moved into this box instead).
+    recipeSearchInput.value = '';
     showToast('레시피를 불러왔어요');
   }
 
@@ -1241,7 +1246,6 @@
       item.className = 'recipe-dropdown-item';
       item.textContent = r.recipe_name || '이름 없는 레시피';
       item.addEventListener('click', function(){
-        recipeSearchInput.value = r.recipe_name || '';
         closeRecipeDropdown();
         loadRecipeByName(r.recipe_name);
       });
@@ -1346,7 +1350,7 @@
     query.then(function(res){
       if (res.error){ alert('저장 실패: ' + res.error.message); return; }
       selectedRecipeId = res.data.id;
-      recipeSearchInput.value = res.data.recipe_name;
+      recipeSearchInput.value = '';
       loadMyRecipes();
       showToast('레시피를 저장했어요');
     });
