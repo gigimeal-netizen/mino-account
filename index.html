@@ -1474,7 +1474,13 @@
       if (supabase) supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: loginRedirect } });
     });
     kakaoBtn.addEventListener('click', function(){
-      if (supabase) supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: loginRedirect } });
+      // Supabase's default Kakao scope request includes account_email, which this app's
+      // Kakao app can't grant without business verification — Kakao then rejects the whole
+      // request (KOE205) rather than dropping just that scope. Asking for only the two
+      // scopes actually enabled in the Kakao app avoids that; email stays unavailable for
+      // Kakao logins, which "Allow users without an email" (Supabase Kakao provider
+      // setting) already accounts for.
+      if (supabase) supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: loginRedirect, scopes: 'profile_nickname profile_image' } });
     });
     logoutBtn.addEventListener('click', function(){
       if (supabase) supabase.auth.signOut();
