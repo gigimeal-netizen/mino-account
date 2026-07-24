@@ -282,13 +282,17 @@
   }
   .ing-name:focus{ outline:none; border-bottom-color: var(--accent); }
   .ing-name[readonly]{ border-bottom: none; font-weight: 800; }
+  /* Mirrors .weight-cell/.weight-unit below — a "%" suffix so the pct field reads as
+     unambiguously a percentage at a glance, the same way "g" already does for weight. */
+  .pct-cell{ flex: 0 0 64px; display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
   .pct-input{
-    flex: 0 0 58px;
+    width: 100%;
     font-family: var(--font-mono); font-size: 16px; font-weight:700; text-align:right;
     background: var(--bg); border: 1.5px solid var(--border); color: var(--ink-soft);
     border-radius: 8px; padding: 8px 6px; min-height: 44px; min-width: 0;
   }
   .pct-input[readonly]{ background: transparent; border-color: transparent; color: var(--accent); }
+  .pct-unit{ font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); flex:0 0 auto; }
   .weight-cell{ flex: 1 1 112px; display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
   .weight-input{
     font-family: var(--font-mono); font-weight: 800; font-size: 17px; text-align:right;
@@ -480,7 +484,7 @@
   .toast.show{ opacity: 1; }
 
   @media (max-width: 360px){
-    .pct-input{ flex-basis: 46px; }
+    .pct-cell{ flex-basis: 52px; }
     .weight-cell{ flex-basis: 92px; }
     .reorder-btns{ flex-basis: 26px; }
     h1{ font-size: 26px; }
@@ -997,7 +1001,7 @@
       row.innerHTML =
         '<input class="ing-name" value="' + escapeHtml(fl.name) + '" data-idx="' + idx + '" aria-label="밀가루 이름">' +
         '<div class="ing-row-numbers">' +
-          '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
+          '<span class="pct-cell"><input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '><span class="pct-unit">%</span></span>' +
           '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
           (state.flours.length > 1
             ? '<button class="del-btn" data-idx="' + idx + '" aria-label="밀가루 삭제">×</button>'
@@ -1061,7 +1065,7 @@
         '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
         '<div class="ing-row-numbers">' +
           (isBread
-            ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
+            ? '<span class="pct-cell"><input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율"><span class="pct-unit">%</span></span>'
             : '') +
           '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
           '<span class="reorder-btns">' +
