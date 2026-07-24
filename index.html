@@ -342,6 +342,7 @@
   .footer-text{ flex:1; min-width:0; }
   .footer-label{ font-size: 11px; letter-spacing:0.06em; text-transform:uppercase; color: var(--ink-soft); }
   .footer-value{ font-family: var(--font-mono); font-weight: 800; font-size: 21px; margin-top:2px; }
+  .footer-dirty{ font-size: 11.5px; color: var(--accent); margin-top: 4px; font-weight: 700; }
   .copy-btn{
     flex: 0 0 auto; background: var(--accent); color: #fff; border:none;
     padding: 12px 14px; border-radius: 10px; font-family: var(--font-display);
@@ -586,6 +587,7 @@
     <div class="footer-text">
       <div class="footer-label">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
       <div class="footer-value" id="totalWeightText">0g</div>
+      <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
     </div>
     <button class="copy-btn" id="copyBtn">결과 복사</button>
   </div>
@@ -1125,6 +1127,7 @@
   var authHintEl = document.getElementById('authHint');
   var saveBtn = document.getElementById('saveBtn');
   var saveBtnBottom = document.getElementById('saveBtnBottom');
+  var footerDirtyHintEl = document.getElementById('footerDirtyHint');
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
   var libraryCardEl = document.getElementById('libraryCard');
@@ -1151,16 +1154,21 @@
   // *loading* a recipe (applyRecipeRowToState/newRecipe) — those aren't user edits.
   var isDirty = false;
   var suppressDirtyTracking = false;
+  function updateDirtyUI(){
+    saveBtn.classList.toggle('primary', isDirty);
+    saveBtnBottom.classList.toggle('primary', isDirty);
+    // No point telling a signed-out visitor "you have unsaved changes" — there's nothing
+    // for them to save to yet, so this stays quiet until currentUser exists too.
+    footerDirtyHintEl.style.display = (isDirty && currentUser) ? 'block' : 'none';
+  }
   function markDirty(){
     if (suppressDirtyTracking || isDirty) return;
     isDirty = true;
-    saveBtn.classList.add('primary');
-    saveBtnBottom.classList.add('primary');
+    updateDirtyUI();
   }
   function markClean(){
     isDirty = false;
-    saveBtn.classList.remove('primary');
-    saveBtnBottom.classList.remove('primary');
+    updateDirtyUI();
   }
 
   function shareUrl(token){
@@ -1424,6 +1432,7 @@
       loggedInRowEl.style.display = '';
       saveBtn.style.display = '';
       saveBtnBottom.style.display = '';
+      updateDirtyUI(); // catches the edge case of edits made before logging in
       libraryCardEl.style.display = 'block';
       loadMyRecipes();
     } else {
