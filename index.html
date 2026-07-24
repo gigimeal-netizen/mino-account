@@ -1365,6 +1365,7 @@
       var label = currentUser.email || currentUser.id;
       accountChipBtn.setAttribute('aria-label', '내 계정 (' + label + ')');
       accountChipBtn.title = label;
+      accountChipBtn.classList.add('primary'); // filled = logged in; the icon alone doesn't change
       logoutBtn.textContent = '로그아웃 (' + label + ')';
       authRowEl.style.display = 'none';
       loggedInRowEl.style.display = '';
@@ -1374,6 +1375,7 @@
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
+      accountChipBtn.classList.remove('primary');
       authRowEl.style.display = '';
       loggedInRowEl.style.display = 'none';
       saveBtn.style.display = 'none';
