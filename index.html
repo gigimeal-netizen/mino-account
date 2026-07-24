@@ -421,8 +421,11 @@
           </button>
           <div class="account-menu" id="accountMenu" style="display:none;">
             <div id="authRow">
+              <!-- Kakao login button removed 2026-07-24 — Supabase always requests the
+                   account_email scope for Kakao (can't be overridden client-side), and this
+                   Kakao app can't grant that scope without completing 비즈니스 인증. Re-add
+                   once that's done: see 2026-07-24_계정레시피공유_작업기록.md. -->
               <button class="menu-btn" id="googleBtn">Google로 로그인</button>
-              <button class="menu-btn" id="kakaoBtn">카카오로 로그인</button>
             </div>
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
@@ -1127,7 +1130,6 @@
   var accountChipBtn = document.getElementById('accountChipBtn');
   var accountMenuEl = document.getElementById('accountMenu');
   var googleBtn = document.getElementById('googleBtn');
-  var kakaoBtn = document.getElementById('kakaoBtn');
   var logoutBtn = document.getElementById('logoutBtn');
   var newRecipeBtn = document.getElementById('newRecipeBtn');
   var authHintEl = document.getElementById('authHint');
@@ -1473,15 +1475,6 @@
     googleBtn.addEventListener('click', function(){
       if (supabase) supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: loginRedirect } });
     });
-    kakaoBtn.addEventListener('click', function(){
-      // Supabase's default Kakao scope request includes account_email, which this app's
-      // Kakao app can't grant without business verification — Kakao then rejects the whole
-      // request (KOE205) rather than dropping just that scope. Asking for only the two
-      // scopes actually enabled in the Kakao app avoids that; email stays unavailable for
-      // Kakao logins, which "Allow users without an email" (Supabase Kakao provider
-      // setting) already accounts for.
-      if (supabase) supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: loginRedirect, scopes: 'profile_nickname profile_image' } });
-    });
     logoutBtn.addEventListener('click', function(){
       if (supabase) supabase.auth.signOut();
     });
@@ -1498,7 +1491,6 @@
         : '계정 기능을 쓰려면 이 파일의 SUPABASE_URL/SUPABASE_ANON_KEY를 채워주세요.';
       authHintEl.style.display = 'block';
       googleBtn.disabled = true;
-      kakaoBtn.disabled = true;
       return;
     }
 
