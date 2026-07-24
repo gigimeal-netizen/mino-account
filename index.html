@@ -1416,6 +1416,17 @@
       if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();
     });
 
+    // If the user hand-edits the name after loading a recipe (instead of using "새
+    // 레시피" or picking a different one from search), `selectedRecipeId` would otherwise
+    // keep pointing at the recipe that was loaded, not the name now on screen — so share/
+    // delete could silently act on the wrong recipe. Drop the selection the moment the name
+    // changes; saving still works fine afterward since that's matched by name, not this id.
+    // (Only fires on real typing — setting .value from code, e.g. when loading a recipe,
+    // doesn't dispatch an input event.)
+    recipeNameInput.addEventListener('input', function(){
+      if (selectedRecipeId) clearSelectedRecipe();
+    });
+
     // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
     // the OAuth round trip completes — which can land back on the site root instead of
     // this page. Pin it to this exact URL (this same string must also be added to
