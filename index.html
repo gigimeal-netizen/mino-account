@@ -306,26 +306,31 @@
   }
   .link-row .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
 
-  /* Custom searchable dropdown for "내 레시피" (replaces the browser's native <datalist>
-     popup, which can't be styled and can't be opened/closed on demand). */
+  /* Generic searchable-dropdown combo box: originally built just for "내 레시피" (replaces
+     the browser's native <datalist> popup, which can't be styled/opened on demand), now
+     also reused per-row for the ingredient picker (see .ing-name-combo below). */
   .recipe-combo{ position: relative; }
+  .ing-name-combo{ position: relative; min-width: 0; }
+  .ing-name-combo .ing-name{ width: 100%; display: block; }
   .combo-toggle{ flex: 0 0 auto; padding: 10px 14px; font-size: 12px; }
-  .recipe-dropdown{
+  .combo-dropdown{
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
     background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 10px;
     max-height: 240px; overflow-y: auto; box-shadow: var(--shadow-pop);
   }
-  .recipe-dropdown-item{
+  .combo-dropdown-item{
     display: block; width: 100%; text-align: left; min-height: 44px;
     padding: 10px 14px; border: none; border-bottom: 1px solid var(--border);
     background: none; font-family: var(--font-body); font-size: 14.5px; color: var(--ink);
     cursor: pointer;
   }
-  .recipe-dropdown-item:last-child{ border-bottom: none; }
-  .recipe-dropdown-item:hover, .recipe-dropdown-item:focus-visible{
+  .combo-dropdown-item:last-child{ border-bottom: none; }
+  .combo-dropdown-item:hover, .combo-dropdown-item:focus-visible{
     background: var(--accent-soft); outline: none;
   }
-  .recipe-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
+  .combo-dropdown-item.combo-add-new{ color: var(--accent); font-weight: 700; }
+  .combo-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
+  .ing-name[data-unresolved]{ border-bottom-color: var(--danger); }
 
   /* Sticky footer stamp */
   .footer{
@@ -461,7 +466,7 @@
           <input type="text" id="recipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색 및 불러오기">
           <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
         </div>
-        <div class="recipe-dropdown" id="recipeDropdown" style="display:none;"></div>
+        <div class="combo-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
       <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
     </div>
@@ -644,16 +649,16 @@
     mode: 'A',
     type: 'bread', // 'bread' (engine A: baker's %) | 'confection' | 'other' (engine B: absolute weight)
     flours: [
-      { name: '밀가루', pct: 100 }
+      { ingredientId: null, name: '밀가루', pct: 100 }
     ],
     baseFlour: 1000,
     multiplier: 2,
     targetTotal: 3000,
     portions: [],
     ingredients: [
-      { name: '물', pct: 65 },
-      { name: '소금', pct: 2 },
-      { name: '이스트', pct: 1 }
+      { ingredientId: null, name: '물', pct: 65 },
+      { ingredientId: null, name: '소금', pct: 2 },
+      { ingredientId: null, name: '이스트', pct: 1 }
     ]
   };
 
@@ -829,7 +834,7 @@
       row.className = 'ing-row flour-row';
       var singleFlour = state.flours.length === 1;
       row.innerHTML =
-        '<input class="ing-name" value="' + escapeHtml(fl.name) + '" data-idx="' + idx + '" aria-label="밀가루 이름">' +
+        '<div class="ing-name-combo"><input class="ing-name" data-idx="' + idx + '" aria-label="밀가루 이름"><div class="combo-dropdown" style="display:none;"></div></div>' +
         '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(fl.pct) + '" data-idx="' + idx + '" aria-label="밀가루 비율"' + (singleFlour ? ' readonly' : '') + '>' +
         '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="밀가루 중량"><span class="weight-unit">g</span></span>' +
         (state.flours.length > 1
@@ -838,12 +843,14 @@
       flourListEl.appendChild(row);
     });
 
-    flourListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      fitDigits(el, 14.5);
-      el.addEventListener('input', function(){
-        state.flours[+el.dataset.idx].name = el.value;
-        fitDigits(el, 14.5);
+    flourListEl.querySelectorAll('.ing-name-combo').forEach(function(wrap, idx){
+      var input = wrap.querySelector('.ing-name');
+      var dropdown = wrap.querySelector('.combo-dropdown');
+      attachIngredientCombo(input, dropdown, state.flours[idx], function(){
+        fitDigits(input, 14.5);
+        updateDisplays();
       });
+      fitDigits(input, 14.5);
     });
     flourListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
       el.addEventListener('input', function(){
@@ -890,7 +897,7 @@
       var row = document.createElement('div');
       row.className = 'ing-row reorderable' + (isBread ? '' : ' weight-only');
       row.innerHTML =
-        '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
+        '<div class="ing-name-combo"><input class="ing-name" data-idx="' + idx + '" aria-label="재료 이름"><div class="combo-dropdown" style="display:none;"></div></div>' +
         (isBread
           ? '<input class="pct-input" type="number" inputmode="decimal" step="0.1" value="' + roundPct(ing.pct) + '" data-idx="' + idx + '" aria-label="재료 비율">'
           : '') +
@@ -903,12 +910,14 @@
       ingListEl.appendChild(row);
     });
 
-    ingListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      fitDigits(el, 14.5);
-      el.addEventListener('input', function(){
-        state.ingredients[+el.dataset.idx].name = el.value;
-        fitDigits(el, 14.5);
+    ingListEl.querySelectorAll('.ing-name-combo').forEach(function(wrap, idx){
+      var input = wrap.querySelector('.ing-name');
+      var dropdown = wrap.querySelector('.combo-dropdown');
+      attachIngredientCombo(input, dropdown, state.ingredients[idx], function(){
+        fitDigits(input, 14.5);
+        updateDisplays();
       });
+      fitDigits(input, 14.5);
     });
     if (isBread){
       ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
@@ -1025,12 +1034,6 @@
     totalWeightText.textContent = fmt(total) + 'g';
   }
 
-  function escapeHtml(s){
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
-
   // Engine switch: bread uses the baker's-% engine (flour card, %, base-flour field);
   // confection/other use the absolute-weight engine (no flour bucket, just ingredient
   // weights scaled by multiplier or target-total). Only toggles static card visibility/
@@ -1104,7 +1107,7 @@
 
   // Add flour type
   document.getElementById('addFlourBtn').addEventListener('click', function(){
-    state.flours.push({ name: '밀가루', pct: 0 });
+    state.flours.push({ ingredientId: null, name: '밀가루', pct: 0 });
     render();
     var rows = flourListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
@@ -1113,7 +1116,7 @@
 
   // Add ingredient
   document.getElementById('addIngBtn').addEventListener('click', function(){
-    state.ingredients.push(state.type === 'bread' ? { name: '재료', pct: 0 } : { name: '재료', weight: 0 });
+    state.ingredients.push(state.type === 'bread' ? { ingredientId: null, name: '재료', pct: 0 } : { ingredientId: null, name: '재료', weight: 0 });
     render();
     var rows = ingListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
@@ -1134,11 +1137,11 @@
       var flourWeight = computeFlourWeight();
       state.flours.forEach(function(fl){
         var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-        lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
+        lines.push(resolveIngredientName(fl) + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
       });
       state.ingredients.forEach(function(ing){
         var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-        lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
+        lines.push(resolveIngredientName(ing) + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
       });
       total = flourWeight + state.ingredients.reduce(function(s,i){
         return s + flourWeight * ((parseFloat(i.pct)||0)/100);
@@ -1147,7 +1150,7 @@
       var scale = computeEngineBScale();
       state.ingredients.forEach(function(ing){
         var w = (parseFloat(ing.weight)||0) * scale;
-        lines.push(ing.name + '  ' + fmt(w) + 'g');
+        lines.push(resolveIngredientName(ing) + '  ' + fmt(w) + 'g');
       });
       total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
     }
@@ -1211,6 +1214,7 @@
 
   var currentUser = null;
   var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
+  var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
   var sharedViewToken = new URLSearchParams(location.search).get('share');
 
   var accountChipBtn = document.getElementById('accountChipBtn');
@@ -1301,16 +1305,16 @@
     });
     if (state.type === 'bread'){
       state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
-        return { name: String(f && f.name || ''), pct: roundPct(f && f.pct) };
+        return migrateIngredientRow({ ingredientId: (f && f.ingredientId) || null, name: String(f && f.name || ''), pct: roundPct(f && f.pct) });
       });
-      if (state.flours.length === 0) state.flours = [{ name: '밀가루', pct: 100 }];
+      if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100 }];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return { name: String(i && i.name || ''), pct: roundPct(i && i.pct) };
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPct(i && i.pct) });
       });
     } else {
       state.flours = [];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return { name: String(i && i.name || ''), weight: parseFloat(i && i.weight) || 0 };
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), weight: parseFloat(i && i.weight) || 0 });
       });
     }
 
@@ -1340,6 +1344,136 @@
       }
     });
   }
+
+  function loadMyIngredients(){
+    supabase.from('ingredients').select('*').order('name').then(function(res){
+      if (res.error){ alert('재료 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myIngredients = res.data || [];
+    });
+  }
+
+  // A flour/ingredient row stores both `ingredientId` (the live link) and a `name` snapshot.
+  // Prefer the ingredient master's current name (so renaming it there updates every recipe
+  // for the owner) but fall back to the snapshot when unresolved (never picked, or a
+  // migrated legacy row that didn't auto-match) or when viewing as someone who can't see
+  // the owner's `ingredients` table at all (a share-link visitor) — this is why renaming an
+  // ingredient won't retroactively update an already-shared link until the owner re-saves.
+  function resolveIngredientName(row){
+    if (row.ingredientId){
+      var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
+      if (found) return found.name;
+    }
+    return row.name || '';
+  }
+
+  // Legacy rows (saved before ingredient-DB linking existed) only have a `name`. On load,
+  // try a one-shot exact-name match against the ingredient master; on success the row is
+  // linked from here on, on failure it's left unresolved (ingredientId stays null) — same
+  // non-blocking "please pick one" state a never-confirmed new row is in, no special case.
+  function migrateIngredientRow(row){
+    if (!row.ingredientId && row.name){
+      var match = myIngredients.find(function(ig){ return ig.name === row.name; });
+      if (match) row.ingredientId = match.id;
+    }
+    return row;
+  }
+
+  // Reused by buildFlourRows()/buildIngRows() for every flour/ingredient name field: a
+  // searchable combo box (same "focus shows everything, typing filters" pattern as the
+  // "내 레시피" search box) that links the row to a personal ingredient master list instead
+  // of a bare free-text name. Falls back to plain text editing (no dropdown, ingredientId
+  // stays null) when signed out or Supabase isn't configured — a share-link visitor never
+  // has an `ingredients` table to search, so this keeps working exactly like before there.
+  function attachIngredientCombo(inputEl, dropdownEl, row, onChange){
+    inputEl.value = resolveIngredientName(row);
+    if (row.ingredientId) inputEl.removeAttribute('data-unresolved');
+    else inputEl.setAttribute('data-unresolved', '');
+
+    if (!currentUser || !supabase){
+      inputEl.addEventListener('input', function(){
+        row.name = inputEl.value;
+        row.ingredientId = null;
+        if (onChange) onChange();
+      });
+      return;
+    }
+
+    function closeDropdown(){ dropdownEl.style.display = 'none'; }
+    function renderList(showAll){
+      var typed = inputEl.value.trim();
+      var q = showAll ? '' : typed.toLowerCase();
+      var matches = myIngredients.filter(function(ig){
+        return !q || ig.name.toLowerCase().indexOf(q) !== -1;
+      });
+      dropdownEl.innerHTML = '';
+      if (matches.length === 0 && !typed){
+        var empty = document.createElement('div');
+        empty.className = 'combo-dropdown-empty';
+        empty.textContent = '등록된 재료가 없어요 — 입력하면 새로 추가할 수 있어요';
+        dropdownEl.appendChild(empty);
+      }
+      matches.forEach(function(ig){
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'combo-dropdown-item';
+        item.textContent = ig.name;
+        item.addEventListener('click', function(){
+          row.ingredientId = ig.id;
+          row.name = ig.name;
+          inputEl.value = ig.name;
+          inputEl.removeAttribute('data-unresolved');
+          closeDropdown();
+          if (onChange) onChange();
+        });
+        dropdownEl.appendChild(item);
+      });
+      var exactMatch = typed && myIngredients.some(function(ig){ return ig.name === typed; });
+      if (typed && !exactMatch){
+        var addItem = document.createElement('button');
+        addItem.type = 'button';
+        addItem.className = 'combo-dropdown-item combo-add-new';
+        addItem.textContent = '+ "' + typed + '" 새 재료로 추가';
+        addItem.addEventListener('click', function(){
+          supabase.from('ingredients').insert({ owner_id: currentUser.id, name: typed }).select().single().then(function(res){
+            if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
+            myIngredients.push(res.data);
+            row.ingredientId = res.data.id;
+            row.name = res.data.name;
+            inputEl.value = res.data.name;
+            inputEl.removeAttribute('data-unresolved');
+            closeDropdown();
+            if (onChange) onChange();
+          });
+        });
+        dropdownEl.appendChild(addItem);
+      }
+    }
+    function openDropdown(showAll){
+      renderList(showAll);
+      dropdownEl.style.display = 'block';
+    }
+
+    inputEl.addEventListener('focus', function(){ openDropdown(true); });
+    inputEl.addEventListener('input', function(){
+      row.name = inputEl.value;
+      row.ingredientId = null;
+      inputEl.setAttribute('data-unresolved', '');
+      openDropdown(false);
+      if (onChange) onChange();
+    });
+  }
+
+  // Ingredient combos are rebuilt on every render() (rows come and go), so a single
+  // document-level closer (attached once, here) handles closing whichever one is open
+  // instead of each attachIngredientCombo() call adding its own permanent listener.
+  document.addEventListener('click', function(e){
+    document.querySelectorAll('.ing-name-combo').forEach(function(wrap){
+      if (!wrap.contains(e.target)) {
+        var dd = wrap.querySelector('.combo-dropdown');
+        if (dd) dd.style.display = 'none';
+      }
+    });
+  });
 
   function clearSelectedRecipe(){
     selectedRecipeId = null;
@@ -1394,7 +1528,7 @@
     recipeDropdownEl.innerHTML = '';
     if (matches.length === 0){
       var empty = document.createElement('div');
-      empty.className = 'recipe-dropdown-empty';
+      empty.className = 'combo-dropdown-empty';
       empty.textContent = '일치하는 레시피가 없어요';
       recipeDropdownEl.appendChild(empty);
       return;
@@ -1402,7 +1536,7 @@
     matches.forEach(function(r){
       var item = document.createElement('button');
       item.type = 'button';
-      item.className = 'recipe-dropdown-item';
+      item.className = 'combo-dropdown-item';
       item.textContent = r.recipe_name || '이름 없는 레시피';
       item.addEventListener('click', function(){
         closeRecipeDropdown();
@@ -1485,17 +1619,17 @@
     state.targetTotal = 0;
     state.portions = [];
     if (state.type === 'bread'){
-      state.flours = [{ name: '밀가루', pct: 100 }];
+      state.flours = [{ ingredientId: null, name: '밀가루', pct: 100 }];
       state.ingredients = [
-        { name: '물', pct: 0 },
-        { name: '소금', pct: 0 },
-        { name: '이스트', pct: 0 }
+        { ingredientId: null, name: '물', pct: 0 },
+        { ingredientId: null, name: '소금', pct: 0 },
+        { ingredientId: null, name: '이스트', pct: 0 }
       ];
     } else {
       state.flours = [];
       state.ingredients = [
-        { name: '재료 1', weight: 0 },
-        { name: '재료 2', weight: 0 }
+        { ingredientId: null, name: '재료 1', weight: 0 },
+        { ingredientId: null, name: '재료 2', weight: 0 }
       ];
     }
     baseFlourInput.value = state.baseFlour;
@@ -1564,6 +1698,7 @@
       updateDirtyUI(); // catches the edge case of edits made before logging in
       libraryCardEl.style.display = 'block';
       loadMyRecipes();
+      loadMyIngredients();
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
@@ -1574,6 +1709,7 @@
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
       myRecipes = [];
+      myIngredients = [];
       recipeSearchInput.value = '';
       clearSelectedRecipe();
       markClean();

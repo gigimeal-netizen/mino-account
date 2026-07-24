@@ -33,8 +33,26 @@ create table recipe_shares (
   primary key (recipe_id, shared_with_user_id)
 );
 
+-- Personal ingredient master list, referenced from a recipe's flour/ingredient rows via
+-- ingredient_id (see account.html's serializeCurrentRecipe/resolveIngredientName). Kept
+-- separate from recipes: purchase_unit/purchase_price exist for a future cost/production-
+-- planning step and aren't used in any calculation yet.
+create table ingredients (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  purchase_unit text not null default '',
+  purchase_price numeric not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table recipes enable row level security;
 alter table recipe_shares enable row level security;
+alter table ingredients enable row level security;
+
+create policy "owner full access" on ingredients for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
 -- recipes' "shared read access" policy needs to check recipe_shares, and recipe_shares'
 -- "owner manages shares" policy needs to check recipes — a direct subquery in either
