@@ -384,37 +384,35 @@
   .combo-dropdown-item.combo-add-new{ color: var(--accent); font-weight: 700; }
   .combo-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
 
-  /* Modal overlay (재료 관리): the first true "leaves the calculator" screen in this file —
-     unlike the small popovers above, this dims and covers everything behind it. Bottom-sheet
-     on narrow screens (matches this app's mobile-first design language), a centered dialog
-     from 560px up. */
-  .modal-overlay{
-    position: fixed; inset: 0; z-index: 50;
-    background: rgba(0,0,0,0.55);
-    display: flex; align-items: flex-end; justify-content: center;
+  /* Subpage (재료 관리 / 원가 계산): the first true "leaves the calculator" screens in this
+     file — unlike the small popovers above, these fully replace the calculator instead of
+     floating over it. No dimmed backdrop since there's nothing left behind to dim: opening
+     one hides .wrap/.footer outright (see showSubpage()/hideSubpage()) and this fills that
+     same space, capped at the same width as .wrap for visual consistency with the calculator. */
+  .subpage{
+    position: fixed; inset: 0; z-index: 50; overflow-y: auto;
+    background: var(--bg);
   }
-  .modal-panel{
-    background: var(--bg-card); border: 1.5px solid var(--border-strong);
-    border-radius: 16px 16px 0 0; width: 100%; max-width: 480px;
-    max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-pop);
-  }
-  .modal-header{
+  .subpage-header{
     position: sticky; top: 0; z-index: 1;
-    display: flex; align-items: center; justify-content: space-between;
     padding: 16px 18px; border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
+    background: var(--bg);
   }
-  .modal-header h2{
-    margin: 0; font-family: var(--font-display); font-size: 13px; font-weight: 800;
-    letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
+  .subpage-header-inner{
+    display: flex; align-items: center; gap: 10px;
+    max-width: 580px; margin: 0 auto;
   }
-  .modal-body{ padding: 18px; }
-  .modal-body h3{
+  .subpage-header h2{
+    margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 800;
+    color: var(--ink);
+  }
+  .subpage-body{ padding: 18px; max-width: 580px; margin: 0 auto; }
+  .subpage-body h3{
     font-family: var(--font-display); font-size: 13px; font-weight: 800;
     letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
     margin: 18px 0 10px;
   }
-  .modal-body h3:first-of-type{ margin-top: 0; }
+  .subpage-body h3:first-of-type{ margin-top: 0; }
   #costRecipeNameHeading{
     font-family: var(--font-display); font-size: 17px; font-weight: 800;
     text-transform: none; letter-spacing: normal; color: var(--ink); margin: 0 0 10px;
@@ -437,11 +435,6 @@
     padding: 9px 10px; min-height: 40px; color: var(--ink);
   }
   .ing-link-input[data-unresolved]{ border-color: var(--danger); }
-
-  @media (min-width: 560px){
-    .modal-overlay{ align-items: center; padding: 20px; }
-    .modal-panel{ border-radius: 16px; }
-  }
 
   /* Sticky footer stamp */
   .footer{
@@ -730,54 +723,64 @@
 <div class="toast" id="toast">복사되었습니다</div>
 
 <!--
-  재료 관리 모달 — .wrap 바깥, 계산기와 완전히 분리된 화면으로 뜨도록 body 직속 오버레이로 둔다.
-  (이 페이지의 첫 진짜 모달: 계정 메뉴/레시피 검색 드롭다운은 작은 팝오버일 뿐 배경을 가리지 않는다.)
+  재료 관리 서브페이지 — .wrap 바깥, 계산기 화면(.wrap/.footer)을 아예 숨기고 그 자리를
+  통째로 차지하도록 body 직속으로 둔다(showSubpage()/hideSubpage() 참조). 배경을 가리는
+  모달이 아니라 "다른 페이지로 이동"하는 느낌을 주기 위한 선택 — 계정 메뉴/레시피 검색
+  드롭다운 같은 작은 팝오버들과는 성격이 다르다.
 -->
-<div class="modal-overlay" id="ingredientManagerOverlay" style="display:none;">
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-label="재료 관리">
-    <div class="modal-header">
+<div class="subpage" id="ingredientManagerPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="계산기로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
       <h2>재료 관리</h2>
-      <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="닫기" style="font-size:22px;font-weight:700;">×</button>
     </div>
-    <div class="modal-body">
-      <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
-      <div id="ingredientManagerList"></div>
-      <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
-      <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
-    </div>
+  </div>
+  <div class="subpage-body">
+    <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
+    <div id="ingredientManagerList"></div>
+    <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
+    <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
   </div>
 </div>
 
 <!--
-  원가 계산 모달 — 레시피 작성 화면과 완전히 분리된 별도 화면. 재료 이름(레시피에 쓰인 그대로,
-  예: "버터")과 원가 계산용 재료DB 연결(예: "앵커버터")은 여기서만 다룬다 — 레시피 편집 화면의
-  재료 이름 칸은 이 연결과 무관하게 항상 그대로 표시된다.
+  원가 계산 서브페이지 — 레시피 작성 화면과 완전히 분리된 별도 화면. 재료 이름(레시피에 쓰인
+  그대로, 예: "버터")과 원가 계산용 재료DB 연결(예: "앵커버터")은 여기서만 다룬다 — 레시피
+  편집 화면의 재료 이름 칸은 이 연결과 무관하게 항상 그대로 표시된다.
 -->
-<div class="modal-overlay" id="costCalcOverlay" style="display:none;">
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-label="원가 계산">
-    <div class="modal-header">
+<div class="subpage" id="costCalcPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeCostCalcBtn" aria-label="계산기로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
       <h2>원가 계산</h2>
-      <button class="icon-btn" id="closeCostCalcBtn" aria-label="닫기" style="font-size:22px;font-weight:700;">×</button>
     </div>
-    <div class="modal-body">
-      <div class="cost-recipe-combo">
-        <div class="field-row">
-          <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색">
-          <button type="button" class="io-btn combo-toggle" id="costRecipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
-        </div>
-        <div class="combo-dropdown" id="costRecipeDropdown" style="display:none;"></div>
+  </div>
+  <div class="subpage-body">
+    <div class="cost-recipe-combo">
+      <div class="field-row">
+        <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색">
+        <button type="button" class="io-btn combo-toggle" id="costRecipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
       </div>
-      <p class="hint" id="costNoRecipeHint">레시피를 선택하면 재료 연결과 원가를 확인할 수 있어요.</p>
-      <div id="costCalcBody" style="display:none;">
-        <h3 id="costRecipeNameHeading"></h3>
-        <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
-        <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
-        <div id="costIngredientsList"></div>
-        <div class="toolbar-divider"></div>
-        <h3>제품 &amp; 원가</h3>
-        <div id="costProductsList"></div>
-        <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
-      </div>
+      <div class="combo-dropdown" id="costRecipeDropdown" style="display:none;"></div>
+    </div>
+    <p class="hint" id="costNoRecipeHint">레시피를 선택하면 재료 연결과 원가를 확인할 수 있어요.</p>
+    <div id="costCalcBody" style="display:none;">
+      <h3 id="costRecipeNameHeading"></h3>
+      <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
+      <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
+      <div id="costIngredientsList"></div>
+      <div class="toolbar-divider"></div>
+      <h3>제품 &amp; 원가</h3>
+      <div id="costProductsList"></div>
+      <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
     </div>
   </div>
 </div>
@@ -1400,12 +1403,12 @@
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
   var manageIngredientsBtn = document.getElementById('manageIngredientsBtn');
-  var ingredientManagerOverlayEl = document.getElementById('ingredientManagerOverlay');
+  var ingredientManagerPageEl = document.getElementById('ingredientManagerPage');
   var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
   var openCostCalcBtn = document.getElementById('openCostCalcBtn');
-  var costCalcOverlayEl = document.getElementById('costCalcOverlay');
+  var costCalcPageEl = document.getElementById('costCalcPage');
   var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
   var costRecipeSearchInput = document.getElementById('costRecipeSearchInput');
   var costRecipeDropdownEl = document.getElementById('costRecipeDropdown');
@@ -2143,26 +2146,36 @@
     accountMenuEl.style.display = 'none';
   }
 
-  // 재료 관리 modal: the first screen in this file that fully covers/dims the calculator
-  // instead of a small anchored popover — open/close are one function each so every trigger
-  // (menu button, close button, backdrop click, Escape, logout) stays in sync.
+  // 재료 관리 / 원가 계산 are the only two screens in this file that fully replace the
+  // calculator instead of floating over it as a small anchored popover — opening one hides
+  // .wrap/.footer outright rather than dimming them behind a modal, so it reads as "navigated
+  // to a different page" rather than "a dialog popped up here."
+  var calculatorWrapEl = document.querySelector('.wrap');
+  var calculatorFooterEl = document.querySelector('.footer');
+  function showSubpage(pageEl){
+    calculatorWrapEl.style.display = 'none';
+    calculatorFooterEl.style.display = 'none';
+    pageEl.style.display = 'block';
+    window.scrollTo(0, 0);
+  }
+  function hideSubpage(pageEl){
+    pageEl.style.display = 'none';
+    calculatorWrapEl.style.display = '';
+    calculatorFooterEl.style.display = '';
+  }
+
   function openIngredientManagerModal(){
     ingredientManagerSearchInput.value = ''; // don't carry over a filter from the last time this was open
     renderIngredientManager();
-    ingredientManagerOverlayEl.style.display = 'flex';
-    document.body.style.overflow = 'hidden'; // lock background scroll while the modal is up
+    showSubpage(ingredientManagerPageEl);
     closeIngredientManagerBtn.focus();
   }
   function closeIngredientManagerModal(){
-    ingredientManagerOverlayEl.style.display = 'none';
-    document.body.style.overflow = '';
+    hideSubpage(ingredientManagerPageEl);
   }
   closeIngredientManagerBtn.addEventListener('click', closeIngredientManagerModal);
-  ingredientManagerOverlayEl.addEventListener('click', function(e){
-    if (e.target === ingredientManagerOverlayEl) closeIngredientManagerModal(); // backdrop only, not the panel
-  });
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && ingredientManagerOverlayEl.style.display !== 'none') closeIngredientManagerModal();
+    if (e.key === 'Escape' && ingredientManagerPageEl.style.display !== 'none') closeIngredientManagerModal();
   });
 
   function openCostCalcModal(){
@@ -2171,20 +2184,15 @@
     costModalRecipe = null;
     costCalcBodyEl.style.display = 'none';
     costNoRecipeHintEl.style.display = 'block';
-    costCalcOverlayEl.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
+    showSubpage(costCalcPageEl);
     closeCostCalcBtn.focus();
   }
   function closeCostCalcModal(){
-    costCalcOverlayEl.style.display = 'none';
-    document.body.style.overflow = '';
+    hideSubpage(costCalcPageEl);
   }
   closeCostCalcBtn.addEventListener('click', closeCostCalcModal);
-  costCalcOverlayEl.addEventListener('click', function(e){
-    if (e.target === costCalcOverlayEl) closeCostCalcModal();
-  });
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && costCalcOverlayEl.style.display !== 'none') closeCostCalcModal();
+    if (e.key === 'Escape' && costCalcPageEl.style.display !== 'none') closeCostCalcModal();
   });
 
   // Recipe picker inside the modal — same show-everything-on-focus/filter-on-type pattern as
