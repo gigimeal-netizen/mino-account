@@ -41,8 +41,13 @@ create table ingredients (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
-  purchase_unit text not null default '',
+  purchase_amount numeric not null default 0,
+  purchase_unit_type text not null default 'g', -- 'g' | 'kg' | 'ml' | 'l' | 'ea'
   purchase_price numeric not null default 0,
+  price_per_gram numeric not null default 0,     -- computed client-side on save; 0/unused for 'ea'
+  is_active boolean not null default true,       -- soft-delete: deactivated ingredients keep
+                                                  -- resolving in recipes that already link them,
+                                                  -- they just stop appearing as pick candidates
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

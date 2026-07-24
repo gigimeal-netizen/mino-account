@@ -195,6 +195,28 @@
     flex: 0 0 auto; min-width: 72px; text-align: right;
   }
 
+  /* Ingredient manager (재료 관리): each row is name+toggle on top, purchase amount/unit/
+     price + computed cost on a wrapping second line — reuses .portion-row's flex-wrap
+     rhythm since this is an occasional settings screen, not the tight scale-reading grid
+     the flour/ingredient rows need. */
+  .ingredient-mgr-row{ padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .ingredient-mgr-row:last-of-type{ border-bottom: none; }
+  .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; }
+  .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
+  .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
+  .ingredient-mgr-cost{ display:flex; align-items:center; gap:6px; flex-wrap: wrap; margin-top: 8px; }
+  .ing-mgr-amount{ flex: 1 1 70px; min-width: 0; }
+  .ing-mgr-unit{
+    flex: 0 0 auto; font-family: var(--font-mono); font-size: 14px; color: var(--ink);
+    background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
+    padding: 10px 6px; min-height: 44px;
+  }
+  .ing-mgr-price{ flex: 1 1 90px; min-width: 0; }
+  .ing-mgr-per-gram{
+    font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
+    flex: 1 1 100%; text-align: right;
+  }
+
 
   .pmpm{ display:flex; align-items:center; gap:8px; margin-top: 12px; }
   .pmpm button{
@@ -422,6 +444,7 @@
               <button class="menu-btn" id="googleBtn">Google로 로그인</button>
             </div>
             <div id="loggedInRow" style="display:none;">
+              <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
             </div>
             <p class="hint" id="authHint" style="display:none;"></p>
@@ -580,6 +603,13 @@
         <button class="io-btn" id="copyLinkBtn">복사</button>
       </div>
     </div>
+  </section>
+
+  <section class="card" id="ingredientManagerCard" style="display:none;">
+    <h2>재료 관리</h2>
+    <div id="ingredientManagerList"></div>
+    <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
+    <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
   </section>
 
   <!--
@@ -1228,6 +1258,9 @@
   var footerDirtyHintEl = document.getElementById('footerDirtyHint');
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
+  var manageIngredientsBtn = document.getElementById('manageIngredientsBtn');
+  var ingredientManagerCardEl = document.getElementById('ingredientManagerCard');
+  var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
@@ -1345,10 +1378,110 @@
     });
   }
 
+  // 'ea' (개수) isn't weight-convertible, so its price-per-gram is left at 0 — the
+  // ingredient manager shows a plain "개당 단가" note instead of a g-based number for it.
+  // ml/l assume a density of 1 (1ml = 1g) as a deliberate simplification.
+  function gramsPerPurchaseUnit(unitType){
+    return { g: 1, kg: 1000, ml: 1, l: 1000 }[unitType] || 0;
+  }
+  function computePricePerGram(amount, unitType, price){
+    if (unitType === 'ea') return 0;
+    var grams = (parseFloat(amount) || 0) * gramsPerPurchaseUnit(unitType);
+    return grams > 0 ? (parseFloat(price) || 0) / grams : 0;
+  }
+
   function loadMyIngredients(){
     supabase.from('ingredients').select('*').order('name').then(function(res){
       if (res.error){ alert('재료 목록을 불러오지 못했어요: ' + res.error.message); return; }
       myIngredients = res.data || [];
+    });
+  }
+
+  var unitLabels = { g: 'g', kg: 'kg', ml: 'ml', l: 'l', ea: '개' };
+
+  // "재료 관리" card (opened from the account menu): a structural rebuild per ingredient
+  // (add/deactivate change the list), each row wired independently right after it's built —
+  // there's no reorder/index concern here (unlike ing-row), so each row just closes over its
+  // own `ig` record directly instead of going through a data-idx pass like buildIngRows().
+  function renderIngredientManager(){
+    ingredientManagerListEl.innerHTML = '';
+    myIngredients.forEach(function(ig){
+      var row = document.createElement('div');
+      row.className = 'ingredient-mgr-row';
+      var options = ['g','kg','ml','l','ea'].map(function(u){
+        return '<option value="' + u + '"' + (ig.purchase_unit_type === u ? ' selected' : '') + '>' + unitLabels[u] + '</option>';
+      }).join('');
+      row.innerHTML =
+        '<div class="ingredient-mgr-top">' +
+          '<input class="ing-mgr-name text-input">' +
+          '<button type="button" class="io-btn ing-mgr-toggle"></button>' +
+        '</div>' +
+        '<div class="ingredient-mgr-cost">' +
+          '<input class="ing-mgr-amount" type="number" inputmode="decimal" step="0.1">' +
+          '<select class="ing-mgr-unit">' + options + '</select>' +
+          '<input class="ing-mgr-price" type="number" inputmode="decimal" step="10">' +
+          '<span class="unit">원</span>' +
+          '<span class="ing-mgr-per-gram"></span>' +
+        '</div>';
+      ingredientManagerListEl.appendChild(row);
+
+      var nameEl = row.querySelector('.ing-mgr-name');
+      var amountEl = row.querySelector('.ing-mgr-amount');
+      var unitEl = row.querySelector('.ing-mgr-unit');
+      var priceEl = row.querySelector('.ing-mgr-price');
+      var perGramEl = row.querySelector('.ing-mgr-per-gram');
+      var toggleBtn = row.querySelector('.ing-mgr-toggle');
+
+      nameEl.value = ig.name || '';
+      amountEl.value = ig.purchase_amount || 0;
+      priceEl.value = ig.purchase_price || 0;
+      toggleBtn.textContent = ig.is_active === false ? '복원' : '사용중지';
+      toggleBtn.classList.toggle('danger', ig.is_active !== false);
+
+      function refreshPerGram(){
+        if (unitEl.value === 'ea'){
+          perGramEl.textContent = '개당 ' + (parseFloat(priceEl.value) || 0) + '원 (무게 환산 안 됨)';
+        } else {
+          var perGram = computePricePerGram(amountEl.value, unitEl.value, priceEl.value);
+          perGramEl.textContent = (Math.round(perGram * 100) / 100) + '원/g';
+        }
+      }
+      refreshPerGram();
+
+      function saveFields(fields){
+        supabase.from('ingredients').update(fields).eq('id', ig.id).then(function(res){
+          if (res.error){ alert('재료 정보 저장 실패: ' + res.error.message); return; }
+          Object.keys(fields).forEach(function(k){ ig[k] = fields[k]; });
+        });
+      }
+      nameEl.addEventListener('blur', function(){
+        var typed = nameEl.value.trim() || ig.name;
+        nameEl.value = typed;
+        if (typed !== ig.name) saveFields({ name: typed });
+      });
+      function saveCost(){
+        saveFields({
+          purchase_amount: parseFloat(amountEl.value) || 0,
+          purchase_unit_type: unitEl.value,
+          purchase_price: parseFloat(priceEl.value) || 0,
+          price_per_gram: computePricePerGram(amountEl.value, unitEl.value, priceEl.value)
+        });
+      }
+      amountEl.addEventListener('input', refreshPerGram);
+      priceEl.addEventListener('input', refreshPerGram);
+      amountEl.addEventListener('blur', saveCost);
+      priceEl.addEventListener('blur', saveCost);
+      unitEl.addEventListener('change', function(){ refreshPerGram(); saveCost(); });
+
+      toggleBtn.addEventListener('click', function(){
+        var nextActive = ig.is_active === false; // currently inactive -> this restores it
+        supabase.from('ingredients').update({ is_active: nextActive }).eq('id', ig.id).then(function(res){
+          if (res.error){ alert('상태 변경 실패: ' + res.error.message); return; }
+          ig.is_active = nextActive;
+          toggleBtn.textContent = nextActive ? '사용중지' : '복원';
+          toggleBtn.classList.toggle('danger', nextActive);
+        });
+      });
     });
   }
 
@@ -1358,6 +1491,15 @@
   // migrated legacy row that didn't auto-match) or when viewing as someone who can't see
   // the owner's `ingredients` table at all (a share-link visitor) — this is why renaming an
   // ingredient won't retroactively update an already-shared link until the owner re-saves.
+  // A row only counts as "resolved" if its ingredientId actually exists in the master list —
+  // deactivated ingredients still exist (so this stays resolved), but a stale/orphaned id
+  // (e.g. from direct DB edits outside this app) correctly falls back to the warning state.
+  function markResolved(inputEl, row){
+    var exists = row.ingredientId && myIngredients.some(function(ig){ return ig.id === row.ingredientId; });
+    if (exists) inputEl.removeAttribute('data-unresolved');
+    else inputEl.setAttribute('data-unresolved', '');
+  }
+
   function resolveIngredientName(row){
     if (row.ingredientId){
       var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
@@ -1386,8 +1528,7 @@
   // has an `ingredients` table to search, so this keeps working exactly like before there.
   function attachIngredientCombo(inputEl, dropdownEl, row, onChange){
     inputEl.value = resolveIngredientName(row);
-    if (row.ingredientId) inputEl.removeAttribute('data-unresolved');
-    else inputEl.setAttribute('data-unresolved', '');
+    markResolved(inputEl, row);
 
     if (!currentUser || !supabase){
       inputEl.addEventListener('input', function(){
@@ -1403,7 +1544,7 @@
       var typed = inputEl.value.trim();
       var q = showAll ? '' : typed.toLowerCase();
       var matches = myIngredients.filter(function(ig){
-        return !q || ig.name.toLowerCase().indexOf(q) !== -1;
+        return ig.is_active !== false && (!q || ig.name.toLowerCase().indexOf(q) !== -1);
       });
       dropdownEl.innerHTML = '';
       if (matches.length === 0 && !typed){
@@ -1708,6 +1849,7 @@
       saveBtn.style.display = 'none';
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
+      ingredientManagerCardEl.style.display = 'none';
       myRecipes = [];
       myIngredients = [];
       recipeSearchInput.value = '';
@@ -1742,6 +1884,21 @@
     accountChipBtn.addEventListener('click', function(){
       closeNewRecipeMenu();
       accountMenuEl.style.display = accountMenuEl.style.display === 'none' ? 'block' : 'none';
+    });
+
+    manageIngredientsBtn.addEventListener('click', function(){
+      closeAccountMenu();
+      var showing = ingredientManagerCardEl.style.display !== 'none';
+      ingredientManagerCardEl.style.display = showing ? 'none' : 'block';
+      if (!showing) renderIngredientManager();
+    });
+    document.getElementById('addIngredientMasterBtn').addEventListener('click', function(){
+      if (!currentUser) return;
+      supabase.from('ingredients').insert({ owner_id: currentUser.id, name: '새 재료' }).select().single().then(function(res){
+        if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
+        myIngredients.push(res.data);
+        renderIngredientManager();
+      });
     });
     document.addEventListener('click', function(e){
       if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();
