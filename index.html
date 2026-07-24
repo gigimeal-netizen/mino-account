@@ -111,7 +111,10 @@
   .icon-btn.primary:hover{ color: #fff; opacity: 0.9; }
   .icon-btn.danger{ color: var(--danger); border-color: var(--danger); }
   .icon-btn.danger:hover{ background: var(--danger-soft); }
-  .toolbar-icons{ display:flex; align-items:center; gap:8px; }
+  /* justify-content:flex-end only matters when there's no flex-growing child to soak up
+     the row (e.g. the notes card's save/share/delete row) — the top toolbar's recipe-name
+     input already flex-grows to fill the row, so this doesn't change that one's layout. */
+  .toolbar-icons{ display:flex; align-items:center; gap:8px; justify-content:flex-end; }
   /* Which icon shows follows data-theme purely in CSS — dark (default) shows the moon,
      light shows the sun; applyTheme() in JS only needs to set the attribute. */
   .theme-toggle .icon-sun{ display:none; }
@@ -600,6 +603,7 @@
     </div>
     <div class="footer-text">
       <div class="footer-label" id="footerFlourLabel">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
+      <div class="footer-label" id="footerScaleLabel" style="display:none;">적용 배율 <span id="engineScaleLabel">×1</span></div>
       <div class="footer-value" id="totalWeightText">0g</div>
       <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
     </div>
@@ -681,6 +685,8 @@
   var ingHintEl = document.getElementById('ingHint');
   var pctInfoBlockEl = document.getElementById('pctInfoBlock');
   var footerFlourLabelEl = document.getElementById('footerFlourLabel');
+  var footerScaleLabelEl = document.getElementById('footerScaleLabel');
+  var engineScaleLabelEl = document.getElementById('engineScaleLabel');
 
   function showToast(msg){
     toastEl.textContent = msg;
@@ -1010,6 +1016,9 @@
         if (wEl) fitDigits(wEl);
       });
       total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
+      // Bread's footer label shows the flour weight the numbers were derived from; engine B
+      // has no flour bucket, so its analogous "derivation basis" is the scale factor itself.
+      engineScaleLabelEl.textContent = '×' + (Math.round(scale * 100) / 100);
     }
 
     stampTotal.textContent = fmt(total);
@@ -1040,6 +1049,7 @@
     ingHintEl.style.display = isBread ? '' : 'none';
     pctInfoBlockEl.style.display = isBread ? '' : 'none';
     footerFlourLabelEl.style.display = isBread ? '' : 'none';
+    footerScaleLabelEl.style.display = isBread ? 'none' : '';
   }
 
   // Mode toggle
