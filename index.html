@@ -5186,7 +5186,15 @@
   if (tagSharedToken) initTagSharedView();
   if (claimShareToken || claimTagShareToken) initClaimShareBanner();
 
+  // 2026-07-25: 이 최초 render()가 suppressDirtyTracking 없이 돌고 있었다 — updateDisplays()가
+  // 매번 markDirty()를 부르기 때문에, 페이지를 열자마자(아무 것도 편집 안 했는데도) isDirty가
+  // true가 돼버렸다. 그 상태에서 confirmDiscardIfDirty()를 추가하니 첫 화면에서 레시피를
+  // 불러오거나 "새 레시피"만 눌러도 "저장 안 된 변경사항" 확인창이 떴다 — applyRecipeRowToState()/
+  // newRecipe()가 이미 하는 것과 똑같이 감싸서 페이지가 진짜 깨끗한 상태로 시작하게 한다.
+  suppressDirtyTracking = true;
   render();
+  suppressDirtyTracking = false;
+  markClean();
 })();
 </script>
 </body>
