@@ -838,6 +838,38 @@
     </div>
     <input type="file" id="importIngredientsCsvInput" accept=".csv,text/csv" style="display:none;">
     <!--
+      컬럼 매핑 — 이 앱이 내보낸 형식(이름,카테고리,구매량,구매단위,구매가격,사용여부)이 아닌
+      CSV(예: 거래처가 주는 거래원장 — 날짜/품목명/수량/단위/단가/금액 형태)를 가져올 때만
+      나온다. 어느 칸이 이름/단위/단가인지 사용자가 지정하면, 이름이 같은 줄은 마지막(가장
+      최근) 값만 남기고, "단위" 칸에 500G·1.2KG·1L처럼 무게/부피가 적혀 있으면
+      parseEmbeddedUnit()이 자동으로 인식한다 — 포/봉/캔처럼 개수만 있으면 무게를 알 수
+      없으니 '개'(원가 미반영) 단위로 등록되고, 나중에 재료 관리에서 직접 고치면 된다.
+    -->
+    <div id="ingredientImportMapping" style="display:none;">
+      <p class="hint">이 파일은 재료 관리 형식이 아니에요. 어느 칸이 이름/단위/단가인지 지정해주세요. 이름이 같은 줄이 여러 개면 마지막(가장 최근) 값만 사용해요.</p>
+      <label class="import-row" style="cursor:pointer;">
+        <input type="checkbox" id="importMapHasHeaderCheckbox" checked>
+        <span>첫 번째 줄은 제목 줄이에요</span>
+      </label>
+      <div class="field-row">
+        <span class="field-label">이름 칸</span>
+        <select id="importMapNameSelect" class="text-input"></select>
+      </div>
+      <div class="field-row">
+        <span class="field-label">단위 칸</span>
+        <select id="importMapUnitSelect" class="text-input"></select>
+      </div>
+      <div class="field-row">
+        <span class="field-label">단가 칸</span>
+        <select id="importMapPriceSelect" class="text-input"></select>
+      </div>
+      <p class="hint">"단가"는 총금액이 아니라 이 한 단위(포/봉/캔 등) 하나의 가격이어야 해요 — 원장에 총금액만 있다면 엑셀에서 "=금액/수량" 칸을 하나 추가한 뒤 다시 내보내주세요.</p>
+      <div class="field-row">
+        <button type="button" class="io-btn primary" id="confirmImportMappingBtn">다음</button>
+        <button type="button" class="io-btn" id="cancelImportMappingBtn">취소</button>
+      </div>
+    </div>
+    <!--
       CSV 가져오기 미리보기 — 이름이 같은 재료의 값이 바뀌었으면 바로 덮어쓰지 않고, 기존
       값과 새 값을 나란히 보여준 뒤 체크박스로 골라서 적용할 항목만 반영한다(요청: "다른
       값이면 확인하는 시스템"). 새로 추가되는 재료도 같은 화면에서 같이 확인.
@@ -1554,6 +1586,14 @@
   var exportIngredientsCsvBtn = document.getElementById('exportIngredientsCsvBtn');
   var importIngredientsCsvBtn = document.getElementById('importIngredientsCsvBtn');
   var importIngredientsCsvInput = document.getElementById('importIngredientsCsvInput');
+  var ingredientImportMappingEl = document.getElementById('ingredientImportMapping');
+  var importMapHasHeaderCheckbox = document.getElementById('importMapHasHeaderCheckbox');
+  var importMapNameSelect = document.getElementById('importMapNameSelect');
+  var importMapUnitSelect = document.getElementById('importMapUnitSelect');
+  var importMapPriceSelect = document.getElementById('importMapPriceSelect');
+  var confirmImportMappingBtn = document.getElementById('confirmImportMappingBtn');
+  var cancelImportMappingBtn = document.getElementById('cancelImportMappingBtn');
+  var pendingMappingRows = null; // raw parsed CSV rows, held between showing the mapping UI and confirming it
   var ingredientImportPreviewEl = document.getElementById('ingredientImportPreview');
   var ingredientImportSummaryEl = document.getElementById('ingredientImportSummary');
   var ingredientImportNewListEl = document.getElementById('ingredientImportNewList');
@@ -1843,47 +1883,150 @@
     return rows.filter(function(r){ return !(r.length === 1 && r[0] === ''); });
   }
 
-  // Parses the picked file and, rather than writing straight to Supabase, builds two review
-  // lists — per the explicit request: "다른 값이면 확인하는 시스템" (ask before applying a
-  // changed value, e.g. butter's price moving from 60,000원 on 7/20 to 100,000원 on 7/25).
-  // Matching is by whitespace/case-normalized name (normalizeForMatch(), same helper the
-  // ingredient-linker's auto-match already uses) — an unmatched name becomes a new-ingredient
-  // candidate, a matched name whose amount/unit/price differ from what's stored becomes a
-  // changed-value candidate; a matched name with no difference is silently skipped (nothing
-  // to confirm). Neither list is written to Supabase until renderIngredientImportPreview()'s
-  // checkboxes are reviewed and 적용 is clicked.
-  function handleIngredientCsvImport(text){
-    var rows = parseCsv(text);
-    if (rows.length === 0){ alert('CSV 내용을 읽을 수 없어요.'); return; }
-    var startIdx = (rows[0][0] || '').trim() === '이름' ? 1 : 0;
-    pendingImportNew = [];
-    pendingImportChanged = [];
+  // Recognizes a weight/volume written inline in a ledger's "단위" cell (e.g. "500G",
+  // "1.2KG", "1L", "450ML") — real supplier 거래원장 rows mix these with plain packaging
+  // words ("포"/"봉"/"캔"/"병"/"롤"/"통") that carry no discoverable weight at all. A word
+  // like "포" or a bare product code has no digit immediately followed by a unit letter, so
+  // it naturally falls through to null → the 'ea' (개수 단위, cost-uninvolved) fallback in
+  // buildLedgerRows() — never a crash, just an unresolved weight the user can fix by hand
+  // afterward in 재료 관리, same as any other unpriced/unresolved row in this app.
+  function parseEmbeddedUnit(text){
+    var m = (text || '').match(/([\d.]+)\s*(kg|ml|g|l)\b/i);
+    if (!m) return null;
+    var amount = parseFloat(m[1]);
+    if (!(amount > 0)) return null;
+    return { amount: amount, unit: m[2].toLowerCase() };
+  }
+
+  // Builds this app's normalized { name, category, purchase_amount, purchase_unit_type,
+  // purchase_price } shape from an arbitrary ledger's columns, given which column index is
+  // which (see startIngredientImportMapping()/컬럼 매핑 UI). A 거래원장 repeats the same
+  // ingredient across many purchase dates — dedupe here keeps only the LAST row seen for a
+  // given normalized name (ledgers read top-to-bottom are chronological, so the last row is
+  // the most recent price), rather than creating/updating from every historical row. Rows
+  // with no name or a non-positive price are skipped outright — this is also what silently
+  // drops a ledger's daily-subtotal rows (blank 품목명, blank 단가), without needing to
+  // special-case them.
+  function buildLedgerRows(rows, startIdx, nameIdx, unitIdx, priceIdx){
+    var byName = {};
+    var order = [];
     for (var i = startIdx; i < rows.length; i++){
       var r = rows[i];
-      var name = (r[0] || '').trim();
-      if (!name) continue;
-      var category = (r[1] || '').trim();
-      var amount = parseFloat(r[2]) || 0;
-      var unit = (r[3] || 'g').trim();
-      if (['g', 'kg', 'ml', 'l', 'ea'].indexOf(unit) === -1) unit = 'g';
-      var price = parseFloat(r[4]) || 0;
+      var name = (r[nameIdx] || '').trim();
+      var price = parseFloat((r[priceIdx] || '').replace(/,/g, '')) || 0;
+      if (!name || price <= 0) continue;
+      var parsed = parseEmbeddedUnit(r[unitIdx] || '');
       var norm = normalizeForMatch(name);
+      if (!(norm in byName)) order.push(norm);
+      byName[norm] = {
+        name: name, category: '',
+        purchase_amount: parsed ? parsed.amount : 0,
+        purchase_unit_type: parsed ? parsed.unit : 'ea',
+        purchase_price: price
+      };
+    }
+    return order.map(function(norm){ return byName[norm]; });
+  }
+
+  // Shared by both import paths (this app's own CSV export, and a mapped ledger): compares
+  // each normalized row against myIngredients by whitespace/case-normalized name
+  // (normalizeForMatch(), same helper the ingredient-linker's auto-match already uses) and
+  // sorts into the two review lists — per the explicit request: "다른 값이면 확인하는
+  // 시스템" (ask before applying a changed value, e.g. butter's price moving from 60,000원
+  // on 7/20 to 100,000원 on 7/25). An unmatched name becomes a new-ingredient candidate; a
+  // matched name whose amount/unit/price differ from what's stored becomes a changed-value
+  // candidate; a matched name with no difference is silently skipped (nothing to confirm).
+  // Neither list is written to Supabase until renderIngredientImportPreview()'s checkboxes
+  // are reviewed and 적용 is clicked.
+  function buildImportDiff(normalizedRows){
+    pendingImportNew = [];
+    pendingImportChanged = [];
+    normalizedRows.forEach(function(row){
+      var norm = normalizeForMatch(row.name);
       var existing = myIngredients.find(function(ig){ return normalizeForMatch(ig.name) === norm; });
       if (!existing){
-        pendingImportNew.push({ name: name, category: category, purchase_amount: amount, purchase_unit_type: unit, purchase_price: price });
-      } else if (existing.purchase_amount !== amount || existing.purchase_unit_type !== unit || existing.purchase_price !== price){
+        pendingImportNew.push(row);
+      } else if (existing.purchase_amount !== row.purchase_amount || existing.purchase_unit_type !== row.purchase_unit_type || existing.purchase_price !== row.purchase_price){
         pendingImportChanged.push({
           ig: existing,
           fields: {
-            purchase_amount: amount, purchase_unit_type: unit, purchase_price: price,
-            price_per_gram: computePricePerGram(amount, unit, price)
+            purchase_amount: row.purchase_amount, purchase_unit_type: row.purchase_unit_type, purchase_price: row.purchase_price,
+            price_per_gram: computePricePerGram(row.purchase_amount, row.purchase_unit_type, row.purchase_price)
           },
           oldText: (existing.purchase_amount || 0) + (unitLabels[existing.purchase_unit_type] || existing.purchase_unit_type) + ' · ' + (existing.purchase_price || 0) + '원',
-          newText: amount + (unitLabels[unit] || unit) + ' · ' + price + '원'
+          newText: row.purchase_amount + (unitLabels[row.purchase_unit_type] || row.purchase_unit_type) + ' · ' + row.purchase_price + '원'
         });
       }
-    }
+    });
     renderIngredientImportPreview();
+  }
+
+  // Entry point for a picked CSV file: this app's own export (exact header match) skips
+  // straight to buildImportDiff(); anything else (a supplier's 거래원장, or any other CSV
+  // whose columns don't line up with 이름/카테고리/구매량/구매단위/구매가격/사용여부) shows
+  // the column-mapping step first instead of guessing at column order.
+  function handleIngredientCsvImport(text){
+    var rows = parseCsv(text);
+    if (rows.length === 0){ alert('CSV 내용을 읽을 수 없어요.'); return; }
+    var ownHeader = ['이름', '카테고리', '구매량', '구매단위', '구매가격', '사용여부'];
+    var looksLikeOwnExport = rows[0].length >= ownHeader.length &&
+      ownHeader.every(function(h, i){ return (rows[0][i] || '').trim() === h; });
+    if (looksLikeOwnExport){
+      var normalizedRows = [];
+      for (var i = 1; i < rows.length; i++){
+        var r = rows[i];
+        var name = (r[0] || '').trim();
+        if (!name) continue;
+        var unit = (r[3] || 'g').trim();
+        if (['g', 'kg', 'ml', 'l', 'ea'].indexOf(unit) === -1) unit = 'g';
+        normalizedRows.push({
+          name: name, category: (r[1] || '').trim(),
+          purchase_amount: parseFloat(r[2]) || 0, purchase_unit_type: unit, purchase_price: parseFloat(r[4]) || 0
+        });
+      }
+      buildImportDiff(normalizedRows);
+    } else {
+      startIngredientImportMapping(rows);
+    }
+  }
+
+  // Column-mapping step for a non-own-format CSV: lets the user say which column is the
+  // item name / unit(-with-weight) / unit price, since a supplier's 거래원장 has no fixed
+  // column order this app can assume. Each <select> is labeled with the header text (if the
+  // "첫 줄은 제목 줄" checkbox is on) or a sample value from the first data row, so the user
+  // can tell columns apart without needing to already know the file's structure by heart.
+  function startIngredientImportMapping(rows){
+    pendingMappingRows = rows;
+    ingredientManagerListEl.style.display = 'none';
+    document.getElementById('addIngredientMasterBtn').style.display = 'none';
+    ingredientImportMappingEl.style.display = 'block';
+    renderImportMappingOptions();
+    importMapHasHeaderCheckbox.onchange = renderImportMappingOptions;
+  }
+  function renderImportMappingOptions(){
+    var rows = pendingMappingRows;
+    var hasHeader = importMapHasHeaderCheckbox.checked;
+    var labelRow = rows[0];
+    var sampleRow = hasHeader && rows.length > 1 ? rows[1] : rows[0];
+    var columnCount = Math.max(labelRow.length, sampleRow.length);
+    var optionsHtml = '';
+    for (var c = 0; c < columnCount; c++){
+      var headerText = hasHeader ? (labelRow[c] || '').trim() : '';
+      var sampleText = (sampleRow[c] || '').trim();
+      var label = (headerText || ('열 ' + (c + 1))) + (sampleText ? ' (' + sampleText + ')' : '');
+      optionsHtml += '<option value="' + c + '">' + escapeHtml(label) + '</option>';
+    }
+    [importMapNameSelect, importMapUnitSelect, importMapPriceSelect].forEach(function(sel){
+      var prev = sel.value;
+      sel.innerHTML = optionsHtml;
+      if (prev && parseInt(prev, 10) < columnCount) sel.value = prev;
+    });
+  }
+  function closeIngredientImportMapping(){
+    ingredientImportMappingEl.style.display = 'none';
+    ingredientManagerListEl.style.display = '';
+    document.getElementById('addIngredientMasterBtn').style.display = '';
+    pendingMappingRows = null;
   }
 
   function renderIngredientImportPreview(){
@@ -3432,6 +3575,17 @@
         handleIngredientCsvImport(String(reader.result));
       };
       reader.readAsText(file, 'utf-8');
+    });
+    cancelImportMappingBtn.addEventListener('click', closeIngredientImportMapping);
+    confirmImportMappingBtn.addEventListener('click', function(){
+      var nameIdx = parseInt(importMapNameSelect.value, 10);
+      var unitIdx = parseInt(importMapUnitSelect.value, 10);
+      var priceIdx = parseInt(importMapPriceSelect.value, 10);
+      var startIdx = importMapHasHeaderCheckbox.checked ? 1 : 0;
+      var normalizedRows = buildLedgerRows(pendingMappingRows, startIdx, nameIdx, unitIdx, priceIdx);
+      closeIngredientImportMapping();
+      if (normalizedRows.length === 0){ alert('지정한 칸에서 유효한 재료를 찾지 못했어요. 칸을 다시 확인해주세요.'); return; }
+      buildImportDiff(normalizedRows);
     });
     cancelIngredientImportBtn.addEventListener('click', closeIngredientImportPreview);
     applyIngredientImportBtn.addEventListener('click', function(){
