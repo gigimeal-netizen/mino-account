@@ -864,6 +864,7 @@
         <select id="importMapPriceSelect" class="text-input"></select>
       </div>
       <p class="hint">"단가"는 총금액이 아니라 이 한 단위(포/봉/캔 등) 하나의 가격이어야 해요 — 원장에 총금액만 있다면 엑셀에서 "=금액/수량" 칸을 하나 추가한 뒤 다시 내보내주세요.</p>
+      <p class="hint">"단위" 칸에 무게가 없어도, 이름에 "해바라기씨중국산1kg"처럼 무게가 같이 적혀 있으면 자동으로 인식해서 이름에서 분리해내요.</p>
       <div class="field-row">
         <button type="button" class="io-btn primary" id="confirmImportMappingBtn">다음</button>
         <button type="button" class="io-btn" id="cancelImportMappingBtn">취소</button>
@@ -1883,19 +1884,21 @@
     return rows.filter(function(r){ return !(r.length === 1 && r[0] === ''); });
   }
 
-  // Recognizes a weight/volume written inline in a ledger's "단위" cell (e.g. "500G",
-  // "1.2KG", "1L", "450ML") — real supplier 거래원장 rows mix these with plain packaging
+  // Recognizes a weight/volume written inline in text (a ledger's "단위" cell, e.g. "500G",
+  // "1.2KG", "1L", "450ML" — or, when that cell has none, the item name itself, e.g. "해바
+  // 라기씨중국산1kg") — real supplier 거래원장 rows mix genuine weights with plain packaging
   // words ("포"/"봉"/"캔"/"병"/"롤"/"통") that carry no discoverable weight at all. A word
   // like "포" or a bare product code has no digit immediately followed by a unit letter, so
   // it naturally falls through to null → the 'ea' (개수 단위, cost-uninvolved) fallback in
   // buildLedgerRows() — never a crash, just an unresolved weight the user can fix by hand
-  // afterward in 재료 관리, same as any other unpriced/unresolved row in this app.
+  // afterward in 재료 관리, same as any other unpriced/unresolved row in this app. Returns
+  // the match's index/text too so a name-column hit can be stripped back out of the name.
   function parseEmbeddedUnit(text){
     var m = (text || '').match(/([\d.]+)\s*(kg|ml|g|l)\b/i);
     if (!m) return null;
     var amount = parseFloat(m[1]);
     if (!(amount > 0)) return null;
-    return { amount: amount, unit: m[2].toLowerCase() };
+    return { amount: amount, unit: m[2].toLowerCase(), matchText: m[0], index: m.index };
   }
 
   // Builds this app's normalized { name, category, purchase_amount, purchase_unit_type,
@@ -1907,16 +1910,34 @@
   // with no name or a non-positive price are skipped outright — this is also what silently
   // drops a ledger's daily-subtotal rows (blank 품목명, blank 단가), without needing to
   // special-case them.
+  //
+  // Some suppliers never write a real unit/weight cell at all — the size is just baked into
+  // the item name itself ("해바라기씨중국산1kg"), which used to always fall back to 'ea' and
+  // need fixing by hand for every single row. When the mapped 단위 cell doesn't parse, this
+  // retries the same parseEmbeddedUnit() against the name — and if THAT'S where the weight
+  // was found, strips the matched text (plus any punctuation/whitespace it leaves dangling)
+  // back out of the name, so "해바라기씨중국산1kg" both parses as 1kg *and* imports as the
+  // cleaner "해바라기씨중국산" rather than keeping the size baked in twice over.
   function buildLedgerRows(rows, startIdx, nameIdx, unitIdx, priceIdx){
     var byName = {};
     var order = [];
     for (var i = startIdx; i < rows.length; i++){
       var r = rows[i];
-      var name = (r[nameIdx] || '').trim();
+      var rawName = (r[nameIdx] || '').trim();
       var price = parseFloat((r[priceIdx] || '').replace(/,/g, '')) || 0;
-      if (!name || price <= 0) continue;
+      if (!rawName || price <= 0) continue;
       var parsed = parseEmbeddedUnit(r[unitIdx] || '');
-      var norm = normalizeForMatch(name);
+      var name = rawName;
+      if (!parsed){
+        parsed = parseEmbeddedUnit(rawName);
+        if (parsed){
+          name = (rawName.slice(0, parsed.index) + rawName.slice(parsed.index + parsed.matchText.length))
+            .replace(/^[\s()\-–_,·]+|[\s()\-–_,·]+$/g, '')
+            .trim();
+          if (!name) name = rawName; // never end up with a blank name
+        }
+      }
+      var norm = normalizeForMatch(rawName);
       if (!(norm in byName)) order.push(norm);
       byName[norm] = {
         name: name, category: '',
