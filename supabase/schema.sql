@@ -13,6 +13,7 @@ create table recipes (
   owner_id uuid not null references auth.users(id) on delete cascade,
   recipe_name text not null default '이름 없는 레시피',
   recipe_type text not null default 'bread', -- 'bread' (baker's %) | 'confection' | 'other' (both: absolute weight)
+  category text not null default '',         -- free-text grouping (제빵/제과/소스/크림 ...), user-defined, same convention as ingredients.category
   mode text not null default 'A',
   base_flour numeric not null default 0,
   multiplier numeric not null default 1,
@@ -22,7 +23,18 @@ create table recipes (
   ingredients jsonb not null default '[]',
   notes text not null default '',
   share_token uuid,               -- null = link sharing off
+  -- 원가 계산 전용 독립 사본. 원가 계산 화면은 이 세 컬럼만 읽고 쓴다 — flours/ingredients
+  -- (메인 계산기가 편집하는 실데이터)와는 별개라서, 메인 계산기에서 배합을 조정해도
+  -- 원가 계산 쪽 재료 연결은 말없이 안 바뀐다. cost_snapshot_taken_at이 null이면 아직 원가
+  -- 계산에서 한 번도 안 열어본 레시피. account.html의 openCostCalcRecipe()가 이 값이
+  -- updated_at보다 오래됐으면 "원본이 수정됨"으로 판단해 안내한다.
+  cost_snapshot_flours jsonb,
+  cost_snapshot_ingredients jsonb,
+  cost_snapshot_taken_at timestamptz,
   created_at timestamptz not null default now(),
+  -- account.html의 serializeCurrentRecipe()가 저장할 때마다 명시적으로 now()를 채워 넣는다 —
+  -- Postgres에 이 컬럼을 자동으로 갱신하는 트리거가 없어서, 클라이언트가 안 채우면 생성 시각
+  -- 그대로 영원히 안 바뀐다(원가 계산 스냅샷과의 신선도 비교가 성립하려면 반드시 필요).
   updated_at timestamptz not null default now()
 );
 
@@ -183,6 +195,49 @@ returns setof recipes language sql security definer as $$
   select * from recipes where share_token = p_token;
 $$;
 grant execute on function get_recipe_by_share_token(uuid) to anon;
+
+-- 카테고리 전체 공유: 레시피 한 개가 아니라 (소유자, 카테고리) 쌍에 링크를 건다. 실시간이라
+-- 스냅샷이 아님 — 링크를 만든 뒤 그 카테고리에 레시피를 더 추가해도 같은 링크로 바로 보인다.
+create table category_shares (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  category text not null,
+  share_token uuid not null default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  unique (owner_id, category)
+);
+alter table category_shares enable row level security;
+create policy "owner full access" on category_shares for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- Issue or revoke a category share link. Owner only. Re-enabling an already-shared category
+-- reuses the row (upsert) rather than erroring, so toggling on/off/on doesn't need a delete
+-- first — same "링크 켜기/끄기" ergonomics as set_recipe_share_token().
+create or replace function set_category_share_token(p_category text, p_enable boolean)
+returns uuid language plpgsql security definer as $$
+declare new_token uuid;
+begin
+  if p_enable then
+    insert into category_shares (owner_id, category, share_token)
+      values (auth.uid(), p_category, gen_random_uuid())
+      on conflict (owner_id, category) do update set share_token = excluded.share_token
+      returning share_token into new_token;
+  else
+    delete from category_shares where owner_id = auth.uid() and category = p_category;
+    new_token := null;
+  end if;
+  return new_token;
+end; $$;
+
+-- Anonymous, real-time lookup: every recipe currently in that (owner, category) pair, not a
+-- frozen list taken when the link was created.
+create or replace function get_recipes_by_category_share_token(p_token uuid)
+returns setof recipes language sql security definer as $$
+  select r.* from recipes r
+  join category_shares cs on cs.owner_id = r.owner_id and cs.category = r.category
+  where cs.share_token = p_token;
+$$;
+grant execute on function get_recipes_by_category_share_token(uuid) to anon;
 
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This

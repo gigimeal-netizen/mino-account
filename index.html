@@ -297,6 +297,25 @@
   .acc-row-header .acc-row-select{ flex: 0 0 auto; width: 20px; height: 20px; }
   .acc-row-header .acc-row-toggle{ flex: 1 1 auto; min-width: 0; }
 
+  /* 카테고리별 보기: 카테고리마다 헤더(이름+개수+공유 버튼) + 그 아래 레시피 이름 목록.
+     레시피 행은 아코디언이 아니라 그냥 클릭하면 바로 불러오는 단순한 목록이라 acc-row
+     계열을 그대로 쓰지 않고 별도로 가볍게 스타일링한다. */
+  .category-group{ padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .category-group:last-of-type{ border-bottom: none; }
+  .category-group-header{ display: flex; align-items: center; gap: 8px; }
+  .category-group-name{
+    flex: 1 1 auto; min-width: 0; font-family: var(--font-display);
+    font-weight: 800; font-size: 15px; color: var(--ink);
+  }
+  .category-group-count{ flex: 0 0 auto; font-size: 12.5px; color: var(--ink-soft); }
+  .category-recipe-list{ margin-top: 8px; }
+  .category-recipe-row{
+    display: block; width: 100%; padding: 10px 4px; border: none; background: transparent;
+    text-align: left; font-family: var(--font-body); font-size: 14px; color: var(--ink);
+    cursor: pointer; border-radius: 8px;
+  }
+  .category-recipe-row:hover{ background: var(--bg-elevated); }
+
   /* 조합 제품 (여러 레시피를 합친 제품): a composite row holds several component rows, each
      a recipe-picker + its own weight/loss rate — reuses .ing-link-combo (already
      position:relative, flex:1 1 auto) for the recipe search so it doesn't need its own CSS. */
@@ -626,6 +645,7 @@
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
               <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
+              <button class="menu-btn" id="openRecipeCategoriesBtn">카테고리별 보기</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
@@ -637,6 +657,14 @@
     </div>
     <p class="sub" id="subText">구글 계정으로 로그인해서 내 레시피를 저장하고 공유해요.</p>
     <p class="hint" id="sharedBanner" style="display:none;">공유된 레시피를 읽기 전용으로 보고 있어요. 저장하려면 본인 계정으로 로그인한 뒤 새로 저장해주세요.</p>
+    <!--
+      ?category_share=<token> 랜딩 — ?share=<token>과 달리 레시피가 여러 개라 계산기에
+      바로 채우지 않고, 목록에서 하나 고르게 한다(고른 뒤에는 applyRecipeRowToState()로
+      똑같이 계산기에 채워짐). category_shares는 실시간이라, 나중에 그 카테고리에 레시피가
+      추가되면 새로고침 시 이 목록에도 바로 나타난다.
+    -->
+    <p class="hint" id="categorySharedBanner" style="display:none;">공유된 카테고리의 레시피 목록이에요. 하나를 눌러서 읽기 전용으로 볼 수 있어요.</p>
+    <div id="categorySharedList" style="display:none;"></div>
   </header>
 
   <section class="card recipe-toolbar">
@@ -663,6 +691,7 @@
         </svg>
       </button>
     </div>
+    <input type="text" id="recipeCategory" class="text-input" autocomplete="off" placeholder="카테고리 (예: 제빵) — 선택 사항" style="width:100%;margin-top:8px;">
 
     <div id="libraryCard" style="display:none;">
       <div class="toolbar-divider"></div>
@@ -962,6 +991,16 @@
         is unchanged from before this screen became a list; only the picker around it changed.
       -->
       <div id="costCalcBody" class="acc-row-detail" style="display:none;">
+        <!--
+          원가 계산은 이제 이 레시피의 독립 사본(cost_snapshot_*)만 본다 — 메인 계산기에서
+          배합을 수정해도 여기 재료 연결은 말없이 안 바뀐다. 원본이 스냅샷 이후 수정됐으면
+          이 배너로 알려주고, 원하면 "다시 불러오기"로만 동기화한다(이름이 같은 재료는
+          링크 자동 유지 — reloadCostSnapshot()/mergeSnapshotIngredientIds() 참고).
+        -->
+        <div id="costStaleHint" style="display:none;">
+          <p class="hint warn-hint">⚠ 원본 레시피가 이후에 수정됐어요 — 다시 불러올까요?</p>
+          <button type="button" class="io-btn" id="reloadCostSnapshotBtn" style="margin-bottom:14px;">다시 불러오기</button>
+        </div>
         <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
         <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
         <div id="costIngredientsList"></div>
@@ -990,6 +1029,29 @@
       </div>
       <div id="compositeProductsList"></div>
     </div>
+  </div>
+</div>
+
+<!--
+  카테고리별 보기 — 레시피를 category(자유 입력, 메인 화면 #recipeCategory)별로 묶어서
+  브라우즈 + 카테고리 단위 공유만 하는 화면. 카테고리 수정은 여기서 안 하고 메인 화면에서.
+-->
+<div class="subpage" id="recipeCategoriesPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeRecipeCategoriesBtn" aria-label="계산기로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      <h2>카테고리별 보기</h2>
+      <div class="header-actions subpage-header-actions"></div>
+    </div>
+  </div>
+  <div class="subpage-body">
+    <p class="hint">레시피를 카테고리별로 모아서 보여줘요. 카테고리는 레시피 이름 옆 입력칸에서 정할 수 있어요.</p>
+    <input type="text" id="recipeCategorySearchInput" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
+    <div id="recipeCategoriesList"></div>
   </div>
 </div>
 
@@ -1058,6 +1120,7 @@
   var flourWeightLabel = document.getElementById('flourWeightLabel');
   var toastEl = document.getElementById('toast');
   var recipeNameInput = document.getElementById('recipeName');
+  var recipeCategoryInput = document.getElementById('recipeCategory');
   var notesInput = document.getElementById('notesInput');
   var baseFlourRowEl = document.getElementById('baseFlourRow');
   var modeAHintEl = document.getElementById('modeAHint');
@@ -1607,6 +1670,7 @@
   var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
   var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
   var sharedViewToken = new URLSearchParams(location.search).get('share');
+  var categorySharedToken = new URLSearchParams(location.search).get('category_share');
 
   var accountChipBtn = document.getElementById('accountChipBtn');
   var accountMenuEl = document.getElementById('accountMenu');
@@ -1659,6 +1723,8 @@
   var selectedCostRecipeIds = {}; // id -> true, only for currently-checked rows in the 레시피 tab's list
   var lastVisibleCostRecipes = []; // the owned/filtered recipe list from the most recent renderCostRecipesList() call
   var costCalcBodyEl = document.getElementById('costCalcBody');
+  var costStaleHintEl = document.getElementById('costStaleHint');
+  var reloadCostSnapshotBtn = document.getElementById('reloadCostSnapshotBtn');
   var costCostPerGramHintEl = document.getElementById('costCostPerGramHint');
   var costUnpricedHintEl = document.getElementById('costUnpricedHint');
   var costIngredientsListEl = document.getElementById('costIngredientsList');
@@ -1684,6 +1750,11 @@
   // unpriced state back into the list the moment it changes, not just into costCalcBody.
   var activeCostRowSummaryEl = null;
   var activeCostRowWarnIconEl = null;
+  var openRecipeCategoriesBtn = document.getElementById('openRecipeCategoriesBtn');
+  var recipeCategoriesPageEl = document.getElementById('recipeCategoriesPage');
+  var closeRecipeCategoriesBtn = document.getElementById('closeRecipeCategoriesBtn');
+  var recipeCategorySearchInput = document.getElementById('recipeCategorySearchInput');
+  var recipeCategoriesListEl = document.getElementById('recipeCategoriesList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
@@ -1698,6 +1769,8 @@
   var linkUrlTextEl = document.getElementById('linkUrlText');
   var copyLinkBtn = document.getElementById('copyLinkBtn');
   var sharedBannerEl = document.getElementById('sharedBanner');
+  var categorySharedBannerEl = document.getElementById('categorySharedBanner');
+  var categorySharedListEl = document.getElementById('categorySharedList');
   var subTextEl = document.getElementById('subText');
 
   var selectedRecipeId = null; // id of the recipe currently loaded via the search box
@@ -1734,6 +1807,7 @@
     return {
       recipe_name: recipeNameInput.value || '이름 없는 레시피',
       recipe_type: state.type,
+      category: (recipeCategoryInput.value || '').trim(),
       mode: state.mode,
       base_flour: state.baseFlour,
       multiplier: state.multiplier,
@@ -1741,7 +1815,11 @@
       portions: state.portions,
       flours: state.flours,
       ingredients: state.ingredients,
-      notes: notesInput.value || ''
+      notes: notesInput.value || '',
+      // Explicit, not a DB trigger — recipes has no updated_at trigger, so this is the only
+      // thing that keeps it moving. 원가 계산's snapshot staleness check (cost_snapshot_taken_at
+      // vs this) depends on it actually changing on every real save.
+      updated_at: new Date().toISOString()
     };
   }
 
@@ -1750,6 +1828,7 @@
   // system starts fresh with its own schema, no recipe.json migration.
   function applyRecipeRowToState(row){
     recipeNameInput.value = row.recipe_name || '';
+    recipeCategoryInput.value = row.category || '';
     notesInput.value = row.notes || '';
     state.type = (row.recipe_type === 'confection' || row.recipe_type === 'other') ? row.recipe_type : 'bread';
     state.mode = row.mode === 'B' ? 'B' : 'A';
@@ -3135,6 +3214,147 @@
     showToast('레시피를 불러왔어요');
   }
 
+  function categoryShareUrl(token){
+    return location.origin + location.pathname + '?category_share=' + token;
+  }
+
+  var myCategoryShares = []; // rows from category_shares: { owner_id, category, share_token }
+  function loadMyCategoryShares(){
+    return supabase.from('category_shares').select('*').then(function(res){
+      if (res.error){ alert('카테고리 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myCategoryShares = res.data || [];
+    });
+  }
+
+  // "카테고리별 보기" — 브라우즈 + 카테고리 단위 공유 전용 화면(카테고리 수정은 메인 화면의
+  // #recipeCategory에서). 이름/카테고리 자유 검색 후 recipe.category(빈 문자열은 "미분류"로
+  // 표시, 실제 그룹 키는 빈 문자열 그대로 유지 — 공유 RPC와 myCategoryShares 매칭에 원본
+  // 값이 필요) 기준으로 묶어서 카테고리 헤더(이름+개수+공유) + 레시피 목록을 그린다. 레시피
+  // 행 클릭은 "내 레시피" 검색창에서 고를 때와 완전히 같은 동작(applyRecipeRowToState() +
+  // renderSelectedRecipe()) — 새 로직 아님, 재사용.
+  function renderRecipeCategoriesList(query){
+    recipeCategoriesListEl.innerHTML = '';
+    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    var q = (query || '').trim().toLowerCase();
+    var filtered = owned.filter(function(r){
+      return !q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1 || (r.category || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (filtered.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = owned.length === 0 ? '아직 등록된 레시피가 없어요.' : '검색 결과가 없어요';
+      recipeCategoriesListEl.appendChild(empty);
+      return;
+    }
+    var groups = {}; // raw category (빈 문자열 = 미분류) -> recipes[]
+    var order = [];
+    filtered.forEach(function(r){
+      var raw = (r.category || '').trim();
+      if (!(raw in groups)){ groups[raw] = []; order.push(raw); }
+      groups[raw].push(r);
+    });
+    order.sort(function(a, b){
+      if (a === '') return 1;
+      if (b === '') return -1;
+      return a.localeCompare(b, 'ko');
+    });
+    order.forEach(function(rawCat){
+      var recipesInGroup = groups[rawCat];
+      var displayName = rawCat || '미분류';
+      var groupEl = document.createElement('div');
+      groupEl.className = 'category-group';
+      groupEl.innerHTML =
+        '<div class="category-group-header">' +
+          '<span class="category-group-name"></span>' +
+          '<span class="category-group-count"></span>' +
+          '<button type="button" class="icon-btn category-share-btn" aria-label="카테고리 공유">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<circle cx="18" cy="5" r="3"></circle>' +
+              '<circle cx="6" cy="12" r="3"></circle>' +
+              '<circle cx="18" cy="19" r="3"></circle>' +
+              '<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>' +
+              '<line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>' +
+            '</svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="share-panel category-share-panel" style="display:none;">' +
+          '<div class="field-row">' +
+            '<span class="field-label">링크 공유</span>' +
+            '<button type="button" class="io-btn category-toggle-link-btn">링크 켜기</button>' +
+          '</div>' +
+          '<div class="link-row category-link-row" style="display:none;">' +
+            '<p class="hint link-url category-link-url"></p>' +
+            '<button type="button" class="io-btn category-copy-link-btn">복사</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="category-recipe-list"></div>';
+      recipeCategoriesListEl.appendChild(groupEl);
+
+      var nameEl = groupEl.querySelector('.category-group-name');
+      var countEl = groupEl.querySelector('.category-group-count');
+      var shareBtn = groupEl.querySelector('.category-share-btn');
+      var sharePanelEl = groupEl.querySelector('.category-share-panel');
+      var toggleLinkBtnEl = groupEl.querySelector('.category-toggle-link-btn');
+      var categoryLinkRowEl = groupEl.querySelector('.category-link-row');
+      var linkUrlEl = groupEl.querySelector('.category-link-url');
+      var copyLinkBtnEl = groupEl.querySelector('.category-copy-link-btn');
+      var recipeListEl = groupEl.querySelector('.category-recipe-list');
+
+      nameEl.textContent = displayName;
+      countEl.textContent = recipesInGroup.length + '개';
+
+      function refreshCategoryShareUI(){
+        var share = myCategoryShares.find(function(cs){ return cs.category === rawCat; });
+        if (share){
+          toggleLinkBtnEl.textContent = '링크 끄기';
+          linkUrlEl.textContent = categoryShareUrl(share.share_token);
+          categoryLinkRowEl.style.display = 'flex';
+        } else {
+          toggleLinkBtnEl.textContent = '링크 켜기';
+          categoryLinkRowEl.style.display = 'none';
+        }
+      }
+      refreshCategoryShareUI();
+
+      shareBtn.addEventListener('click', function(){
+        sharePanelEl.style.display = sharePanelEl.style.display === 'none' ? 'block' : 'none';
+      });
+      toggleLinkBtnEl.addEventListener('click', function(){
+        var enable = !myCategoryShares.some(function(cs){ return cs.category === rawCat; });
+        supabase.rpc('set_category_share_token', { p_category: rawCat, p_enable: enable }).then(function(res){
+          if (res.error){ alert('카테고리 공유 설정 실패: ' + res.error.message); return; }
+          myCategoryShares = myCategoryShares.filter(function(cs){ return cs.category !== rawCat; });
+          if (enable && res.data){
+            myCategoryShares.push({ owner_id: currentUser.id, category: rawCat, share_token: res.data });
+            copyToClipboard(categoryShareUrl(res.data));
+            showToast('공유 링크를 복사했어요');
+          } else {
+            showToast('공유 링크를 껐어요');
+          }
+          refreshCategoryShareUI();
+        });
+      });
+      copyLinkBtnEl.addEventListener('click', function(){
+        copyToClipboard(linkUrlEl.textContent);
+        showToast('공유 링크를 복사했어요');
+      });
+
+      recipesInGroup.forEach(function(r){
+        var recipeBtn = document.createElement('button');
+        recipeBtn.type = 'button';
+        recipeBtn.className = 'category-recipe-row';
+        recipeBtn.textContent = r.recipe_name || '이름 없는 레시피';
+        recipeBtn.addEventListener('click', function(){
+          applyRecipeRowToState(r);
+          renderSelectedRecipe(r);
+          closeRecipeCategoriesModal();
+          showToast('레시피를 불러왔어요');
+        });
+        recipeListEl.appendChild(recipeBtn);
+      });
+    });
+  }
+
   // "Opening" the dropdown (via the toggle button, or by focusing the search box) always
   // starts from the FULL recipe list, regardless of whatever name is currently sitting in
   // the box (e.g. right after loading a recipe) — only actually typing new characters
@@ -3232,6 +3452,7 @@
   function newRecipe(type){
     state.type = type || 'bread';
     recipeNameInput.value = '새 레시피';
+    recipeCategoryInput.value = '';
     notesInput.value = '';
     state.mode = 'A';
     state.baseFlour = 0;
@@ -3357,6 +3578,20 @@
     if (e.key === 'Escape' && ingredientManagerPageEl.style.display !== 'none') closeIngredientManagerModal();
   });
 
+  function openRecipeCategoriesModal(){
+    recipeCategorySearchInput.value = ''; // don't carry over a filter from the last time this was open
+    loadMyCategoryShares().then(function(){ renderRecipeCategoriesList(); });
+    showSubpage(recipeCategoriesPageEl);
+    closeRecipeCategoriesBtn.focus();
+  }
+  function closeRecipeCategoriesModal(){
+    hideSubpage(recipeCategoriesPageEl);
+  }
+  closeRecipeCategoriesBtn.addEventListener('click', closeRecipeCategoriesModal);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && recipeCategoriesPageEl.style.display !== 'none') closeRecipeCategoriesModal();
+  });
+
   // Switches between the two tabs sharing one "원가 계산" subpage. Neither tab's own list/
   // detail DOM is torn down on switch-away — just hidden — so an expanded recipe row (and
   // wherever costCalcBody currently sits) survives flipping to 조합 제품 and back. The
@@ -3381,6 +3616,7 @@
   function openCostCalcModal(){
     costRecipeSearchInput.value = ''; // don't carry over a filter from the last time this was open
     costModalRecipe = null;
+    costModalSourceRecipe = null;
     activeCostRowSummaryEl = null;
     activeCostRowWarnIconEl = null;
     costCalcBodyEl.style.display = 'none';
@@ -3473,15 +3709,23 @@
       });
 
       nameLabelEl.textContent = r.recipe_name || '이름 없는 레시피';
-      var recipeLike = {
-        type: (r.recipe_type === 'confection' || r.recipe_type === 'other') ? r.recipe_type : 'bread',
-        flours: Array.isArray(r.flours) ? r.flours : [],
-        ingredients: Array.isArray(r.ingredients) ? r.ingredients : []
-      };
-      var cost = computeRecipeCostPerGramFor(recipeLike);
-      summaryEl.textContent = 'g당 원가 ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g' +
-        (cost.hasUnpriced ? ' · 단가 없음' : '');
-      warnIconEl.style.display = cost.hasUnpriced ? 'block' : 'none';
+      // 원가 계산은 이제 cost_snapshot_*(독립 사본)만 본다 — 한 번도 안 열어본 레시피는
+      // 아직 스냅샷이 없으니 원가를 계산할 데이터 자체가 없다는 걸 그대로 보여준다.
+      if (!r.cost_snapshot_taken_at){
+        summaryEl.textContent = '아직 불러오지 않음 — 눌러서 불러오기';
+        warnIconEl.style.display = 'none';
+      } else {
+        var recipeLike = {
+          type: (r.recipe_type === 'confection' || r.recipe_type === 'other') ? r.recipe_type : 'bread',
+          flours: Array.isArray(r.cost_snapshot_flours) ? r.cost_snapshot_flours : [],
+          ingredients: Array.isArray(r.cost_snapshot_ingredients) ? r.cost_snapshot_ingredients : []
+        };
+        var cost = computeRecipeCostPerGramFor(recipeLike);
+        var isStale = new Date(r.updated_at) > new Date(r.cost_snapshot_taken_at);
+        summaryEl.textContent = 'g당 원가 ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g' +
+          (cost.hasUnpriced ? ' · 단가 없음' : '') + (isStale ? ' · 원본 수정됨' : '');
+        warnIconEl.style.display = cost.hasUnpriced ? 'block' : 'none';
+      }
 
       toggleBtn.addEventListener('click', function(){
         var isThisOpen = row.hasAttribute('data-expanded');
@@ -3533,26 +3777,134 @@
     });
   });
 
-  // Loads an independent working copy of the picked recipe's flours/ingredients — this never
-  // touches the main calculator's `state`, so linking ingredients here is safe regardless of
-  // whatever recipe (if any) is currently open in the editor behind this modal.
-  // migrateIngredientRow() (the same exact-name auto-match applyRecipeRowToState() runs when
-  // loading a recipe into the main editor) runs here too — otherwise a recipe that's only
-  // ever been opened through this modal (never through the main editor) would show every
-  // ingredient as unlinked even when a same-named ingredient already exists in myIngredients.
+  // Carries an existing ingredientId over onto a same-named row that doesn't have one yet —
+  // used only when refreshing the cost snapshot from a since-modified source recipe, so
+  // "다시 불러오기" doesn't wipe out links whose ingredient didn't actually change, just
+  // because the recipe's ratios did. Matching is by normalizeForMatch() (same helper the
+  // ingredient-linker's auto-match uses), not position, since rows can get reordered/added/
+  // removed between snapshots.
+  function mergeSnapshotIngredientIds(newRows, oldRows){
+    newRows.forEach(function(row){
+      if (row.ingredientId) return;
+      var norm = normalizeForMatch(row.name);
+      var match = oldRows.find(function(old){ return old.ingredientId && normalizeForMatch(old.name) === norm; });
+      if (match) row.ingredientId = match.ingredientId;
+    });
+    return newRows;
+  }
+
+  // Writes the current cost snapshot (flours/ingredients + a fresh cost_snapshot_taken_at)
+  // back to this recipe's row — used both for the very first snapshot a recipe ever gets and
+  // for an explicit "다시 불러오기" refresh. Deliberately separate from saveCostRecipeLinks()
+  // below, which only touches the snapshot's *content* (a link change) without moving
+  // cost_snapshot_taken_at — only an actual re-sync from the live recipe should reset "when
+  // was this last taken" (see cost_snapshot_taken_at's own comment in schema.sql for why).
+  function persistCostSnapshot(recipeId, flours, ingredients){
+    var takenAt = new Date().toISOString();
+    return supabase.from('recipes').update({
+      cost_snapshot_flours: flours,
+      cost_snapshot_ingredients: ingredients,
+      cost_snapshot_taken_at: takenAt
+    }).eq('id', recipeId).select().then(function(res){
+      if (res.error){ alert('원가 계산용 사본 저장 실패: ' + res.error.message); return; }
+      if (!res.data || res.data.length === 0){
+        alert('원가 계산용 사본이 저장되지 않았어요 (권한 문제일 수 있어요). 다시 시도해주세요.');
+        return;
+      }
+      var cached = myRecipes.find(function(r){ return r.id === recipeId; });
+      if (cached){
+        cached.cost_snapshot_flours = res.data[0].cost_snapshot_flours;
+        cached.cost_snapshot_ingredients = res.data[0].cost_snapshot_ingredients;
+        cached.cost_snapshot_taken_at = res.data[0].cost_snapshot_taken_at;
+      }
+    });
+  }
+
+  // Shows/hides the "원본 레시피가 수정됐어요" banner inside the open recipe's detail —
+  // called whenever costModalRecipe's source recipe (costModalSourceRecipe) or its
+  // updated_at/cost_snapshot_taken_at might have just changed.
+  function updateCostStaleBanner(recipe){
+    var isStale = !!(recipe.updated_at && recipe.cost_snapshot_taken_at &&
+      new Date(recipe.updated_at) > new Date(recipe.cost_snapshot_taken_at));
+    costStaleHintEl.style.display = isStale ? 'block' : 'none';
+  }
+
+  // Loads an **independent** working copy of the picked recipe into costModalRecipe — 원가
+  // 계산 reads/writes only cost_snapshot_flours/cost_snapshot_ingredients from here on, never
+  // the live flours/ingredients the main calculator edits, so adjusting a recipe's ratios
+  // there never silently changes what's already been cost-linked here (2026-07-25 rework, by
+  // request — previously this always mirrored the live recipe in real time).
+  // - First time this recipe is ever opened here (no cost_snapshot_taken_at yet): take an
+  //   initial snapshot straight from the live flours/ingredients (still running
+  //   migrateIngredientRow()'s exact-name auto-match, same as before) and persist it — no
+  //   separate "불러오기" click needed, per explicit request ("처음 열 때 자동 스냅샷").
+  // - Otherwise: read the *existing* snapshot as-is (even if stale) and just flag staleness
+  //   via updateCostStaleBanner() — reloadCostSnapshot() (wired to the banner's button) is
+  //   the only thing that re-syncs from the live recipe after that point.
+  var costModalSourceRecipe = null; // the raw myRecipes row costModalRecipe was loaded from — needed by reloadCostSnapshot()/the stale banner
   function openCostCalcRecipe(recipe){
+    costModalSourceRecipe = recipe;
+    var hasSnapshot = !!recipe.cost_snapshot_taken_at;
+    var flours, ingredients;
+    if (hasSnapshot){
+      flours = (Array.isArray(recipe.cost_snapshot_flours) ? recipe.cost_snapshot_flours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); });
+      ingredients = (Array.isArray(recipe.cost_snapshot_ingredients) ? recipe.cost_snapshot_ingredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); });
+    } else {
+      flours = (Array.isArray(recipe.flours) ? recipe.flours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); });
+      ingredients = (Array.isArray(recipe.ingredients) ? recipe.ingredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); });
+    }
     costModalRecipe = {
       id: recipe.id,
       type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
-      flours: (Array.isArray(recipe.flours) ? recipe.flours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); }),
-      ingredients: (Array.isArray(recipe.ingredients) ? recipe.ingredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); })
+      flours: flours,
+      ingredients: ingredients
     };
+    if (!hasSnapshot){
+      recipe.cost_snapshot_flours = flours;
+      recipe.cost_snapshot_ingredients = ingredients;
+      recipe.cost_snapshot_taken_at = new Date().toISOString();
+      persistCostSnapshot(recipe.id, flours, ingredients);
+    }
+    updateCostStaleBanner(recipe);
     renderCostIngredientsList();
     loadProducts(recipe.id);
   }
 
-  // Persists just the ingredient-DB links back to this recipe's row — the recipe's own
-  // `name`/`pct`/`weight` fields are carried through untouched (this modal never edits them).
+  // "다시 불러오기": re-fetches the recipe fresh (not the possibly-stale myRecipes cache —
+  // this action's whole point is syncing with the true current source), carries over
+  // existing ingredient links by name via mergeSnapshotIngredientIds(), and persists the
+  // refreshed snapshot.
+  function reloadCostSnapshot(){
+    if (!costModalSourceRecipe || !costModalRecipe) return;
+    var recipe = costModalSourceRecipe;
+    var oldFlours = costModalRecipe.flours;
+    var oldIngredients = costModalRecipe.ingredients;
+    supabase.from('recipes').select('flours, ingredients, updated_at').eq('id', recipe.id).single().then(function(res){
+      if (res.error || !res.data){ alert('레시피를 다시 불러오지 못했어요: ' + (res.error ? res.error.message : '')); return; }
+      var freshFlours = mergeSnapshotIngredientIds(
+        (Array.isArray(res.data.flours) ? res.data.flours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); }),
+        oldFlours
+      );
+      var freshIngredients = mergeSnapshotIngredientIds(
+        (Array.isArray(res.data.ingredients) ? res.data.ingredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); }),
+        oldIngredients
+      );
+      costModalRecipe.flours = freshFlours;
+      costModalRecipe.ingredients = freshIngredients;
+      recipe.updated_at = res.data.updated_at;
+      persistCostSnapshot(recipe.id, freshFlours, freshIngredients).then(function(){
+        updateCostStaleBanner(recipe);
+        renderCostIngredientsList();
+        showToast('레시피를 다시 불러왔어요');
+      });
+    });
+  }
+
+  // Persists just the ingredient-DB links back to this recipe's cost snapshot — the recipe's
+  // own `name`/`pct`/`weight` fields (and the live flours/ingredients columns entirely) are
+  // untouched (this modal never edits them, and never edits the live recipe at all anymore).
+  // Deliberately does NOT touch cost_snapshot_taken_at — only persistCostSnapshot() (initial
+  // load / reloadCostSnapshot()) should move that.
   //
   // Two bugs fixed here (2026-07-25) after a report of links (소금/이스트) silently
   // disappearing on reload despite no error ever showing:
@@ -3574,8 +3926,8 @@
       // Re-read costModalRecipe.flours/.ingredients now (not captured at call time) so a
       // queued-but-not-yet-sent save still reflects the latest links once its turn comes.
       return supabase.from('recipes').update({
-        flours: costModalRecipe.flours,
-        ingredients: costModalRecipe.ingredients
+        cost_snapshot_flours: costModalRecipe.flours,
+        cost_snapshot_ingredients: costModalRecipe.ingredients
       }).eq('id', recipeId).select().then(function(res){
         if (res.error){ alert('재료 연결 저장 실패: ' + res.error.message); return; }
         if (!res.data || res.data.length === 0){
@@ -3584,7 +3936,10 @@
         }
         // Keep myRecipes in sync so re-opening this recipe (here or in the main editor) reflects the new links.
         var cached = myRecipes.find(function(r){ return r.id === recipeId; });
-        if (cached){ cached.flours = res.data[0].flours; cached.ingredients = res.data[0].ingredients; }
+        if (cached){
+          cached.cost_snapshot_flours = res.data[0].cost_snapshot_flours;
+          cached.cost_snapshot_ingredients = res.data[0].cost_snapshot_ingredients;
+        }
       });
     });
   }
@@ -3670,9 +4025,11 @@
       libraryCardEl.style.display = 'none';
       closeIngredientManagerModal();
       closeCostCalcModal();
+      closeRecipeCategoriesModal();
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
+      myCategoryShares = [];
       recipeSearchInput.value = '';
       clearSelectedRecipe();
       markClean();
@@ -3701,6 +4058,45 @@
     });
   }
 
+  // Landing for a `?category_share=<token>` link — unlike ?share=, this points at
+  // potentially several recipes, so it can't just pre-fill the calculator with "the one"
+  // recipe. Shows a plain clickable list instead; picking one loads it into the calculator
+  // the same way applyRecipeRowToState() always does. Real-time (get_recipes_by_category_share_token
+  // re-queries live), so a recipe added to this category after the link was shared still
+  // shows up here on a fresh visit/reload — no re-sharing needed.
+  function initCategorySharedView(){
+    subTextEl.style.display = 'none';
+    categorySharedBannerEl.style.display = 'block';
+    categorySharedListEl.style.display = 'block';
+
+    if (!supabase){
+      categorySharedBannerEl.textContent = 'Supabase 설정이 안 돼 있어서 공유 링크를 열 수 없어요.';
+      return;
+    }
+    supabase.rpc('get_recipes_by_category_share_token', { p_token: categorySharedToken }).then(function(res){
+      if (res.error || !res.data){
+        categorySharedBannerEl.textContent = '공유 링크를 찾을 수 없어요 (잘못됐거나 공유가 꺼졌을 수 있어요).';
+        return;
+      }
+      if (res.data.length === 0){
+        categorySharedBannerEl.textContent = '이 카테고리에는 아직 레시피가 없어요.';
+        return;
+      }
+      categorySharedListEl.innerHTML = '';
+      res.data.forEach(function(r){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'category-recipe-row';
+        btn.textContent = r.recipe_name || '이름 없는 레시피';
+        btn.addEventListener('click', function(){
+          applyRecipeRowToState(r);
+          showToast('레시피를 불러왔어요');
+        });
+        categorySharedListEl.appendChild(btn);
+      });
+    });
+  }
+
   function initAccountMode(){
     accountChipBtn.addEventListener('click', function(){
       closeNewRecipeMenu();
@@ -3714,6 +4110,13 @@
     openCostCalcBtn.addEventListener('click', function(){
       closeAccountMenu();
       openCostCalcModal();
+    });
+    openRecipeCategoriesBtn.addEventListener('click', function(){
+      closeAccountMenu();
+      openRecipeCategoriesModal();
+    });
+    recipeCategorySearchInput.addEventListener('input', function(){
+      renderRecipeCategoriesList(recipeCategorySearchInput.value);
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
       if (!currentUser) return;
@@ -3866,6 +4269,10 @@
         showToast(ids.length + '개 조합 제품을 삭제했어요');
       });
     });
+    reloadCostSnapshotBtn.addEventListener('click', function(){
+      if (!currentUser) return;
+      reloadCostSnapshot();
+    });
     document.getElementById('addProductBtn').addEventListener('click', function(){
       if (!currentUser || !costModalRecipe) return;
       // Same batch, different shapes (e.g. PLF dough cut into both croissants and pains au
@@ -3897,6 +4304,7 @@
       markDirty();
     });
     notesInput.addEventListener('input', markDirty);
+    recipeCategoryInput.addEventListener('input', markDirty);
 
     // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
     // the OAuth round trip completes — which can land back on the site root instead of
@@ -3961,6 +4369,7 @@
 
   initAccountMode();
   if (sharedViewToken) initSharedView();
+  if (categorySharedToken) initCategorySharedView();
 
   render();
 })();
