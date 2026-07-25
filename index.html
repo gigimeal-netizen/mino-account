@@ -2128,6 +2128,11 @@
   var deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
   var selectedSharePanelEl = document.getElementById('selectedSharePanel');
   var myProducts = []; // products rows for whichever recipe is currently loaded in the cost-calc modal
+  // 2026-07-25: recipe_id -> products[] 전체 캐시 — 원가 계산의 레시피 목록을 펼치기 전에도
+  // "바게트 1개당 N원" 같은 제품 원가를 collapsed 요약에 보여주기 위해, 목록을 열 때 한 번에
+  // 전부 불러온다(레시피별로 따로 쿼리하면 N+1). myProducts(펼친 레시피 하나만)와는 별개 —
+  // 제품을 추가/삭제할 때마다 이 캐시도 같이 갱신해줘야 한다(loadProducts/addProductBtn/삭제 핸들러).
+  var myAllProductsByRecipe = {};
   var toggleLinkBtn = document.getElementById('toggleLinkBtn');
   var linkRowEl = document.getElementById('linkRow');
   var linkUrlTextEl = document.getElementById('linkUrlText');
@@ -2911,10 +2916,37 @@
     refreshBulkToolbar(compositeSelectAllCheckbox, deleteSelectedCompositeBtn, selectedCompositeIds, lastVisibleCompositeProducts);
   }
 
+  // 원가 계산 레시피 탭을 열 때 한 번 전부 불러온다 — RLS가 owner 소유 제품으로만 스코프해주니
+  // 별도 필터 없이 select('*')로 충분. recipe_id별로 묶어서 캐시.
+  function loadAllProductsForCostList(){
+    return supabase.from('products').select('*').then(function(res){
+      if (res.error){ alert('제품 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myAllProductsByRecipe = {};
+      (res.data || []).forEach(function(pd){
+        if (!myAllProductsByRecipe[pd.recipe_id]) myAllProductsByRecipe[pd.recipe_id] = [];
+        myAllProductsByRecipe[pd.recipe_id].push(pd);
+      });
+    });
+  }
+
+  // 레시피 목록의 collapsed 요약 한 줄 — g당 원가 + (있으면) 등록된 제품별 1개당 원가까지.
+  // renderCostRecipesList()의 초기 렌더와 refreshProductCosts()의 실시간 반영이 공유한다.
+  function buildCostRowSummaryText(cost, isStale, products){
+    var productLines = (products || []).map(function(pd){
+      var eff = effectiveCostPerGram(cost.costPerGram, pd.loss_rate_pct);
+      var productCost = Math.round(eff * (parseFloat(pd.portion_weight) || 0));
+      return (pd.name || '제품') + ' 1개당 ' + productCost + '원';
+    });
+    return 'g당 원가 ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g' +
+      (cost.hasUnpriced ? ' · 단가 없음' : '') + (isStale ? ' · 원본 수정됨' : '') +
+      (productLines.length ? ' · ' + productLines.join(' · ') : '');
+  }
+
   function loadProducts(recipeId){
     supabase.from('products').select('*').eq('recipe_id', recipeId).order('created_at').then(function(res){
       if (res.error){ alert('제품 목록을 불러오지 못했어요: ' + res.error.message); return; }
       myProducts = res.data || [];
+      myAllProductsByRecipe[recipeId] = myProducts;
       renderProductsList();
     });
   }
@@ -2943,8 +2975,7 @@
     // Mirror the same g당원가/미가격 state back into this recipe's row in the list, so fixing
     // an ingredient link updates what's visible without opening the row immediately, too.
     if (activeCostRowSummaryEl){
-      activeCostRowSummaryEl.textContent = 'g당 원가 ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g' +
-        (cost.hasUnpriced ? ' · 단가 없음' : '');
+      activeCostRowSummaryEl.textContent = buildCostRowSummaryText(cost, false, myProducts);
     }
     if (activeCostRowWarnIconEl){
       activeCostRowWarnIconEl.style.display = cost.hasUnpriced ? 'block' : 'none';
@@ -3077,7 +3108,9 @@
         supabase.from('products').delete().eq('id', pd.id).then(function(res){
           if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
           myProducts = myProducts.filter(function(other){ return other.id !== pd.id; });
+          if (costModalRecipe) myAllProductsByRecipe[costModalRecipe.id] = myProducts;
           renderProductsList();
+          refreshProductCosts();
           showToast('제품을 삭제했어요');
         });
       });
@@ -4284,7 +4317,7 @@
     activeCostRowWarnIconEl = null;
     costCalcBodyEl.style.display = 'none';
     switchCostTab('recipe'); // always open back on the 레시피 tab, same as each screen resetting itself before this merge
-    renderCostRecipesList();
+    loadAllProductsForCostList().then(function(){ renderCostRecipesList(); });
     showSubpage(costCalcPageEl);
     closeCostCalcBtn.focus();
   }
@@ -4966,8 +4999,7 @@
         };
         var cost = computeRecipeCostPerGramFor(recipeLike);
         var isStale = new Date(r.updated_at) > new Date(r.cost_snapshot_taken_at);
-        summaryEl.textContent = 'g당 원가 ' + (Math.round(cost.costPerGram * 100) / 100) + '원/g' +
-          (cost.hasUnpriced ? ' · 단가 없음' : '') + (isStale ? ' · 원본 수정됨' : '');
+        summaryEl.textContent = buildCostRowSummaryText(cost, isStale, myAllProductsByRecipe[r.id]);
         warnIconEl.style.display = cost.hasUnpriced ? 'block' : 'none';
       }
 
@@ -5577,7 +5609,9 @@
       }).select().single().then(function(res){
         if (res.error){ alert('제품 추가 실패: ' + res.error.message); return; }
         myProducts.push(res.data);
+        myAllProductsByRecipe[costModalRecipe.id] = myProducts;
         renderProductsList();
+        refreshProductCosts();
       });
     });
     document.addEventListener('click', function(e){
