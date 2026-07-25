@@ -201,8 +201,10 @@
      price + computed cost on a wrapping second line — reuses .portion-row's flex-wrap
      rhythm since this is an occasional settings screen, not the tight scale-reading grid
      the flour/ingredient rows need. */
-  .ingredient-mgr-row{ padding: 12px 0; border-bottom: 1px solid var(--border); }
-  .ingredient-mgr-row:last-of-type{ border-bottom: none; }
+  .ing-mgr-inactive-badge{
+    flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); background: var(--bg-elevated);
+    border-radius: 999px; padding: 2px 8px;
+  }
   .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
   .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
@@ -1754,52 +1756,99 @@
     }
     visible.forEach(function(ig){
       var row = document.createElement('div');
-      row.className = 'ingredient-mgr-row';
+      row.className = 'acc-row';
       var options = ['g','kg','ml','l','ea'].map(function(u){
         return '<option value="' + u + '"' + (ig.purchase_unit_type === u ? ' selected' : '') + '>' + unitLabels[u] + '</option>';
       }).join('');
       row.innerHTML =
-        '<div class="ingredient-mgr-top">' +
-          '<input class="ing-mgr-name text-input">' +
-          '<button type="button" class="io-btn ing-mgr-toggle"></button>' +
-          (ig.is_active === false
-            ? '<button type="button" class="io-btn danger ing-mgr-delete">완전 삭제</button>'
-            : '') +
-        '</div>' +
-        '<input class="ing-mgr-category" placeholder="카테고리 (예: 유제품)">' +
-        '<div class="ingredient-mgr-cost">' +
-          '<input class="ing-mgr-amount" type="number" inputmode="decimal" step="0.1">' +
-          '<select class="ing-mgr-unit">' + options + '</select>' +
-          '<input class="ing-mgr-price" type="number" inputmode="decimal" step="10">' +
-          '<span class="unit">원</span>' +
-          '<span class="ing-mgr-per-gram"></span>' +
+        '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+          '<div class="acc-row-toggle-top">' +
+            '<span class="acc-row-name-label"></span>' +
+            '<span class="ing-mgr-inactive-badge" style="display:none;">사용중지</span>' +
+            '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="단가 미입력">' +
+              '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
+              '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+              '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+            '</svg>' +
+            '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<polyline points="6 9 12 15 18 9"></polyline>' +
+            '</svg>' +
+          '</div>' +
+          '<div class="acc-row-toggle-summary"></div>' +
+        '</button>' +
+        '<div class="acc-row-detail" style="display:none;">' +
+          '<div class="ingredient-mgr-top">' +
+            '<input class="ing-mgr-name text-input">' +
+            '<button type="button" class="io-btn ing-mgr-toggle"></button>' +
+            (ig.is_active === false
+              ? '<button type="button" class="io-btn danger ing-mgr-delete">완전 삭제</button>'
+              : '') +
+          '</div>' +
+          '<input class="ing-mgr-category" placeholder="카테고리 (예: 유제품)">' +
+          '<div class="ingredient-mgr-cost">' +
+            '<input class="ing-mgr-amount" type="number" inputmode="decimal" step="0.1">' +
+            '<select class="ing-mgr-unit">' + options + '</select>' +
+            '<input class="ing-mgr-price" type="number" inputmode="decimal" step="10">' +
+            '<span class="unit">원</span>' +
+            '<span class="ing-mgr-per-gram"></span>' +
+          '</div>' +
         '</div>';
       ingredientManagerListEl.appendChild(row);
 
+      var accToggleBtn = row.querySelector('.acc-row-toggle');
+      var nameLabelEl = row.querySelector('.acc-row-name-label');
+      var inactiveBadgeEl = row.querySelector('.ing-mgr-inactive-badge');
+      var warnIconEl = row.querySelector('.acc-row-warn-icon');
+      var summaryEl = row.querySelector('.acc-row-toggle-summary');
+      var detailEl = row.querySelector('.acc-row-detail');
       var nameEl = row.querySelector('.ing-mgr-name');
       var categoryEl = row.querySelector('.ing-mgr-category');
       var amountEl = row.querySelector('.ing-mgr-amount');
       var unitEl = row.querySelector('.ing-mgr-unit');
       var priceEl = row.querySelector('.ing-mgr-price');
       var perGramEl = row.querySelector('.ing-mgr-per-gram');
-      var toggleBtn = row.querySelector('.ing-mgr-toggle');
+      var statusToggleBtn = row.querySelector('.ing-mgr-toggle');
 
+      nameLabelEl.textContent = ig.name || '';
       nameEl.value = ig.name || '';
       categoryEl.value = ig.category || '';
       amountEl.value = ig.purchase_amount || 0;
       priceEl.value = ig.purchase_price || 0;
-      toggleBtn.textContent = ig.is_active === false ? '복원' : '사용중지';
-      toggleBtn.classList.toggle('danger', ig.is_active !== false);
+      statusToggleBtn.textContent = ig.is_active === false ? '복원' : '사용중지';
+      statusToggleBtn.classList.toggle('danger', ig.is_active !== false);
+      inactiveBadgeEl.style.display = ig.is_active === false ? 'inline-block' : 'none';
 
-      function refreshPerGram(){
+      // List-first, detail-on-click (accordion, same pattern as 조합 제품/레시피 원가 계산):
+      // name + a live 단가/g summary + a red warning icon (when unpriced, only for still-
+      // active ingredients — a deactivated one isn't expected to have a price kept current)
+      // are visible without opening the row.
+      function refreshSummary(){
+        var text, isUnpriced;
         if (unitEl.value === 'ea'){
-          perGramEl.textContent = '개당 ' + (parseFloat(priceEl.value) || 0) + '원 (무게 환산 안 됨)';
+          text = '개당 ' + (parseFloat(priceEl.value) || 0) + '원 (무게 환산 안 됨)';
+          isUnpriced = true; // 'ea' never converts to price_per_gram — same "미입력" treatment the top-of-page badge already gives it
         } else {
           var perGram = computePricePerGram(amountEl.value, unitEl.value, priceEl.value);
-          perGramEl.textContent = (Math.round(perGram * 100) / 100) + '원/g';
+          text = (Math.round(perGram * 100) / 100) + '원/g';
+          isUnpriced = !(perGram > 0);
         }
+        perGramEl.textContent = text;
+        summaryEl.textContent = text;
+        warnIconEl.style.display = (isUnpriced && ig.is_active !== false) ? 'block' : 'none';
       }
-      refreshPerGram();
+      refreshSummary();
+
+      accToggleBtn.addEventListener('click', function(){
+        var willOpen = detailEl.style.display === 'none';
+        ingredientManagerListEl.querySelectorAll('.acc-row-detail').forEach(function(d){ d.style.display = 'none'; });
+        ingredientManagerListEl.querySelectorAll('.acc-row').forEach(function(r){ r.removeAttribute('data-expanded'); });
+        ingredientManagerListEl.querySelectorAll('.acc-row-toggle').forEach(function(t){ t.setAttribute('aria-expanded', 'false'); });
+        if (willOpen){
+          detailEl.style.display = 'block';
+          row.setAttribute('data-expanded', 'true');
+          accToggleBtn.setAttribute('aria-expanded', 'true');
+        }
+      });
 
       function saveFields(fields){
         supabase.from('ingredients').update(fields).eq('id', ig.id).then(function(res){
@@ -1810,6 +1859,7 @@
       nameEl.addEventListener('blur', function(){
         var typed = nameEl.value.trim() || ig.name;
         nameEl.value = typed;
+        nameLabelEl.textContent = typed;
         if (typed !== ig.name) saveFields({ name: typed });
       });
       categoryEl.addEventListener('blur', function(){
@@ -1824,13 +1874,13 @@
           price_per_gram: computePricePerGram(amountEl.value, unitEl.value, priceEl.value)
         });
       }
-      amountEl.addEventListener('input', refreshPerGram);
-      priceEl.addEventListener('input', refreshPerGram);
+      amountEl.addEventListener('input', refreshSummary);
+      priceEl.addEventListener('input', refreshSummary);
       amountEl.addEventListener('blur', saveCost);
       priceEl.addEventListener('blur', saveCost);
-      unitEl.addEventListener('change', function(){ refreshPerGram(); saveCost(); });
+      unitEl.addEventListener('change', function(){ refreshSummary(); saveCost(); });
 
-      toggleBtn.addEventListener('click', function(){
+      statusToggleBtn.addEventListener('click', function(){
         var nextActive = ig.is_active === false; // currently inactive -> this restores it
         supabase.from('ingredients').update({ is_active: nextActive }).eq('id', ig.id).then(function(res){
           if (res.error){ alert('상태 변경 실패: ' + res.error.message); return; }
@@ -3121,15 +3171,17 @@
         myIngredients.push(res.data);
         ingredientManagerSearchInput.value = ''; // clear any filter — otherwise the new row could render invisible if it doesn't match
         renderIngredientManager();
-        // The list can get long enough that the newly-added row is off-screen below the
-        // "+ 재료 추가" button — scroll to it and focus its name field instead of leaving the
-        // user to hunt for it themselves.
-        var rows = ingredientManagerListEl.querySelectorAll('.ing-mgr-name');
-        var last = rows[rows.length - 1];
-        if (last){
-          last.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          last.focus();
-          last.select();
+        // Rows render collapsed now — expand the new one (via its own toggle, so the
+        // accordion-close-others logic runs the same as a real click) and focus its name
+        // field, rather than leaving the user to find and open it themselves.
+        var rows = ingredientManagerListEl.querySelectorAll('.acc-row');
+        var lastRow = rows[rows.length - 1];
+        if (lastRow){
+          var toggle = lastRow.querySelector('.acc-row-toggle');
+          if (toggle) toggle.click();
+          var nameInput = lastRow.querySelector('.ing-mgr-name');
+          lastRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (nameInput){ nameInput.focus(); nameInput.select(); }
         }
       });
     });
