@@ -237,6 +237,16 @@
     font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
     text-align: right; margin-top: 6px;
   }
+  .loss-calc-toggle{
+    flex: 0 0 auto; background: none; border: 1.5px dashed var(--border-strong);
+    border-radius: 8px; padding: 8px 10px; color: var(--ink-soft);
+    font-family: var(--font-display); font-size: 12.5px; font-weight: 700; cursor: pointer;
+  }
+  .loss-calc-toggle:hover{ border-color: var(--accent); color: var(--accent); }
+  .loss-calc-panel{ display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .loss-calc-dough, .loss-calc-formed{ flex: 1 1 100px; min-width: 0; }
+  .loss-calc-sep{ flex: 0 0 auto; color: var(--ink-soft); font-size: 12px; }
+  .loss-calc-result{ flex: 1 1 100%; text-align: right; font-size: 12.5px; color: var(--accent); font-weight: 700; }
 
 
   .pmpm{ display:flex; align-items:center; gap:8px; margin-top: 12px; }
@@ -760,8 +770,11 @@
   <div class="subpage-body">
     <p class="hint warn-hint" id="ingredientManagerUnpricedHint" style="display:none;"></p>
     <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
+    <!-- Pinned above the list (not below it) so adding a new ingredient never requires
+         scrolling past however long the list has grown — only finding the just-added row
+         afterward needs a scroll, which the click handler does automatically. -->
+    <button class="add-btn" id="addIngredientMasterBtn" style="margin-top:0;margin-bottom:14px;">+ 재료 추가</button>
     <div id="ingredientManagerList"></div>
-    <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
     <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
   </div>
 </div>
@@ -1840,12 +1853,19 @@
           '</button>' +
         '</div>' +
         '<div class="product-cost-inputs">' +
-          '<input class="product-weight" type="number" inputmode="decimal" placeholder="1개당(g)">' +
+          '<input class="product-weight" type="number" inputmode="decimal" placeholder="1개당">' +
           '<span class="unit">g</span>' +
           '<input class="product-price" type="number" inputmode="decimal" placeholder="판매가">' +
           '<span class="unit">원</span>' +
           '<input class="product-loss" type="number" inputmode="decimal" step="0.1" min="0" max="99" placeholder="로스율">' +
           '<span class="unit">%</span>' +
+          '<button type="button" class="loss-calc-toggle">계산</button>' +
+        '</div>' +
+        '<div class="loss-calc-panel" style="display:none;">' +
+          '<input class="loss-calc-dough" type="number" inputmode="decimal" placeholder="총 반죽(g)">' +
+          '<span class="loss-calc-sep">→</span>' +
+          '<input class="loss-calc-formed" type="number" inputmode="decimal" placeholder="성형 완료 총(g)">' +
+          '<span class="loss-calc-result"></span>' +
         '</div>' +
         '<div class="product-cost-result"></div>';
       costProductsListEl.appendChild(row);
@@ -1855,6 +1875,11 @@
       var priceEl = row.querySelector('.product-price');
       var lossEl = row.querySelector('.product-loss');
       var delBtn = row.querySelector('.product-del');
+      var lossCalcToggle = row.querySelector('.loss-calc-toggle');
+      var lossCalcPanel = row.querySelector('.loss-calc-panel');
+      var doughEl = row.querySelector('.loss-calc-dough');
+      var formedEl = row.querySelector('.loss-calc-formed');
+      var lossCalcResultEl = row.querySelector('.loss-calc-result');
 
       nameEl.value = pd.name || '';
       // Left blank (not "0") when unset so the placeholder ("1개당(g)" etc.) actually shows —
@@ -1888,6 +1913,31 @@
       weightEl.addEventListener('blur', saveWeightPrice);
       priceEl.addEventListener('blur', saveWeightPrice);
       lossEl.addEventListener('blur', saveWeightPrice);
+
+      // Small helper so 로스율 doesn't have to be hand-calculated first: type the batch's
+      // total dough weight and the total weight of the actually-shaped pieces, and it fills
+      // in the 로스율 field itself (same formula the user gave: (반죽-성형)÷반죽×100). The two
+      // raw numbers aren't persisted anywhere — only the resulting % is — so this is a
+      // one-time scratchpad, not a saved field; re-open it and retype if revisiting later.
+      lossCalcToggle.addEventListener('click', function(){
+        lossCalcPanel.style.display = lossCalcPanel.style.display === 'none' ? 'flex' : 'none';
+      });
+      function updateLossCalc(){
+        var dough = parseFloat(doughEl.value) || 0;
+        var formed = parseFloat(formedEl.value) || 0;
+        if (dough > 0 && formed >= 0 && formed <= dough){
+          var computed = Math.round((dough - formed) / dough * 1000) / 10;
+          lossCalcResultEl.textContent = '로스율 ' + computed + '%';
+          lossEl.value = computed;
+          refreshProductCosts();
+        } else {
+          lossCalcResultEl.textContent = '';
+        }
+      }
+      doughEl.addEventListener('input', updateLossCalc);
+      formedEl.addEventListener('input', updateLossCalc);
+      doughEl.addEventListener('blur', saveWeightPrice);
+      formedEl.addEventListener('blur', saveWeightPrice);
 
       delBtn.addEventListener('click', function(){
         if (!confirm('"' + (pd.name || '이 제품') + '"을 삭제할까요?')) return;
