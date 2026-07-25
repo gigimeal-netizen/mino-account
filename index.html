@@ -1911,6 +1911,13 @@
     updateDirtyUI();
   }
 
+  // 2026-07-25: 수정 중인데 다른 레시피로 이동하면(검색/공유받은 목록/태그별 보기/새 레시피 등)
+  // 저장 안 된 변경사항이 그냥 사라졌다 — 이동 직전에 한 번 확인한다. isDirty가 아니면 그냥 통과.
+  function confirmDiscardIfDirty(){
+    if (!isDirty) return true;
+    return confirm('저장하지 않은 변경사항이 있어요. 계속하면 사라집니다. 계속할까요?');
+  }
+
   function shareUrl(token){
     return location.origin + location.pathname + '?share=' + token;
   }
@@ -3407,6 +3414,7 @@
       btn.className = 'tag-recipe-row';
       btn.textContent = r.recipe_name || '이름 없는 레시피';
       btn.addEventListener('click', function(){
+        if (!confirmDiscardIfDirty()) return;
         applyRecipeRowToState(r);
         renderSelectedRecipe(r);
         recipeSearchInput.value = '';
@@ -3440,6 +3448,7 @@
   // 행을 클릭해도 항상 "이름이 같은 것 중 맨 처음 것"이 로드되는 문제가 있었다. 공유 기능으로
   // 남의 레시피 이름과 겹칠 일이 많아지면서 실제로 발생할 수 있는 문제가 됐다.
   function loadRecipeById(id){
+    if (!confirmDiscardIfDirty()) return;
     applyLoadedRecipe(myRecipes.find(function(r){ return r.id === id; }));
   }
 
@@ -3580,6 +3589,7 @@
         recipeBtn.className = 'tag-recipe-row';
         recipeBtn.textContent = r.recipe_name || '이름 없는 레시피';
         recipeBtn.addEventListener('click', function(){
+          if (!confirmDiscardIfDirty()) return;
           applyRecipeRowToState(r);
           renderSelectedRecipe(r);
           closeRecipeTagsModal();
@@ -3635,7 +3645,10 @@
   recipeSearchInput.addEventListener('focus', function(){ openRecipeDropdown(true); });
   recipeSearchInput.addEventListener('input', function(){
     openRecipeDropdown(false); // now the user is actively typing, so filter for real
-    loadRecipeByName(recipeSearchInput.value); // auto-loads on an exact typed match too
+    // 편집 중(isDirty)이면 타이핑 도중 자동 로드를 건너뛴다 — 글자 하나하나마다 "저장 안 한
+    // 변경사항이 있어요" 확인창이 뜨는 건 최악이라, 여기선 조용히 건너뛰고 드롭다운에서
+    // 직접 클릭하게 한다(그건 loadRecipeById()가 명시적으로 확인해준다).
+    if (!isDirty) loadRecipeByName(recipeSearchInput.value); // auto-loads on an exact typed match too
   });
   recipeDropdownToggleBtn.addEventListener('click', function(){
     if (recipeDropdownEl.style.display === 'none') { recipeSearchInput.focus(); openRecipeDropdown(true); }
@@ -3688,6 +3701,7 @@
   });
 
   function newRecipe(type){
+    if (!confirmDiscardIfDirty()) return;
     state.type = type || 'bread';
     recipeNameInput.value = '새 레시피';
     recipeTagsInput.value = '';
@@ -3753,7 +3767,66 @@
     return baseName + ' (' + i + ')';
   }
 
+  // 2026-07-25: 기존 레시피를 덮어쓰기 직전에, "무엇이 바뀌는지"를 사람이 읽을 수 있게 요약한다 —
+  // 그냥 "저장하시겠습니까?"만 물으면 매번 뜨는 성가심만 늘고 정작 실수(숫자를 잘못 늘렸거나
+  // 재료를 지운 채 저장하는 것)는 안 잡아준다. oldRow는 DB에 있는 그대로(snake_case), newPayload는
+  // serializeCurrentRecipe()의 결과라 필드 이름이 그대로 겹친다.
+  function diffIngredientRows(oldRows, newRows, label, lines){
+    oldRows = Array.isArray(oldRows) ? oldRows : [];
+    newRows = Array.isArray(newRows) ? newRows : [];
+    var oldByName = {};
+    oldRows.forEach(function(r){ oldByName[r.name] = r; });
+    var newByName = {};
+    newRows.forEach(function(r){ newByName[r.name] = r; });
+    oldRows.forEach(function(r){
+      if (!(r.name in newByName)) lines.push(label + ' 삭제됨: ' + r.name);
+    });
+    newRows.forEach(function(r){
+      if (!(r.name in oldByName)){ lines.push(label + ' 추가됨: ' + r.name); return; }
+      var o = oldByName[r.name];
+      if ('pct' in r || 'pct' in o){
+        var op = roundPct(o.pct), np = roundPct(r.pct);
+        if (op !== np) lines.push(r.name + ': ' + op + '% → ' + np + '%');
+      } else if ('weight' in r || 'weight' in o){
+        var ow = roundPct(o.weight), nw = roundPct(r.weight);
+        if (ow !== nw) lines.push(r.name + ': ' + ow + 'g → ' + nw + 'g');
+      }
+    });
+  }
+  function computeRecipeChangeSummary(oldRow, newPayload){
+    var lines = [];
+    if ((oldRow.recipe_name || '') !== newPayload.recipe_name){
+      lines.push('이름: "' + oldRow.recipe_name + '" → "' + newPayload.recipe_name + '"');
+    }
+    diffIngredientRows(oldRow.flours, newPayload.flours, '밀가루', lines);
+    diffIngredientRows(oldRow.ingredients, newPayload.ingredients, '재료', lines);
+    if (roundPct(oldRow.base_flour) !== roundPct(newPayload.base_flour)){
+      lines.push('기준 밀가루: ' + roundPct(oldRow.base_flour) + 'g → ' + roundPct(newPayload.base_flour) + 'g');
+    }
+    if (roundPct(oldRow.multiplier) !== roundPct(newPayload.multiplier)){
+      lines.push('배율: ×' + roundPct(oldRow.multiplier) + ' → ×' + roundPct(newPayload.multiplier));
+    }
+    if (roundPct(oldRow.target_total) !== roundPct(newPayload.target_total)){
+      lines.push('총 반죽량: ' + roundPct(oldRow.target_total) + 'g → ' + roundPct(newPayload.target_total) + 'g');
+    }
+    if ((oldRow.notes || '') !== newPayload.notes) lines.push('메모가 변경됨');
+    var oldTags = (Array.isArray(oldRow.tags) ? oldRow.tags : []).join(',');
+    var newTags = newPayload.tags.join(',');
+    if (oldTags !== newTags) lines.push('태그가 변경됨');
+    return lines;
+  }
+
   function finishSaveRecipe(payload, existing){
+    if (existing){
+      var changes = computeRecipeChangeSummary(existing, payload);
+      if (changes.length > 0){
+        var ok = confirm(
+          '다음과 같이 저장돼요:\n\n' + changes.map(function(c){ return '· ' + c; }).join('\n') +
+          '\n\n저장할까요?'
+        );
+        if (!ok) return;
+      }
+    }
     var query = existing
       ? supabase.from('recipes').update(payload).eq('id', existing.id).select().single()
       : supabase.from('recipes').insert(Object.assign({ owner_id: currentUser.id }, payload)).select().single();
@@ -4789,6 +4862,7 @@
         btn.className = 'tag-recipe-row';
         btn.textContent = r.recipe_name || '이름 없는 레시피';
         btn.addEventListener('click', function(){
+          if (!confirmDiscardIfDirty()) return;
           applyRecipeRowToState(r);
           showToast('레시피를 불러왔어요');
         });
@@ -5054,6 +5128,7 @@
       if (supabase) supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: loginRedirect } });
     });
     logoutBtn.addEventListener('click', function(){
+      if (!confirmDiscardIfDirty()) return;
       if (supabase) supabase.auth.signOut();
     });
     // Client keys (anon/authenticated) can never delete an auth.users row directly — only
