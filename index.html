@@ -207,13 +207,6 @@
     flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); background: var(--bg-elevated);
     border-radius: 999px; padding: 2px 8px;
   }
-  /* Bulk-select checkbox sits beside (not inside) .acc-row-toggle — a <button> can't
-     validly contain another interactive control like a checkbox, and nesting them would
-     make every checkbox click also fire the row's expand/collapse. As true siblings inside
-     this flex row, checking a box never touches the toggle button at all. */
-  .ing-row-header{ display: flex; align-items: center; gap: 10px; }
-  .ing-row-header .acc-row-select{ flex: 0 0 auto; width: 20px; height: 20px; }
-  .ing-row-header .acc-row-toggle{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
   .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
@@ -295,6 +288,14 @@
     margin-top: 4px; font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft);
   }
   .acc-row-detail{ padding-bottom: 16px; }
+  /* Bulk-select checkbox sits beside (not inside) .acc-row-toggle — a <button> can't
+     validly contain another interactive control like a checkbox, and nesting them would
+     make every checkbox click also fire the row's expand/collapse. As true siblings inside
+     this flex row, checking a box never touches the toggle button at all. Shared by every
+     list that offers bulk select (재료 관리 / 조합 제품 원가 계산 / 레시피 원가 계산). */
+  .acc-row-header{ display: flex; align-items: center; gap: 10px; }
+  .acc-row-header .acc-row-select{ flex: 0 0 auto; width: 20px; height: 20px; }
+  .acc-row-header .acc-row-toggle{ flex: 1 1 auto; min-width: 0; }
 
   /* 조합 제품 (여러 레시피를 합친 제품): a composite row holds several component rows, each
      a recipe-picker + its own weight/loss rate — reuses .ing-link-combo (already
@@ -940,6 +941,19 @@
     <div id="costRecipeTabPanel">
       <p class="hint">레시피를 선택하면 재료를 재료DB와 연결하고, 이 레시피로 파는 제품의 원가/마진을 확인할 수 있어요.</p>
       <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
+      <!--
+        레시피 자체를 완전히 삭제하는 버튼 — 재료 관리의 일괄/선택 삭제와 같은 패턴이지만,
+        여기서 지우는 건 원가 계산용 부가정보가 아니라 레시피 자체다(연결된 제품/조합 제품
+        구성요소도 함께 cascade 삭제됨). "내 레시피"의 개별 삭제와 같은 confirm() 한 번
+        패턴을 쓰되, 문구는 이게 계산기 레시피 자체를 지운다는 걸 명확히 알려준다.
+      -->
+      <div class="field-row" id="costRecipeBulkToolbar" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 1 auto;">
+          <input type="checkbox" id="costRecipeSelectAllCheckbox">
+          <span>전체 선택</span>
+        </label>
+        <button type="button" class="io-btn danger" id="deleteSelectedCostRecipesBtn" style="display:none;flex:0 0 auto;">선택 삭제</button>
+      </div>
       <div id="costRecipeList"></div>
       <!--
         A single shared detail block, moved into whichever recipe row's slot is clicked open
@@ -967,6 +981,13 @@
       <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요. 구성요소는 레시피뿐 아니라 소금 뿌리기처럼 재료 하나만 추가할 수도 있어요.</p>
       <button class="add-btn" id="addCompositeProductBtn" style="margin-top:0;margin-bottom:14px;">+ 조합 제품 추가</button>
       <input type="text" id="compositeProductsSearch" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
+      <div class="field-row" id="compositeBulkToolbar" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 1 auto;">
+          <input type="checkbox" id="compositeSelectAllCheckbox">
+          <span>전체 선택</span>
+        </label>
+        <button type="button" class="io-btn danger" id="deleteSelectedCompositeBtn" style="display:none;flex:0 0 auto;">선택 삭제</button>
+      </div>
       <div id="compositeProductsList"></div>
     </div>
   </div>
@@ -1633,6 +1654,10 @@
   var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
   var costRecipeSearchInput = document.getElementById('costRecipeSearchInput');
   var costRecipeListEl = document.getElementById('costRecipeList');
+  var costRecipeSelectAllCheckbox = document.getElementById('costRecipeSelectAllCheckbox');
+  var deleteSelectedCostRecipesBtn = document.getElementById('deleteSelectedCostRecipesBtn');
+  var selectedCostRecipeIds = {}; // id -> true, only for currently-checked rows in the 레시피 tab's list
+  var lastVisibleCostRecipes = []; // the owned/filtered recipe list from the most recent renderCostRecipesList() call
   var costCalcBodyEl = document.getElementById('costCalcBody');
   var costCostPerGramHintEl = document.getElementById('costCostPerGramHint');
   var costUnpricedHintEl = document.getElementById('costUnpricedHint');
@@ -1648,6 +1673,10 @@
   var costCompositeTabPanelEl = document.getElementById('costCompositeTabPanel');
   var compositeProductsListEl = document.getElementById('compositeProductsList');
   var compositeProductsSearchInput = document.getElementById('compositeProductsSearch');
+  var compositeSelectAllCheckbox = document.getElementById('compositeSelectAllCheckbox');
+  var deleteSelectedCompositeBtn = document.getElementById('deleteSelectedCompositeBtn');
+  var selectedCompositeIds = {}; // id -> true, only for currently-checked rows
+  var lastVisibleCompositeProducts = []; // the filtered composite-product list from the most recent renderCompositeProductsList() call
   var myCompositeProducts = []; // composite_products rows, each with a nested .composite_product_components array
   var costModalRecipe = null; // independent working copy of whichever recipe is loaded in the cost-calc modal
   // The currently-open recipe row's own collapsed-header summary/warning-icon elements (or
@@ -2158,7 +2187,7 @@
         return '<option value="' + u + '"' + (ig.purchase_unit_type === u ? ' selected' : '') + '>' + unitLabels[u] + '</option>';
       }).join('');
       row.innerHTML =
-        '<div class="ing-row-header">' +
+        '<div class="acc-row-header">' +
           '<input type="checkbox" class="acc-row-select" aria-label="선택">' +
           '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
             '<div class="acc-row-toggle-top">' +
@@ -2317,21 +2346,33 @@
     refreshIngredientBulkToolbar();
   }
 
-  // Keeps the "전체 선택" checkbox and "선택 삭제 (N)" button in sync with
-  // selectedIngredientIds against whichever rows are currently visible (i.e. matching the
-  // active search filter, tracked in lastVisibleIngredients) — selecting "전체" only selects
-  // what's actually on screen, so narrowing the search first and then "전체 선택" is how a
-  // subset gets bulk-deleted. Reads lastVisibleIngredients rather than taking a parameter so
+  // Keeps a "전체 선택" checkbox and "선택 삭제 (N)" button in sync with a selectedIds map
+  // against whichever rows are currently visible (i.e. matching the active search filter) —
+  // selecting "전체" only selects what's actually on screen, so narrowing the search first
+  // and then "전체 선택" is how a subset gets bulk-deleted. Shared by every list that offers
+  // bulk select (재료 관리 / 조합 제품 원가 계산 / 레시피 원가 계산) — each just passes its own
+  // checkbox/button/selection-map/last-rendered-list, so this one function is the only place
+  // the checked/indeterminate/count logic needs to be right.
+  function refreshBulkToolbar(selectAllCheckbox, deleteBtn, selectedIds, visibleItems){
+    var visibleIds = visibleItems.map(function(item){ return item.id; });
+    var selectedVisibleCount = visibleIds.filter(function(id){ return selectedIds[id]; }).length;
+    selectAllCheckbox.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+    selectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+    var totalSelected = Object.keys(selectedIds).length;
+    deleteBtn.style.display = totalSelected > 0 ? 'inline-block' : 'none';
+    deleteBtn.textContent = '선택 삭제 (' + totalSelected + ')';
+  }
+  // lastVisibleIngredients etc. are read here (rather than this taking a list parameter) so
   // it can be called from anywhere — a single row's own checkbox handler included — without
   // that call site needing to know or re-derive the current filtered list itself.
   function refreshIngredientBulkToolbar(){
-    var visibleIds = lastVisibleIngredients.map(function(ig){ return ig.id; });
-    var selectedVisibleCount = visibleIds.filter(function(id){ return selectedIngredientIds[id]; }).length;
-    ingredientSelectAllCheckbox.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
-    ingredientSelectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
-    var totalSelected = Object.keys(selectedIngredientIds).length;
-    deleteSelectedIngredientsBtn.style.display = totalSelected > 0 ? 'inline-block' : 'none';
-    deleteSelectedIngredientsBtn.textContent = '선택 삭제 (' + totalSelected + ')';
+    refreshBulkToolbar(ingredientSelectAllCheckbox, deleteSelectedIngredientsBtn, selectedIngredientIds, lastVisibleIngredients);
+  }
+  function refreshCostRecipeBulkToolbar(){
+    refreshBulkToolbar(costRecipeSelectAllCheckbox, deleteSelectedCostRecipesBtn, selectedCostRecipeIds, lastVisibleCostRecipes);
+  }
+  function refreshCompositeBulkToolbar(){
+    refreshBulkToolbar(compositeSelectAllCheckbox, deleteSelectedCompositeBtn, selectedCompositeIds, lastVisibleCompositeProducts);
   }
 
   function loadProducts(recipeId){
@@ -2770,10 +2811,12 @@
       empty.className = 'hint';
       empty.textContent = '아직 등록된 조합 제품이 없어요 — 위에서 추가해보세요.';
       compositeProductsListEl.appendChild(empty);
+      lastVisibleCompositeProducts = [];
+      refreshCompositeBulkToolbar();
       return;
     }
     var q = (query || '').trim().toLowerCase();
-    var visible = myCompositeProducts.filter(function(cp){
+    var visible = lastVisibleCompositeProducts = myCompositeProducts.filter(function(cp){
       return !q || (cp.name || '').toLowerCase().indexOf(q) !== -1;
     });
     if (visible.length === 0){
@@ -2781,26 +2824,30 @@
       noMatch.className = 'hint';
       noMatch.textContent = '검색 결과가 없어요';
       compositeProductsListEl.appendChild(noMatch);
+      refreshCompositeBulkToolbar();
       return;
     }
     visible.forEach(function(cp){
       var row = document.createElement('div');
       row.className = 'composite-row acc-row';
       row.innerHTML =
-        '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
-          '<div class="acc-row-toggle-top">' +
-            '<span class="acc-row-name-label"></span>' +
-            '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="원가 확인 필요">' +
-              '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
-              '<line x1="12" y1="9" x2="12" y2="13"></line>' +
-              '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
-            '</svg>' +
-            '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<polyline points="6 9 12 15 18 9"></polyline>' +
-            '</svg>' +
-          '</div>' +
-          '<div class="acc-row-toggle-summary"></div>' +
-        '</button>' +
+        '<div class="acc-row-header">' +
+          '<input type="checkbox" class="acc-row-select" aria-label="선택">' +
+          '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+            '<div class="acc-row-toggle-top">' +
+              '<span class="acc-row-name-label"></span>' +
+              '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="원가 확인 필요">' +
+                '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
+                '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+                '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+              '</svg>' +
+              '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="6 9 12 15 18 9"></polyline>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="acc-row-toggle-summary"></div>' +
+          '</button>' +
+        '</div>' +
         '<div class="acc-row-detail" style="display:none;">' +
           '<div class="composite-top">' +
             '<input class="composite-name text-input">' +
@@ -2825,6 +2872,7 @@
         '</div>';
       compositeProductsListEl.appendChild(row);
 
+      var selectCheckbox = row.querySelector('.acc-row-select');
       var toggleBtn = row.querySelector('.acc-row-toggle');
       var nameLabelEl = row.querySelector('.acc-row-name-label');
       var warnIconEl = row.querySelector('.acc-row-warn-icon');
@@ -2837,6 +2885,13 @@
       var priceEl = row.querySelector('.composite-price');
       var resultEl = row.querySelector('.composite-cost-result');
       var issueHintEl = row.querySelector('.composite-issue-hint');
+
+      selectCheckbox.checked = !!selectedCompositeIds[cp.id];
+      selectCheckbox.addEventListener('change', function(){
+        if (selectCheckbox.checked) selectedCompositeIds[cp.id] = true;
+        else delete selectedCompositeIds[cp.id];
+        refreshCompositeBulkToolbar();
+      });
 
       nameLabelEl.textContent = cp.name || '새 조합 제품';
       nameEl.value = cp.name || '';
@@ -3031,11 +3086,13 @@
         supabase.from('composite_products').delete().eq('id', cp.id).then(function(res){
           if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
           myCompositeProducts = myCompositeProducts.filter(function(other){ return other.id !== cp.id; });
+          delete selectedCompositeIds[cp.id];
           renderCompositeProductsList(compositeProductsSearchInput.value);
           showToast('조합 제품을 삭제했어요');
         });
       });
     });
+    refreshCompositeBulkToolbar();
   }
 
   function clearSelectedRecipe(){
@@ -3361,10 +3418,12 @@
       empty.className = 'hint';
       empty.textContent = '아직 등록된 레시피가 없어요.';
       costRecipeListEl.appendChild(empty);
+      lastVisibleCostRecipes = [];
+      refreshCostRecipeBulkToolbar();
       return;
     }
     var q = (query || '').trim().toLowerCase();
-    var visible = owned.filter(function(r){
+    var visible = lastVisibleCostRecipes = owned.filter(function(r){
       return !q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1;
     });
     if (visible.length === 0){
@@ -3372,34 +3431,46 @@
       noMatch.className = 'hint';
       noMatch.textContent = '검색 결과가 없어요';
       costRecipeListEl.appendChild(noMatch);
+      refreshCostRecipeBulkToolbar();
       return;
     }
     visible.forEach(function(r){
       var row = document.createElement('div');
       row.className = 'acc-row';
       row.innerHTML =
-        '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
-          '<div class="acc-row-toggle-top">' +
-            '<span class="acc-row-name-label"></span>' +
-            '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="원가 확인 필요">' +
-              '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
-              '<line x1="12" y1="9" x2="12" y2="13"></line>' +
-              '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
-            '</svg>' +
-            '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<polyline points="6 9 12 15 18 9"></polyline>' +
-            '</svg>' +
-          '</div>' +
-          '<div class="acc-row-toggle-summary"></div>' +
-        '</button>' +
+        '<div class="acc-row-header">' +
+          '<input type="checkbox" class="acc-row-select" aria-label="선택">' +
+          '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+            '<div class="acc-row-toggle-top">' +
+              '<span class="acc-row-name-label"></span>' +
+              '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="원가 확인 필요">' +
+                '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
+                '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+                '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+              '</svg>' +
+              '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="6 9 12 15 18 9"></polyline>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="acc-row-toggle-summary"></div>' +
+          '</button>' +
+        '</div>' +
         '<div class="cost-recipe-detail-slot"></div>';
       costRecipeListEl.appendChild(row);
 
+      var selectCheckbox = row.querySelector('.acc-row-select');
       var toggleBtn = row.querySelector('.acc-row-toggle');
       var nameLabelEl = row.querySelector('.acc-row-name-label');
       var warnIconEl = row.querySelector('.acc-row-warn-icon');
       var summaryEl = row.querySelector('.acc-row-toggle-summary');
       var slotEl = row.querySelector('.cost-recipe-detail-slot');
+
+      selectCheckbox.checked = !!selectedCostRecipeIds[r.id];
+      selectCheckbox.addEventListener('change', function(){
+        if (selectCheckbox.checked) selectedCostRecipeIds[r.id] = true;
+        else delete selectedCostRecipeIds[r.id];
+        refreshCostRecipeBulkToolbar();
+      });
 
       nameLabelEl.textContent = r.recipe_name || '이름 없는 레시피';
       var recipeLike = {
@@ -3430,9 +3501,36 @@
         }
       });
     });
+    refreshCostRecipeBulkToolbar();
   }
   costRecipeSearchInput.addEventListener('input', function(){
     renderCostRecipesList(costRecipeSearchInput.value);
+  });
+  costRecipeSelectAllCheckbox.addEventListener('change', function(){
+    var checked = costRecipeSelectAllCheckbox.checked;
+    costRecipeListEl.querySelectorAll('.acc-row-select').forEach(function(cb){
+      cb.checked = checked;
+      cb.dispatchEvent(new Event('change'));
+    });
+  });
+  deleteSelectedCostRecipesBtn.addEventListener('click', function(){
+    var ids = Object.keys(selectedCostRecipeIds);
+    if (ids.length === 0) return;
+    var names = myRecipes.filter(function(r){ return selectedCostRecipeIds[r.id]; }).map(function(r){ return r.recipe_name; });
+    var preview = names.slice(0, 5).join(', ') + (names.length > 5 ? ' 외 ' + (names.length - 5) + '개' : '');
+    if (!confirm(
+      ids.length + '개 레시피를 완전히 삭제할까요?\n(' + preview + ')\n\n' +
+      '원가 계산용 정보가 아니라 레시피 자체가 삭제돼요 — 계산기에서도 사라지고, 이 레시피로 등록한 제품도 함께 삭제되며 되돌릴 수 없어요.'
+    )) return;
+    supabase.from('recipes').delete().in('id', ids).then(function(res){
+      if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+      myRecipes = myRecipes.filter(function(r){ return !selectedCostRecipeIds[r.id]; });
+      selectedCostRecipeIds = {};
+      costModalRecipe = null;
+      if (selectedRecipeId && ids.indexOf(selectedRecipeId) !== -1) clearSelectedRecipe();
+      renderCostRecipesList(costRecipeSearchInput.value);
+      showToast(ids.length + '개 레시피를 삭제했어요');
+    });
   });
 
   // Loads an independent working copy of the picked recipe's flours/ingredients — this never
@@ -3746,6 +3844,27 @@
     });
     compositeProductsSearchInput.addEventListener('input', function(){
       renderCompositeProductsList(compositeProductsSearchInput.value);
+    });
+    compositeSelectAllCheckbox.addEventListener('change', function(){
+      var checked = compositeSelectAllCheckbox.checked;
+      compositeProductsListEl.querySelectorAll('.acc-row-select').forEach(function(cb){
+        cb.checked = checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    deleteSelectedCompositeBtn.addEventListener('click', function(){
+      var ids = Object.keys(selectedCompositeIds);
+      if (ids.length === 0) return;
+      var names = myCompositeProducts.filter(function(cp){ return selectedCompositeIds[cp.id]; }).map(function(cp){ return cp.name; });
+      var preview = names.slice(0, 5).join(', ') + (names.length > 5 ? ' 외 ' + (names.length - 5) + '개' : '');
+      if (!confirm(ids.length + '개 조합 제품을 삭제할까요?\n(' + preview + ')\n\n구성요소도 함께 삭제되며 되돌릴 수 없어요.')) return;
+      supabase.from('composite_products').delete().in('id', ids).then(function(res){
+        if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+        myCompositeProducts = myCompositeProducts.filter(function(cp){ return !selectedCompositeIds[cp.id]; });
+        selectedCompositeIds = {};
+        renderCompositeProductsList(compositeProductsSearchInput.value);
+        showToast(ids.length + '개 조합 제품을 삭제했어요');
+      });
     });
     document.getElementById('addProductBtn').addEventListener('click', function(){
       if (!currentUser || !costModalRecipe) return;
