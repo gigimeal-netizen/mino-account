@@ -81,11 +81,18 @@ create table composite_products (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- A component is either a whole recipe (recipe_id) OR a single priced ingredient
+-- (ingredient_id) — e.g. 프레첼 위에 뿌리는 소금 is just "N그램의 소금", not a recipe with its
+-- own flour/ratio. Exactly one of the two is expected to be set at a time; the app clears
+-- the other when the user picks one. recipe_id cascades (the component has no identity of
+-- its own once its recipe is gone), but ingredient_id sets null instead of cascading — an
+-- ingredient can be hard-deleted independently (see ingredients.is_active soft-delete flow),
+-- and the component row should survive as "재료를 다시 선택해주세요", not vanish silently.
 create table composite_product_components (
   id uuid primary key default gen_random_uuid(),
   composite_product_id uuid not null references composite_products(id) on delete cascade,
-  recipe_id uuid references recipes(id) on delete cascade, -- nullable: a new component starts
-                                                            -- unassigned until a recipe is picked
+  recipe_id uuid references recipes(id) on delete cascade,       -- nullable: unassigned until picked
+  ingredient_id uuid references ingredients(id) on delete set null,
   weight_g numeric not null default 0,      -- 이 구성요소가 완제품에 들어가는 무게(성형 완료 기준)
   loss_rate_pct numeric not null default 0, -- 이 구성요소만의 재단/성형 손실률(%)
   created_at timestamptz not null default now()

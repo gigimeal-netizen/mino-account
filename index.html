@@ -852,7 +852,7 @@
     </div>
   </div>
   <div class="subpage-body">
-    <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요.</p>
+    <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요. 구성요소는 레시피뿐 아니라 소금 뿌리기처럼 재료 하나만 추가할 수도 있어요.</p>
     <button class="add-btn" id="addCompositeProductBtn" style="margin-top:0;margin-bottom:14px;">+ 조합 제품 추가</button>
     <input type="text" id="compositeProductsSearch" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
     <div id="compositeProductsList"></div>
@@ -2070,38 +2070,45 @@
     return best;
   }
 
-  // Reusable searchable combo for picking one of the user's own recipes — same show-
-  // everything-on-focus/filter-on-type pattern as "내 레시피"/원가계산's recipe picker,
-  // generalized here since 조합 제품's component rows need the same "search my recipes, pick
-  // one" interaction repeated per row. Reuses .ing-link-combo/.combo-dropdown (both already
-  // exist for the ingredient linker) so the existing document-level outside-click closer
-  // picks these instances up automatically without any extra wiring.
-  function attachRecipePicker(inputEl, dropdownEl, getCurrentName, onPick){
+  // Reusable searchable combo for a 조합 제품 component: picks EITHER one of the user's own
+  // recipes OR a single priced ingredient — e.g. 프레첼 위에 뿌리는 소금 is just "N그램의 소금",
+  // not a whole recipe, so a component can't always be forced through the recipe-only picker
+  // this used to be. Both kinds are searched together and tagged ("[레시피]"/"[재료]") in one
+  // dropdown rather than making the user pick a mode first. onPick receives ({kind:'recipe',
+  // id, name} | {kind:'ingredient', id, name}); the caller sets recipe_id/ingredient_id
+  // accordingly and clears the other. Reuses .ing-link-combo/.combo-dropdown (already used by
+  // the ingredient linker) so the existing document-level outside-click closer picks these up
+  // automatically without extra wiring.
+  function attachComponentPicker(inputEl, dropdownEl, getCurrentName, onPick){
     function closeDropdown(){ dropdownEl.style.display = 'none'; }
     function renderList(showAll){
       var typed = inputEl.value.trim();
       var q = showAll ? '' : typed.toLowerCase();
-      var matches = myRecipes.filter(function(r){
+      var recipeMatches = myRecipes.filter(function(r){
         return currentUser && r.owner_id === currentUser.id &&
           (!q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1);
-      });
+      }).map(function(r){ return { kind: 'recipe', id: r.id, name: r.recipe_name || '이름 없는 레시피' }; });
+      var ingredientMatches = myIngredients.filter(function(ig){
+        return ig.is_active !== false && (!q || ig.name.toLowerCase().indexOf(q) !== -1);
+      }).map(function(ig){ return { kind: 'ingredient', id: ig.id, name: ig.name }; });
+      var matches = recipeMatches.concat(ingredientMatches);
       dropdownEl.innerHTML = '';
       if (matches.length === 0){
         var empty = document.createElement('div');
         empty.className = 'combo-dropdown-empty';
-        empty.textContent = '일치하는 레시피가 없어요';
+        empty.textContent = '일치하는 레시피/재료가 없어요';
         dropdownEl.appendChild(empty);
         return;
       }
-      matches.forEach(function(r){
+      matches.forEach(function(m){
         var item = document.createElement('button');
         item.type = 'button';
         item.className = 'combo-dropdown-item';
-        item.textContent = r.recipe_name || '이름 없는 레시피';
+        item.textContent = (m.kind === 'recipe' ? '[레시피] ' : '[재료] ') + m.name;
         item.addEventListener('click', function(){
-          inputEl.value = r.recipe_name || '';
+          inputEl.value = m.name;
           closeDropdown();
-          onPick(r);
+          onPick(m);
         });
         dropdownEl.appendChild(item);
       });
@@ -2232,6 +2239,17 @@
     return computeRecipeCostPerGramFor(recipeLike);
   }
 
+  // The other half of a component's cost lookup: a single priced ingredient (e.g. 프레첼 위에
+  // 뿌리는 소금) rather than a whole recipe. Same { costPerGram, hasUnpriced } shape as
+  // costPerGramForRecipeId() so refreshCompositeCost() doesn't need to branch on the shape,
+  // only on which id it has. purchase_unit_type 'ea' (개수 단위) already leaves price_per_gram
+  // at 0 elsewhere in this file, so it naturally falls out as unpriced here too.
+  function costPerGramForIngredientId(ingredientId){
+    var ig = myIngredients.find(function(i){ return i.id === ingredientId; });
+    if (!ig) return { costPerGram: 0, hasUnpriced: true };
+    return { costPerGram: ig.price_per_gram || 0, hasUnpriced: !(ig.price_per_gram > 0) };
+  }
+
   // Structural rebuild per composite product/component (add/delete change the list, same
   // rhythm as renderIngredientManager()/renderProductsList()) — each row closes over its own
   // `cp`/`comp` record directly rather than going through a data-idx pass, since there's no
@@ -2319,18 +2337,19 @@
         componentsEl.querySelectorAll('.composite-component-row').forEach(function(compRow){
           anyComponent = true;
           var recipeId = compRow.dataset.recipeId || '';
+          var ingredientId = compRow.dataset.ingredientId || '';
           var weightEl = compRow.querySelector('.component-weight');
           var lossEl = compRow.querySelector('.component-loss');
           var compResultEl = compRow.querySelector('.component-cost-result');
           var weight = parseFloat(weightEl.value) || 0;
           var lossRate = Math.max(0, Math.min(99, parseFloat(lossEl.value) || 0));
-          if (!recipeId){
-            compResultEl.textContent = '레시피를 선택해주세요';
+          if (!recipeId && !ingredientId){
+            compResultEl.textContent = '레시피 또는 재료를 선택해주세요';
             compResultEl.classList.add('warn-hint');
             hasIssue = true;
             return;
           }
-          var cost = costPerGramForRecipeId(recipeId);
+          var cost = recipeId ? costPerGramForRecipeId(recipeId) : costPerGramForIngredientId(ingredientId);
           var effCost = effectiveCostPerGram(cost.costPerGram, lossRate);
           var componentCost = Math.round(effCost * weight);
           totalCost += componentCost;
@@ -2357,9 +2376,10 @@
         var compRow = document.createElement('div');
         compRow.className = 'composite-component-row';
         compRow.dataset.recipeId = comp.recipe_id || '';
+        compRow.dataset.ingredientId = comp.ingredient_id || '';
         compRow.innerHTML =
           '<div class="component-top">' +
-            '<div class="ing-link-combo"><input class="component-recipe-input" autocomplete="off" placeholder="레시피 선택"><div class="combo-dropdown" style="display:none;"></div></div>' +
+            '<div class="ing-link-combo"><input class="component-recipe-input" autocomplete="off" placeholder="레시피 또는 재료 선택"><div class="combo-dropdown" style="display:none;"></div></div>' +
             '<button type="button" class="icon-btn danger component-del" aria-label="구성요소 삭제">' +
               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<polyline points="3 6 5 6 21 6"></polyline>' +
@@ -2384,11 +2404,18 @@
         var lossEl = compRow.querySelector('.component-loss');
         var compDelBtn = compRow.querySelector('.component-del');
 
-        function currentRecipeName(){
-          var r = myRecipes.find(function(rr){ return rr.id === compRow.dataset.recipeId; });
-          return r ? (r.recipe_name || '') : '';
+        function currentComponentName(){
+          if (compRow.dataset.recipeId){
+            var r = myRecipes.find(function(rr){ return rr.id === compRow.dataset.recipeId; });
+            return r ? (r.recipe_name || '') : '';
+          }
+          if (compRow.dataset.ingredientId){
+            var ig = myIngredients.find(function(i){ return i.id === compRow.dataset.ingredientId; });
+            return ig ? (ig.name || '') : '';
+          }
+          return '';
         }
-        recipeInput.value = currentRecipeName();
+        recipeInput.value = currentComponentName();
         weightEl.value = comp.weight_g > 0 ? comp.weight_g : '';
         lossEl.value = comp.loss_rate_pct > 0 ? comp.loss_rate_pct : '';
 
@@ -2398,9 +2425,16 @@
             Object.keys(fields).forEach(function(k){ comp[k] = fields[k]; });
           });
         }
-        attachRecipePicker(recipeInput, recipeDropdown, currentRecipeName, function(recipe){
-          compRow.dataset.recipeId = recipe.id;
-          saveComponentFields({ recipe_id: recipe.id });
+        attachComponentPicker(recipeInput, recipeDropdown, currentComponentName, function(picked){
+          if (picked.kind === 'recipe'){
+            compRow.dataset.recipeId = picked.id;
+            compRow.dataset.ingredientId = '';
+            saveComponentFields({ recipe_id: picked.id, ingredient_id: null });
+          } else {
+            compRow.dataset.ingredientId = picked.id;
+            compRow.dataset.recipeId = '';
+            saveComponentFields({ ingredient_id: picked.id, recipe_id: null });
+          }
           refreshCompositeCost();
         });
         weightEl.addEventListener('input', refreshCompositeCost);
@@ -2428,7 +2462,7 @@
       addComponentBtn.addEventListener('click', function(){
         if (!currentUser) return;
         supabase.from('composite_product_components').insert({
-          composite_product_id: cp.id, recipe_id: null, weight_g: 0, loss_rate_pct: 0
+          composite_product_id: cp.id, recipe_id: null, ingredient_id: null, weight_g: 0, loss_rate_pct: 0
         }).select().single().then(function(res){
           if (res.error){ alert('구성요소 추가 실패: ' + res.error.message); return; }
           cp.composite_product_components = (cp.composite_product_components || []).concat([res.data]);
