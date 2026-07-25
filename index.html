@@ -1380,8 +1380,17 @@
   unlike index.html/manager.html, which stay dependency-free for spotty bakery-floor wifi —
   it deliberately loads the Supabase client from a CDN. See CLAUDE.md and
   supabase/schema.sql for why this is scoped to this one page only.
+
+  2026-07-25 보안 수정: 예전엔 `@2`(플로팅 태그, jsDelivr가 그때그때 최신 2.x로 풀어줌)를 그대로
+  써서 SRI(무결성 검증)를 걸 수 없었다 — 해시를 고정해도 jsDelivr가 파일을 바꿔버리면 매번 깨진다.
+  정확한 버전(2.110.8)으로 고정하고, 그 파일 바이트를 직접 내려받아 sha384 해시를 계산해서 넣었다
+  (jsDelivr나 제3자가 알려준 값을 그대로 믿지 않고 직접 검증). CDN이 침해되거나 응답이 변조돼도
+  브라우저가 해시 불일치로 스크립트 실행 자체를 거부한다. 이후 Supabase 클라이언트를 업그레이드할
+  때는 새 버전 파일을 똑같이 받아서 새 해시를 계산해 함께 갱신해야 한다(버전과 해시가 항상 짝).
 -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.8/dist/umd/supabase.js"
+  integrity="sha384-M65KxMm/JqBppck6onbmAgPVMBHrmPCf1L17Q+71EcvI9/VVI8j5cqoxQf6lj6h2"
+  crossorigin="anonymous"></script>
 <script>
 (function(){
   // Light/dark toggle: :root holds the dark theme (this app's default); a `data-theme`
@@ -1806,10 +1815,16 @@
     totalWeightText.textContent = fmt(total) + 'g';
   }
 
+  // 2026-07-25 보안 수정: textContent → innerHTML 왕복은 <, >, &는 이스케이프하지만 큰따옴표(")/
+  // 작은따옴표(')는 그대로 통과시킨다 — buildFlourRows()/buildIngRows()처럼 결과를
+  // value="' + escapeHtml(x) + '"'처럼 큰따옴표로 감싼 속성값에 그대로 꽂아 넣는 곳에서는,
+  // 재료 이름에 `" autofocus onfocus="...'` 같은 값을 넣으면 속성 밖으로 탈출해 임의 속성/이벤트
+  // 핸들러를 주입할 수 있는 실제 XSS였다(공개 게시판/공유 레시피를 통해 다른 사용자에게도 전파
+  // 가능). 따옴표까지 HTML 엔티티로 변환해서 막는다.
   function escapeHtml(s){
     var d = document.createElement('div');
     d.textContent = s;
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
   // Engine switch: bread uses the baker's-% engine (flour card, %, base-flour field);
