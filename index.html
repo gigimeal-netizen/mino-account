@@ -60,7 +60,7 @@
     -webkit-font-smoothing: antialiased;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
-  body{ padding-bottom: 132px; /* room for sticky footer */ }
+  body{ padding-bottom: 84px; /* room for the fixed bottom nav bar, added 2026-07-25 */ }
   .wrap{ max-width: 580px; margin: 0 auto; padding: 28px 18px 24px; }
 
   header{ padding: 6px 2px 20px; }
@@ -507,8 +507,11 @@
   /* Subpage (재료 관리 / 원가 계산): the first true "leaves the calculator" screens in this
      file — unlike the small popovers above, these fully replace the calculator instead of
      floating over it. No dimmed backdrop since there's nothing left behind to dim: opening
-     one hides .wrap/.footer outright (see showSubpage()/hideSubpage()) and this fills that
-     same space, capped at the same width as .wrap for visual consistency with the calculator. */
+     one hides .wrap outright (see showSubpage()/hideSubpage()) and this fills that same
+     space, capped at the same width as .wrap for visual consistency with the calculator.
+     The bottom nav bar (added 2026-07-25) stays visible over a subpage on purpose — z-index
+     60 vs. this element's 50 — so switching between 재료 관리/원가 계산/아카이브 doesn't need
+     a trip back through the calculator first. */
   .subpage{
     position: fixed; inset: 0; z-index: 50; overflow-y: auto;
     background: var(--bg);
@@ -532,7 +535,10 @@
      main calculator's header instead of looking empty, with zero duplicated login/menu logic. */
   .subpage-header-actions{ flex: 0 0 auto; }
   .cost-tabs{ margin-bottom: 18px; }
-  .subpage-body{ padding: 18px; max-width: 580px; margin: 0 auto; }
+  /* Bottom padding matches body's reserve for the fixed bottom nav bar (2026-07-25) — the nav
+     bar sits on top of a subpage (see .subpage's z-index note above), so its own last content
+     needs the same clearance the calculator gets from body's padding-bottom. */
+  .subpage-body{ padding: 18px 18px 84px; max-width: 580px; margin: 0 auto; }
   .subpage-body h3{
     font-family: var(--font-display); font-size: 13px; font-weight: 800;
     letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft);
@@ -582,16 +588,14 @@
   }
   .ing-link-input[data-unresolved]{ border-color: var(--danger); }
 
-  /* Sticky footer stamp */
-  .footer{
-    position: fixed; left:0; right:0; bottom:0;
-    background: var(--bg-elevated); color: var(--ink);
-    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
-    display:flex; align-items:center; gap:14px;
-    border-top: 1px solid var(--border);
-    box-shadow: var(--shadow-footer);
-  }
-  .footer-inner{ max-width: 580px; margin: 0 auto; width:100%; display:flex; align-items:center; gap:14px; }
+  /* Stamp — used to live in a fixed sticky footer at the true screen bottom, always visible
+     while scrolling. 2026-07-25: moved inline as its own card between the ingredients card
+     and the memo card (screenshot-confirmed placement), specifically to free up the real
+     screen bottom for the new persistent bottom nav bar below. No longer position:fixed —
+     .stamp/.footer-text/etc. keep their old look, just in normal document flow now. The
+     "결과 복사" button that used to sit next to it moved into the share panel instead
+     (#copyResultBtn) since there's no longer a fixed footer bar to anchor it to. */
+  .stamp-card{ display:flex; align-items:center; gap:14px; }
   .stamp{
     flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%;
     border: 3px solid var(--accent); color: var(--accent);
@@ -604,16 +608,34 @@
   .footer-label{ font-size: 11px; letter-spacing:0.06em; text-transform:uppercase; color: var(--ink-soft); }
   .footer-value{ font-family: var(--font-mono); font-weight: 800; font-size: 21px; margin-top:2px; }
   .footer-dirty{ font-size: 11.5px; color: var(--accent); margin-top: 4px; font-weight: 700; }
-  .copy-btn{
-    flex: 0 0 auto; background: var(--accent); color: #fff; border:none;
-    padding: 12px 14px; border-radius: 10px; font-family: var(--font-display);
-    font-weight: 800; font-size: 13px; cursor:pointer; min-height: 44px;
+
+  /* Bottom nav bar (Instagram-style, added 2026-07-25) — the persistent way to reach the
+     calculator/레시피 아카이브/재료 관리/원가 계산 without going through the account menu.
+     z-index 60 (> .subpage's 50) so it stays visible and clickable on top of any open
+     subpage — the whole point is switching screens without a trip back through the
+     calculator first (see showSubpage()/hideSubpage()'s updateBottomNavActive()). */
+  .bottom-nav{
+    position: fixed; left:0; right:0; bottom:0; z-index: 60;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border);
+    box-shadow: var(--shadow-footer);
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .copy-btn:active{ transform: scale(0.97); }
-  .copy-btn.copied{ background: var(--success); color:#fff; }
+  .bottom-nav-inner{ max-width: 580px; margin: 0 auto; width:100%; display:flex; }
+  .bottom-nav-btn{
+    flex: 1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 3px; min-height: 60px; background:none; border:none; cursor:pointer;
+    color: var(--ink-soft); font-family: var(--font-display); font-weight: 700; font-size: 10.5px;
+  }
+  .bottom-nav-btn svg{ width: 22px; height: 22px; }
+  .bottom-nav-btn.active{ color: var(--accent); }
+  .bottom-nav-btn:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* 2026-07-25: 결과 복사 버튼이 예전 고정 푸터의 .copy-btn에서 공유 패널의 .io-btn으로
+     옮겨갔다 — "복사됨" 성공 색상 표시는 그대로 유지. */
+  .io-btn.copied{ background: var(--success); border-color: var(--success); color:#fff; }
 
   .toast{
-    position: fixed; left:50%; bottom: 150px; transform: translateX(-50%);
+    position: fixed; left:50%; bottom: 90px; transform: translateX(-50%);
     background: var(--bg-elevated); color: var(--ink); border: 1px solid var(--border-strong);
     padding: 10px 18px; border-radius: 999px;
     font-size: 13px; font-weight:700; opacity:0; pointer-events:none;
@@ -671,8 +693,8 @@
               <button class="menu-btn" id="googleBtn">Google로 로그인</button>
             </div>
             <div id="loggedInRow" style="display:none;">
-              <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
-              <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
+              <!-- 재료 관리/원가 계산은 2026-07-25에 하단 네비게이션 탭으로 옮기고 여기서
+                   제거 — 두 군데 동시에 있으면 중복. -->
               <button class="menu-btn" id="openShareManagerBtn">공유 관리</button>
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
@@ -733,17 +755,6 @@
           <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
           <polyline points="7 3 7 8 15 8"></polyline>
-        </svg>
-      </button>
-      <!-- 2026-07-25: 계정 메뉴에서 여기로 옮김 — 이 카드는 로그인 여부와 무관하게 항상 보여서
-           (#libraryCard와 달리), 로그인 전 방문자에게도 공개 게시판이 눈에 띄어야 한다는 게
-           목적. 지구본 아이콘 — "태그별 보기"의 격자 아이콘과 헷갈리지 않게 의도적으로
-           다른 모양을 골랐다. -->
-      <button class="icon-btn" id="openArchiveBtn" aria-label="레시피 아카이브">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
         </svg>
       </button>
     </div>
@@ -855,6 +866,22 @@
     </div>
   </section>
 
+  <!-- 2026-07-25: moved out of the old fixed sticky footer (screenshot-confirmed placement:
+       재료 카드와 메모 카드 사이) — see .stamp-card CSS note. The "결과 복사" button that used
+       to sit next to it now lives inside 공유 패널 as #copyResultBtn. -->
+  <section class="card stamp-card">
+    <div class="stamp">
+      <span class="num" id="stampTotal">0</span>
+      <span class="u">TOTAL g</span>
+    </div>
+    <div class="footer-text">
+      <div class="footer-label" id="footerFlourLabel">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
+      <div class="footer-label" id="footerScaleLabel" style="display:none;">적용 배율 <span id="engineScaleLabel">×1</span></div>
+      <div class="footer-value" id="totalWeightText">0g</div>
+      <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
+    </div>
+  </section>
+
   <section class="card">
     <h2>메모</h2>
     <textarea id="notesInput" class="notes-input" rows="4" placeholder="발효 시간, 굽기 팁처럼 남겨두고 싶은 메모를 적어보세요."></textarea>
@@ -885,6 +912,14 @@
       </button>
     </div>
     <div class="share-panel" id="selectedSharePanel" style="display:none;">
+      <!-- 2026-07-25: 하단 고정 푸터를 없애면서(#stampTotal 등이 재료/메모 카드 사이로 이동)
+           거기 있던 "결과 복사" 버튼이 갈 곳이 없어졌다 — 공유 버튼을 누르면 여는 이 패널
+           안에 그대로 옮겨서 기능을 유지한다. -->
+      <div class="field-row">
+        <span class="field-label">계산 결과</span>
+        <button class="io-btn" id="copyResultBtn">클립보드 복사</button>
+      </div>
+      <div class="toolbar-divider"></div>
       <div class="field-row">
         <span class="field-label">링크 공유</span>
         <button class="io-btn" id="toggleLinkBtn">링크 켜기</button>
@@ -921,28 +956,59 @@
   -->
 </div>
 
-<div class="footer">
-  <div class="footer-inner">
-    <div class="stamp">
-      <span class="num" id="stampTotal">0</span>
-      <span class="u">TOTAL g</span>
-    </div>
-    <div class="footer-text">
-      <div class="footer-label" id="footerFlourLabel">밀가루 합계 <span id="flourWeightLabel">0g</span> 기준</div>
-      <div class="footer-label" id="footerScaleLabel" style="display:none;">적용 배율 <span id="engineScaleLabel">×1</span></div>
-      <div class="footer-value" id="totalWeightText">0g</div>
-      <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
-    </div>
-    <button class="copy-btn" id="copyBtn">결과 복사</button>
+<!--
+  2026-07-25: 인스타그램 스타일 하단 네비게이션 — "처음 들어갔을 때 화면이 복잡하다"는
+  지적에 낸 방향(선택 항목 접어두기) 다음 단계로, 재료 관리/원가 계산/레시피 아카이브를
+  계정 메뉴에서 완전히 빼서 항상 보이는 탭으로 올렸다. "새 레시피 작성"은 별도 탭이 아니라
+  (홈/검색/프로필처럼 "머무는 화면"이 아니라 누르면 바로 실행되는 동작이라 성격이 다름)
+  "레시피" 탭 = 계산기 화면 자체 안의 기존 + 버튼(#newRecipeBtn)으로 남겨둔다.
+  z-index는 .subpage(50)보다 위(60)라 서브페이지 위에서도 계속 보이고 눌린다 —
+  updateBottomNavActive()가 showSubpage()/hideSubpage()에서 활성 탭 표시를 같이 관리.
+  재료 관리/원가 계산 탭은 로그인 전엔 숨김(applyAuthUI()) — 로그인 없이 쓸 수 있는 기능이
+  아니라서, 다른 로그인 전용 UI와 같은 처리.
+-->
+<nav class="bottom-nav" aria-label="주요 화면 이동">
+  <div class="bottom-nav-inner">
+    <button type="button" class="bottom-nav-btn active" id="navHomeBtn" aria-label="레시피(계산기)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+      </svg>
+      <span>레시피</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="navArchiveBtn" aria-label="레시피 아카이브">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="2" y1="12" x2="22" y2="12"></line>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+      </svg>
+      <span>아카이브</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="navIngredientsBtn" aria-label="재료 관리" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"></path>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+      </svg>
+      <span>재료</span>
+    </button>
+    <button type="button" class="bottom-nav-btn" id="navCostBtn" aria-label="원가 계산" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23"></line>
+        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"></path>
+      </svg>
+      <span>원가</span>
+    </button>
   </div>
-</div>
+</nav>
 <div class="toast" id="toast">복사되었습니다</div>
 
 <!--
-  재료 관리 서브페이지 — .wrap 바깥, 계산기 화면(.wrap/.footer)을 아예 숨기고 그 자리를
+  재료 관리 서브페이지 — .wrap 바깥, 계산기 화면(.wrap)을 아예 숨기고 그 자리를
   통째로 차지하도록 body 직속으로 둔다(showSubpage()/hideSubpage() 참조). 배경을 가리는
   모달이 아니라 "다른 페이지로 이동"하는 느낌을 주기 위한 선택 — 계정 메뉴/레시피 검색
-  드롭다운 같은 작은 팝오버들과는 성격이 다르다.
+  드롭다운 같은 작은 팝오버들과는 성격이 다르다. 하단 네비게이션 바(2026-07-25)는 이
+  서브페이지 위에서도 계속 보인다(z-index가 더 높음) — .wrap과 달리 숨겨지지 않는다.
 -->
 <div class="subpage" id="ingredientManagerPage" style="display:none;">
   <div class="subpage-header">
@@ -1964,8 +2030,12 @@
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
   });
 
-  // Copy results
-  document.getElementById('copyBtn').addEventListener('click', function(){
+  // Copy results — 2026-07-25: moved from the old fixed footer into #selectedSharePanel
+  // (#copyResultBtn), reachable via the 공유 아이콘. Note this narrows availability slightly
+  // versus the old always-visible footer button: the share panel only shows for a
+  // selected/owned recipe (shareSelectedBtn's isOwner gate), so an ad-hoc calculation with no
+  // recipe ever saved/selected has no copy-to-clipboard path anymore.
+  document.getElementById('copyResultBtn').addEventListener('click', function(){
     var lines = [recipeNameInput.value, ''];
     var total;
     if (state.type === 'bread'){
@@ -1996,12 +2066,12 @@
     lines.push('총 반죽량  ' + fmt(total) + 'g');
     var text = lines.join('\n');
 
-    var btn = document.getElementById('copyBtn');
+    var btn = document.getElementById('copyResultBtn');
     var showCopyToast = function(){
       showToast('복사되었습니다');
       btn.textContent = '복사됨';
       btn.classList.add('copied');
-      setTimeout(function(){ btn.textContent = '결과 복사'; btn.classList.remove('copied'); }, 1600);
+      setTimeout(function(){ btn.textContent = '클립보드 복사'; btn.classList.remove('copied'); }, 1600);
     };
 
     if (navigator.clipboard && navigator.clipboard.writeText){
@@ -2082,7 +2152,8 @@
   var footerDirtyHintEl = document.getElementById('footerDirtyHint');
   var authRowEl = document.getElementById('authRow');
   var loggedInRowEl = document.getElementById('loggedInRow');
-  var manageIngredientsBtn = document.getElementById('manageIngredientsBtn');
+  var navHomeBtn = document.getElementById('navHomeBtn');
+  var navIngredientsBtn = document.getElementById('navIngredientsBtn');
   var ingredientManagerPageEl = document.getElementById('ingredientManagerPage');
   var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
@@ -2122,7 +2193,7 @@
   var cancelRecipeImportBtn = document.getElementById('cancelRecipeImportBtn');
   var pendingRecipeImportNew = [];     // parsed recipes from the CSV with no matching owned recipe name
   var pendingRecipeImportChanged = []; // parsed recipes matching an owned recipe whose composition differs
-  var openCostCalcBtn = document.getElementById('openCostCalcBtn');
+  var navCostBtn = document.getElementById('navCostBtn');
   var costCalcPageEl = document.getElementById('costCalcPage');
   var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
   var costRecipeSearchInput = document.getElementById('costRecipeSearchInput');
@@ -2175,7 +2246,7 @@
   var openHelpBtn = document.getElementById('openHelpBtn');
   var helpPageEl = document.getElementById('helpPage');
   var closeHelpBtn = document.getElementById('closeHelpBtn');
-  var openArchiveBtn = document.getElementById('openArchiveBtn');
+  var navArchiveBtn = document.getElementById('navArchiveBtn');
   var archivePageEl = document.getElementById('archivePage');
   var closeArchiveBtn = document.getElementById('closeArchiveBtn');
   var archiveSearchInput = document.getElementById('archiveSearchInput');
@@ -4524,12 +4595,25 @@
 
   // 재료 관리 / 원가 계산 are the only two screens in this file that fully replace the
   // calculator instead of floating over it as a small anchored popover — opening one hides
-  // .wrap/.footer outright rather than dimming them behind a modal, so it reads as "navigated
+  // .wrap outright rather than dimming it behind a modal, so it reads as "navigated
   // to a different page" rather than "a dialog popped up here."
   var calculatorWrapEl = document.querySelector('.wrap');
-  var calculatorFooterEl = document.querySelector('.footer');
   var mainHeaderActionsEl = document.getElementById('mainHeaderActions');
   var accountChipWrapEl = document.getElementById('accountChipWrap');
+  // 2026-07-25: 하단 네비게이션 탭(레시피/아카이브/재료/원가) 중 지금 열린 서브페이지에
+  // 해당하는 것만 강조 표시 — 서브페이지가 없는 화면(공유 관리/도움말/신고 내역/태그별 보기)은
+  // 매핑에 없으니 전부 꺼진 채로 둔다(탭 4개 중 아무것도 지금 화면을 대표하지 않으므로).
+  var navTabForPageId = {
+    ingredientManagerPage: navIngredientsBtn,
+    costCalcPage: navCostBtn,
+    archivePage: navArchiveBtn
+  };
+  function updateBottomNavActive(openPageEl){
+    document.querySelectorAll('.bottom-nav-btn').forEach(function(btn){ btn.classList.remove('active'); });
+    if (!openPageEl){ navHomeBtn.classList.add('active'); return; }
+    var btn = navTabForPageId[openPageEl.id];
+    if (btn) btn.classList.add('active');
+  }
   // showSubpage() hides any OTHER subpage that's currently open (not just the calculator) so
   // that navigating straight from one subpage's account menu to another (e.g. 재료 관리 ->
   // 조합 제품 원가 계산 without going back to the calculator first) can't leave two subpages
@@ -4541,7 +4625,6 @@
       if (p !== pageEl) p.style.display = 'none';
     });
     calculatorWrapEl.style.display = 'none';
-    calculatorFooterEl.style.display = 'none';
     // The theme toggle and account chip (with its popover) are single shared elements, moved
     // into whichever screen is currently on top — the main header when nothing's open, or
     // here — rather than duplicated per screen, so there's exactly one working copy of the
@@ -4553,14 +4636,25 @@
     }
     pageEl.style.display = 'block';
     window.scrollTo(0, 0);
+    updateBottomNavActive(pageEl);
   }
   function hideSubpage(pageEl){
     pageEl.style.display = 'none';
     calculatorWrapEl.style.display = '';
-    calculatorFooterEl.style.display = '';
     mainHeaderActionsEl.appendChild(themeToggleBtn);
     mainHeaderActionsEl.appendChild(accountChipWrapEl);
+    updateBottomNavActive(null);
   }
+  // "레시피" 탭(navHomeBtn) 전용 — 지금 열려 있는 서브페이지가 어느 것이든(재료 관리/원가
+  // 계산/아카이브뿐 아니라 공유 관리/도움말/신고 내역/태그별 보기까지) 상관없이 계산기로
+  // 돌아간다. 모든 closeXModal()이 결국 hideSubpage(그 페이지)만 호출하므로 페이지별
+  // 정리 로직 없이 안전하게 범용으로 처리할 수 있다.
+  function closeAnyOpenSubpage(){
+    var open = Array.prototype.slice.call(document.querySelectorAll('.subpage'))
+      .find(function(p){ return p.style.display !== 'none'; });
+    if (open) hideSubpage(open);
+  }
+  navHomeBtn.addEventListener('click', closeAnyOpenSubpage);
 
   function openIngredientManagerModal(){
     ingredientManagerSearchInput.value = ''; // don't carry over a filter from the last time this was open
@@ -4764,7 +4858,7 @@
   function closeArchiveModal(){
     hideSubpage(archivePageEl);
   }
-  openArchiveBtn.addEventListener('click', openArchiveModal);
+  navArchiveBtn.addEventListener('click', openArchiveModal);
   closeArchiveBtn.addEventListener('click', closeArchiveModal);
   archiveSearchInput.addEventListener('input', function(){
     renderPublicArchiveList(archiveSearchInput.value);
@@ -5616,6 +5710,10 @@
       // 신고 내역 메뉴는 사장님 계정에서만 보인다 — UI 편의일 뿐, 실제 접근 통제는
       // recipe_reports의 RLS(auth.uid()가 이 이메일과 일치하는지)가 담당.
       openReportsBtn.style.display = (currentUser.email === 'gigimeal@gmail.com') ? '' : 'none';
+      // 재료 관리/원가 계산 탭은 로그인 후에만 의미가 있는 기능(Supabase 데이터)이라
+      // 로그인 전엔 하단 네비게이션에서 숨긴다 — 다른 로그인 전용 UI와 같은 처리.
+      navIngredientsBtn.style.display = '';
+      navCostBtn.style.display = '';
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
@@ -5626,6 +5724,8 @@
       saveBtn.style.display = 'none';
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
+      navIngredientsBtn.style.display = 'none';
+      navCostBtn.style.display = 'none';
       closeIngredientManagerModal();
       closeCostCalcModal();
       closeRecipeTagsModal();
@@ -5747,14 +5847,8 @@
       accountMenuEl.style.display = accountMenuEl.style.display === 'none' ? 'block' : 'none';
     });
 
-    manageIngredientsBtn.addEventListener('click', function(){
-      closeAccountMenu();
-      openIngredientManagerModal();
-    });
-    openCostCalcBtn.addEventListener('click', function(){
-      closeAccountMenu();
-      openCostCalcModal();
-    });
+    navIngredientsBtn.addEventListener('click', openIngredientManagerModal);
+    navCostBtn.addEventListener('click', openCostCalcModal);
     openRecipeTagsBtn.addEventListener('click', function(){
       closeAccountMenu();
       openRecipeTagsModal();
