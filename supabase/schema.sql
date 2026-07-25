@@ -427,8 +427,15 @@ create table recipe_reports (
 );
 alter table recipe_reports enable row level security;
 create policy "anyone can report" on recipe_reports for insert with check (true);
+-- auth.users is never exposed to clients directly (같은 원칙, 파일 맨 위 참고) — 일반 RLS 정책은
+-- 클라이언트 권한으로 평가되기 때문에 auth.users를 직접 조회하면 "permission denied for table
+-- users"가 난다. share_recipe_with_email()처럼 SECURITY DEFINER 함수로 감싸서 우회한다.
+create or replace function is_report_admin()
+returns boolean language sql security definer stable as $$
+  select auth.uid() = (select id from auth.users where email = 'gigimeal@gmail.com');
+$$;
 create policy "owner manages reports" on recipe_reports for all
-  using (auth.uid() = (select id from auth.users where email = 'gigimeal@gmail.com'));
+  using (is_report_admin());
 
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This
