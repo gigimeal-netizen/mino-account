@@ -3455,16 +3455,39 @@
 
   // Persists just the ingredient-DB links back to this recipe's row — the recipe's own
   // `name`/`pct`/`weight` fields are carried through untouched (this modal never edits them).
+  //
+  // Two bugs fixed here (2026-07-25) after a report of links (소금/이스트) silently
+  // disappearing on reload despite no error ever showing:
+  // 1. `.update(...)` without `.select()` returns no row data — if the write matched zero
+  //    rows for any reason (RLS, a stale/mismatched id), Supabase reports plain success
+  //    (`res.error` stays null) with nothing actually written, and the old code had no way
+  //    to notice. Adding `.select()` lets a zero-row response be treated as a real failure
+  //    and surfaced with an alert, instead of silently believed.
+  // 2. Linking several ingredients back-to-back fires one save per link — with no
+  //    ordering guarantee between separate in-flight requests, a slower earlier save could
+  //    land at the DB *after* a faster later one and overwrite it with stale (less-linked)
+  //    data. costLinksSaveQueue chains every call onto the previous one's request finishing
+  //    first, so saves always reach the DB in the order they were made.
+  var costLinksSaveQueue = Promise.resolve();
   function saveCostRecipeLinks(){
     if (!costModalRecipe) return;
-    supabase.from('recipes').update({
-      flours: costModalRecipe.flours,
-      ingredients: costModalRecipe.ingredients
-    }).eq('id', costModalRecipe.id).then(function(res){
-      if (res.error){ alert('재료 연결 저장 실패: ' + res.error.message); return; }
-      // Keep myRecipes in sync so re-opening this recipe (here or in the main editor) reflects the new links.
-      var cached = myRecipes.find(function(r){ return r.id === costModalRecipe.id; });
-      if (cached){ cached.flours = costModalRecipe.flours; cached.ingredients = costModalRecipe.ingredients; }
+    var recipeId = costModalRecipe.id;
+    costLinksSaveQueue = costLinksSaveQueue.then(function(){
+      // Re-read costModalRecipe.flours/.ingredients now (not captured at call time) so a
+      // queued-but-not-yet-sent save still reflects the latest links once its turn comes.
+      return supabase.from('recipes').update({
+        flours: costModalRecipe.flours,
+        ingredients: costModalRecipe.ingredients
+      }).eq('id', recipeId).select().then(function(res){
+        if (res.error){ alert('재료 연결 저장 실패: ' + res.error.message); return; }
+        if (!res.data || res.data.length === 0){
+          alert('재료 연결이 저장되지 않았어요 (권한 문제일 수 있어요). 다시 시도해주세요.');
+          return;
+        }
+        // Keep myRecipes in sync so re-opening this recipe (here or in the main editor) reflects the new links.
+        var cached = myRecipes.find(function(r){ return r.id === recipeId; });
+        if (cached){ cached.flours = res.data[0].flours; cached.ingredients = res.data[0].ingredients; }
+      });
     });
   }
 
