@@ -355,6 +355,13 @@
   }
 
   .hint{ font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; line-height:1.5; word-break: keep-all; }
+  /* A <button class="hint ..."> (the whole hint line is clickable, not just a nested link)
+     needs its own button-default reset — .hint button.link above is for a link *inside* a
+     hint, a different case. */
+  button.hint-btn{
+    display: block; width: 100%; background: none; border: none; padding: 0;
+    font-family: inherit; text-align: left; cursor: pointer; text-decoration: underline;
+  }
   .hint button.link{
     background:none; border:none; padding:0; color: var(--accent);
     font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
@@ -875,7 +882,12 @@
     </div>
   </div>
   <div class="subpage-body">
-    <p class="hint warn-hint" id="ingredientManagerUnpricedHint" style="display:none;"></p>
+    <!--
+      단가 미입력 재료만 보기 — 원래는 그냥 안내 문구였는데, 그 자리에 눌러서 바로 필터링할
+      수 있게 버튼으로 바꿨다(요청: "단가 미입력 재료만 따로 볼 수 있는 기능"). renderIngredientManager()가
+      토글 상태에 따라 목록을 걸러내고, 문구 자체도 지금 필터 중인지 다시 알려준다.
+    -->
+    <button type="button" class="hint warn-hint hint-btn" id="ingredientManagerUnpricedHint" style="display:none;"></button>
     <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
     <!-- Pinned above the list (not below it) so adding a new ingredient never requires
          scrolling past however long the list has grown — only finding the just-added row
@@ -2250,17 +2262,29 @@
   // (add/deactivate change the list), each row wired independently right after it's built —
   // there's no reorder/index concern here (unlike ing-row), so each row just closes over its
   // own `ig` record directly instead of going through a data-idx pass like buildIngRows().
+  function isIngredientUnpriced(ig){
+    return ig.is_active !== false && !(ig.price_per_gram > 0);
+  }
+
+  // "단가 미입력만 보기" — 눌러서 바로 전체 목록을 필터링한다(요청: "단가 미입력 재료만
+  // 따로 볼 수 있는 기능"). 검색어와는 독립적으로 같이 적용됨 — 이름으로 좁힌 다음 그 안에서
+  // 단가 없는 것만 보는 것도 가능. 재료가 하나도 안 남으면(단가 미입력이 0개가 됨) 자동으로
+  // 꺼서 빈 화면에 갇히지 않게 한다.
+  var ingredientUnpricedOnlyFilter = false;
   function renderIngredientManager(query){
     ingredientManagerListEl.innerHTML = '';
     // Counted against the full list regardless of the current search filter, so it stays a
     // reliable "N개 남았어요" status even while searching for something else entirely.
-    var unpricedCount = myIngredients.filter(function(ig){
-      return ig.is_active !== false && !(ig.price_per_gram > 0);
-    }).length;
+    var unpricedCount = myIngredients.filter(isIngredientUnpriced).length;
+    if (unpricedCount === 0) ingredientUnpricedOnlyFilter = false;
     ingredientManagerUnpricedHintEl.style.display = unpricedCount > 0 ? 'block' : 'none';
-    ingredientManagerUnpricedHintEl.textContent = unpricedCount > 0 ? ('단가 미입력 재료 ' + unpricedCount + '개') : '';
+    ingredientManagerUnpricedHintEl.textContent = unpricedCount === 0 ? '' :
+      ingredientUnpricedOnlyFilter
+        ? ('단가 미입력만 보고 있어요 (' + unpricedCount + '개) · 전체 보기')
+        : ('단가 미입력 재료 ' + unpricedCount + '개 · 눌러서 보기');
     var q = (query || '').trim().toLowerCase();
     var visible = lastVisibleIngredients = myIngredients.filter(function(ig){
+      if (ingredientUnpricedOnlyFilter && !isIngredientUnpriced(ig)) return false;
       if (!q) return true;
       return (ig.name || '').toLowerCase().indexOf(q) !== -1 ||
              (ig.category || '').toLowerCase().indexOf(q) !== -1;
@@ -3578,6 +3602,7 @@
 
   function openIngredientManagerModal(){
     ingredientManagerSearchInput.value = ''; // don't carry over a filter from the last time this was open
+    ingredientUnpricedOnlyFilter = false;
     renderIngredientManager();
     showSubpage(ingredientManagerPageEl);
     closeIngredientManagerBtn.focus();
@@ -4174,6 +4199,10 @@
       });
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
+      renderIngredientManager(ingredientManagerSearchInput.value);
+    });
+    ingredientManagerUnpricedHintEl.addEventListener('click', function(){
+      ingredientUnpricedOnlyFilter = !ingredientUnpricedOnlyFilter;
       renderIngredientManager(ingredientManagerSearchInput.value);
     });
     ingredientSelectAllCheckbox.addEventListener('change', function(){
