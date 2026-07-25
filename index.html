@@ -4669,6 +4669,11 @@
       nameBtn.addEventListener('click', function(){
         if (!confirmDiscardIfDirty()) return;
         applyRecipeRowToState(r);
+        // 2026-07-25: renderSelectedRecipe()를 꼭 호출해야 한다 — 안 그러면 이전에 내 레시피를
+        // 선택해 공유 패널(CSV 내보내기 포함)이 열려 있던 상태가 안 닫힌 채로 남는다. 실제로
+        // 다른 레시피 데이터가 새는 건 아니었지만(패널은 여전히 그 이전 레시피를 가리킴),
+        // 화면 상태가 꼬이는 건 명백한 버그라 다른 로드 경로들과 똑같이 맞춘다.
+        renderSelectedRecipe(r);
         closeArchiveModal();
         showToast('레시피를 불러왔어요');
       });
@@ -5627,6 +5632,12 @@
         btn.addEventListener('click', function(){
           if (!confirmDiscardIfDirty()) return;
           applyRecipeRowToState(r);
+          // 2026-07-25: renderSelectedRecipe()는 일부러 안 부른다 — 여기(?tag_share= 익명 링크)는
+          // ?share=와 마찬가지로 "누구나 링크로 봤으면 로그인 후 저장(사본)까지 항상 허용"이
+          // 기존부터 정해진 동작인데, renderSelectedRecipe()는 canSaveThisRecipe()로 계정 기반
+          // 공유 여부를 따로 판단해서(이 링크 공유와는 무관한 기준) 저장 버튼을 도로 숨겨버린다.
+          // 레시피 아카이브는 is_public 레시피라 canSaveThisRecipe()가 항상 true를 반환해서
+          // 안전하게 호출할 수 있었지만, 여긴 그 지름길이 없어 그대로 두면 회귀 버그가 된다.
           showToast('레시피를 불러왔어요');
         });
         tagSharedListEl.appendChild(btn);
