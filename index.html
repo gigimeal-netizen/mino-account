@@ -433,6 +433,19 @@
     flex: 1 1 100%; font-family: var(--font-mono); font-size: 12px;
     color: var(--ink-soft); text-align: right;
   }
+  .cost-ing-category{
+    display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px;
+    background: var(--bg-elevated); color: var(--ink-soft);
+    font-size: 10.5px; font-weight: 600; vertical-align: middle;
+  }
+  .cost-ing-suggestion{
+    flex: 1 1 100%; display: flex; align-items: center; justify-content: flex-end;
+    gap: 6px; font-size: 12.5px; color: var(--ink-soft);
+  }
+  .cost-ing-suggestion-btn{
+    background: none; border: none; padding: 2px 4px; color: var(--accent);
+    font-weight: 700; font-size: 12.5px; cursor: pointer; text-decoration: underline;
+  }
   .ing-link-input{
     width: 100%; display: block; font-family: var(--font-body); font-size: 14px;
     background: var(--bg-elevated); border: 1.5px solid var(--border-strong); border-radius: 8px;
@@ -744,6 +757,7 @@
     </div>
   </div>
   <div class="subpage-body">
+    <p class="hint warn-hint" id="ingredientManagerUnpricedHint" style="display:none;"></p>
     <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
     <div id="ingredientManagerList"></div>
     <button class="add-btn" id="addIngredientMasterBtn">+ 재료 추가</button>
@@ -1412,6 +1426,7 @@
   var closeIngredientManagerBtn = document.getElementById('closeIngredientManagerBtn');
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
+  var ingredientManagerUnpricedHintEl = document.getElementById('ingredientManagerUnpricedHint');
   var openCostCalcBtn = document.getElementById('openCostCalcBtn');
   var costCalcPageEl = document.getElementById('costCalcPage');
   var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
@@ -1578,12 +1593,15 @@
     var rows = recipeLike.flours.concat(recipeLike.ingredients);
     var items = rows.map(function(row){
       var w = isBread ? BASE * (parseFloat(row.pct) || 0) / 100 : (parseFloat(row.weight) || 0);
-      var pricePerGram = null;
+      var pricePerGram = null, category = '';
       if (row.ingredientId){
         var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
-        if (found && found.price_per_gram > 0) pricePerGram = found.price_per_gram;
+        if (found){
+          category = found.category || '';
+          if (found.price_per_gram > 0) pricePerGram = found.price_per_gram;
+        }
       }
-      return { row: row, weight: w, pricePerGram: pricePerGram, cost: pricePerGram !== null ? w * pricePerGram : 0 };
+      return { row: row, weight: w, pricePerGram: pricePerGram, category: category, cost: pricePerGram !== null ? w * pricePerGram : 0 };
     });
     var totalWeight = items.reduce(function(s, it){ return s + it.weight; }, 0);
     var totalCost = items.reduce(function(s, it){ return s + it.cost; }, 0);
@@ -1622,6 +1640,13 @@
   // own `ig` record directly instead of going through a data-idx pass like buildIngRows().
   function renderIngredientManager(query){
     ingredientManagerListEl.innerHTML = '';
+    // Counted against the full list regardless of the current search filter, so it stays a
+    // reliable "N개 남았어요" status even while searching for something else entirely.
+    var unpricedCount = myIngredients.filter(function(ig){
+      return ig.is_active !== false && !(ig.price_per_gram > 0);
+    }).length;
+    ingredientManagerUnpricedHintEl.style.display = unpricedCount > 0 ? 'block' : 'none';
+    ingredientManagerUnpricedHintEl.textContent = unpricedCount > 0 ? ('단가 미입력 재료 ' + unpricedCount + '개') : '';
     var q = (query || '').trim().toLowerCase();
     var visible = myIngredients.filter(function(ig){
       if (!q) return true;
@@ -1851,16 +1876,66 @@
     else inputEl.setAttribute('data-unresolved', '');
   }
 
+  // Whitespace differences ("르방리퀴드" vs "르방 리퀴드") are the same ingredient, not a
+  // fuzzy match — normalize before comparing so migrateIngredientRow() treats them as exact.
+  function normalizeForMatch(s){
+    return (s || '').replace(/\s+/g, '').toLowerCase();
+  }
+
   // Legacy rows (saved before ingredient-DB linking existed) only have a `name`. On load,
-  // try a one-shot exact-name match against the ingredient master; on success the row is
-  // linked from here on, on failure it's left unresolved (ingredientId stays null) — same
-  // non-blocking "please pick one" state a never-confirmed new row is in, no special case.
+  // try a one-shot whitespace-normalized name match against the ingredient master; on success
+  // the row is linked from here on, on failure it's left unresolved (ingredientId stays null)
+  // — same non-blocking "please pick one" state a never-confirmed new row is in, no special case.
   function migrateIngredientRow(row){
     if (!row.ingredientId && row.name){
-      var match = myIngredients.find(function(ig){ return ig.name === row.name; });
+      var norm = normalizeForMatch(row.name);
+      var match = myIngredients.find(function(ig){ return normalizeForMatch(ig.name) === norm; });
       if (match) row.ingredientId = match.id;
     }
     return row;
+  }
+
+  // Classic edit-distance DP, used only to suggest a likely match for a still-unresolved
+  // ingredient row (typos, not just whitespace — those are already caught by
+  // migrateIngredientRow()'s normalized exact match above).
+  function levenshtein(a, b){
+    if (a === b) return 0;
+    var m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    var prev = [], curr = [];
+    for (var j = 0; j <= n; j++) prev[j] = j;
+    for (var i = 1; i <= m; i++){
+      curr[0] = i;
+      for (j = 1; j <= n; j++){
+        var cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+        curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      }
+      var tmp = prev; prev = curr; curr = tmp;
+    }
+    return prev[n];
+  }
+
+  // Best-guess candidate for a row that migrateIngredientRow() couldn't resolve — lets the
+  // cost-calc ingredient list offer a one-click "혹시 이건가요?" instead of making the user
+  // open the search combo and retype something that's 90% already right (typo, one missing
+  // character, etc). Threshold scales with name length so short names need a near-exact typo,
+  // not just "any 2 edits away."
+  function findSimilarIngredient(name){
+    var norm = normalizeForMatch(name);
+    if (!norm) return null;
+    var best = null, bestDist = Infinity;
+    myIngredients.forEach(function(ig){
+      if (ig.is_active === false) return;
+      var igNorm = normalizeForMatch(ig.name);
+      if (!igNorm || igNorm === norm) return;
+      var dist = levenshtein(norm, igNorm);
+      var threshold = Math.max(1, Math.floor(Math.max(norm.length, igNorm.length) * 0.34));
+      if (dist <= threshold && dist < bestDist){
+        best = ig; bestDist = dist;
+      }
+    });
+    return best;
   }
 
   // Reused only by the "원가 계산" modal's ingredient-link list: same show-everything-on-
@@ -2305,14 +2380,26 @@
     var rows = costModalRecipe.flours.concat(costModalRecipe.ingredients);
     rows.forEach(function(row, idx){
       var item = breakdown.items[idx];
+      var isResolved = row.ingredientId && myIngredients.some(function(ig){ return ig.id === row.ingredientId; });
+      var suggestion = !isResolved ? findSimilarIngredient(row.name) : null;
       var rowEl = document.createElement('div');
       rowEl.className = 'cost-ing-row';
       rowEl.innerHTML =
         '<div class="cost-ing-name"></div>' +
         '<div class="ing-link-combo"><input class="ing-link-input" autocomplete="off"><div class="combo-dropdown" style="display:none;"></div></div>' +
-        '<div class="cost-ing-price"></div>';
+        '<div class="cost-ing-price"></div>' +
+        (suggestion
+          ? '<div class="cost-ing-suggestion">혹시 "' + escapeHtml(suggestion.name) + '"인가요? <button type="button" class="cost-ing-suggestion-btn">연결</button></div>'
+          : '');
       costIngredientsListEl.appendChild(rowEl);
-      rowEl.querySelector('.cost-ing-name').textContent = row.name || '';
+      var nameEl = rowEl.querySelector('.cost-ing-name');
+      nameEl.textContent = row.name || '';
+      if (item.category){
+        var categoryTag = document.createElement('span');
+        categoryTag.className = 'cost-ing-category';
+        categoryTag.textContent = item.category;
+        nameEl.appendChild(categoryTag);
+      }
       var priceEl = rowEl.querySelector('.cost-ing-price');
       if (item.pricePerGram !== null){
         var contribution = breakdown.totalCost > 0 ? Math.round(item.cost / breakdown.totalCost * 100) : 0;
@@ -2327,6 +2414,13 @@
         saveCostRecipeLinks();
         renderCostIngredientsList(); // rebuild (its own tail already calls refreshProductCosts()) so price/contribution reflect the new link
       });
+      if (suggestion){
+        rowEl.querySelector('.cost-ing-suggestion-btn').addEventListener('click', function(){
+          row.ingredientId = suggestion.id;
+          saveCostRecipeLinks();
+          renderCostIngredientsList();
+        });
+      }
     });
     refreshProductCosts();
   }
