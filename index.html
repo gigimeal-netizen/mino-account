@@ -534,6 +534,11 @@
   /* 도움말 화면 본문 — .hint(ink-soft, 12.5px, 부가 설명용)와 달리 이게 화면의 주된 읽을거리라
      기본 ink 색·조금 더 큰 글자로 둔다. */
   .help-body p{ font-size: 14px; line-height: 1.6; color: var(--ink); margin: 0 0 12px; word-break: keep-all; }
+  /* 도움말 맨 위 "아이콘 안내" — 실제 버튼과 똑같은 .icon-btn을 그대로 재사용해서(정적 표시용,
+     클릭 안 됨) 앱 안에서 보이는 모양 그대로 보여준다. 아이콘 옆에 이름+짧은 설명. */
+  .help-icon-row{ display:flex; align-items:center; gap: 12px; margin-bottom: 12px; }
+  .help-icon-row .icon-btn{ flex: 0 0 auto; cursor: default; }
+  .help-icon-row .icon-btn:hover{ border-color: var(--border-strong); color: var(--ink); }
   /* 레시피 원가 계산 화면의 레시피 목록 안에서, 펼쳐진 상세의 "이 레시피의 g당 원가" 등
      안내문 바로 아래에 이어지는 재료 연결 목록: 이름(레시피 그대로, 읽기 전용) + 재료DB 링크 콤보. */
   .cost-ing-row{
@@ -1169,6 +1174,106 @@
     </div>
   </div>
   <div class="subpage-body help-body">
+    <h3>아이콘 안내</h3>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+        </svg>
+      </span>
+      <div><strong>테마 전환</strong><p class="hint" style="margin:2px 0 0;">화면을 밝게/어둡게 바꿔요. (헤더 오른쪽)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </span>
+      <div><strong>계정</strong><p class="hint" style="margin:2px 0 0;">로그인 상태를 보여주고, 누르면 로그인/로그아웃과 계정 메뉴(재료 관리, 원가 계산 등)를 열어요. (헤더 오른쪽)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </span>
+      <div><strong>새 레시피</strong><p class="hint" style="margin:2px 0 0;">제빵/제과/기타 중 하나를 골라 새로 시작해요. (레시피 이름 옆)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </span>
+      <div><strong>저장</strong><p class="hint" style="margin:2px 0 0;">지금 화면의 레시피를 저장해요. 로그인해야 보이고, 공유받은 레시피는 저장 가능(공개) 설정일 때만 보여요.</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </span>
+      <div><strong>레시피 아카이브</strong><p class="hint" style="margin:2px 0 0;">누구나 볼 수 있는 공개 게시판을 둘러봐요. (레시피 이름 옆)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+      </span>
+      <div><strong>태그별 보기</strong><p class="hint" style="margin:2px 0 0;">내 레시피를 태그로 묶어서 봐요. (로그인 후, 레시피 검색창 옆)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"></circle>
+          <circle cx="6" cy="12" r="3"></circle>
+          <circle cx="18" cy="19" r="3"></circle>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+        </svg>
+      </span>
+      <div><strong>공유</strong><p class="hint" style="margin:2px 0 0;">선택한 내 레시피의 링크 공유·공개 게시판 설정을 열어요. (내 레시피 선택 시)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn danger" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </span>
+      <div><strong>삭제</strong><p class="hint" style="margin:2px 0 0;">선택한 내 레시피를 삭제해요(되돌릴 수 없어요).</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </span>
+      <div><strong>계산기로 돌아가기</strong><p class="hint" style="margin:2px 0 0;">재료 관리/원가 계산/공유 관리/신고 내역/태그별 보기 같은 화면에서 계산기 메인 화면으로 돌아가요. (각 화면 왼쪽 위)</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+          <line x1="4" y1="22" x2="4" y2="15"></line>
+        </svg>
+      </span>
+      <div><strong>신고</strong><p class="hint" style="margin:2px 0 0;">레시피 아카이브에서 부적절한 게시물을 알려요. (아카이브 목록 각 행)</p></div>
+    </div>
+
     <h3>계산기 기초</h3>
     <p>이 계산기는 베이커스 퍼센트(밀가루 전체를 100%로 두고, 나머지 재료를 그 비율로 표시하는 방식)를 기본으로 해요. 제빵 레시피는 밀가루가 여러 종류여도 전부 합쳐서 100%가 되고, 물·소금·이스트 같은 재료는 그 밀가루 총량 대비 비율(%)로 입력합니다.</p>
     <p><strong>배율 조정</strong> 모드는 "기준 밀가루량 × 배율"로 전체 반죽을 스케일해요. <strong>총 반죽량 기준</strong> 모드는 반대로 "원하는 완성 반죽 무게"를 입력하면 거기서 밀가루량을 거꾸로 계산해줘요 — 반죽을 여러 크기로 나눠 만들 때는 "반죽 분할"(무게 × 개수)을 여러 개 추가해서 합산할 수도 있어요.</p>
