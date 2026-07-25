@@ -26,6 +26,12 @@ create table recipes (
   ingredients jsonb not null default '[]',
   notes text not null default '',
   share_token uuid,               -- null = link sharing off
+  -- 2026-07-25: 레시피 아카이브(공개 게시판) — 지금까지의 공유(링크/계정 지정)와 달리, 이건
+  -- 로그인 없이 누구나 볼 수 있는 진짜 공개 게시. author_display_name은 별도 프로필 테이블 없이
+  -- 레시피 행에 바로 저장하는 선택적 닉네임(비우면 화면에 "익명") — recipe_shares.shared_with_email과
+  -- 같은 "행에 표시용 텍스트를 바로 저장" 패턴.
+  is_public boolean not null default false,
+  author_display_name text not null default '',
   -- 원가 계산 전용 독립 사본. 원가 계산 화면은 이 세 컬럼만 읽고 쓴다 — flours/ingredients
   -- (메인 계산기가 편집하는 실데이터)와는 별개라서, 메인 계산기에서 배합을 조정해도
   -- 원가 계산 쪽 재료 연결은 말없이 안 바뀐다. cost_snapshot_taken_at이 null이면 아직 원가
@@ -191,6 +197,11 @@ create policy "owner full access" on recipes for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "shared read access" on recipes for select
   using (is_recipe_shared_with_me(id) or is_recipe_tag_shared_with_me(owner_id, tags));
+-- 레시피 아카이브: 이건 의도적으로 "누구나"(anon 포함) 읽을 수 있는 단순 컬럼 조건 정책이다 —
+-- 파일 맨 위의 "share_token is not null 정책 안 씀" 원칙은 링크 공유(원치 않는 사람에게 발견되면
+-- 안 되는 것)에 관한 거고, 공개 게시판은 정반대로 발견/브라우징이 목적이라 이 방식이 맞다.
+create policy "public recipes are readable by anyone" on recipes for select
+  using (is_public = true);
 
 create policy "owner manages shares" on recipe_shares for all
   using (is_owner_of_recipe(recipe_id));
@@ -403,6 +414,21 @@ begin
   return 'ok';
 end; $$;
 grant execute on function claim_tag_share_invite(uuid) to authenticated;
+
+-- 레시피 아카이브 신고 — 로그인 여부와 무관하게 누구나 사유만 남길 수 있는 쓰기 전용 테이블.
+-- 별도 관리자 역할(RBAC) 테이블을 새로 만드는 대신, 이 개인 프로젝트의 유일한 운영자 계정
+-- 이메일을 정책에 직접 박아둔다 — 여러 사업자가 쓰는 SaaS가 아니라 한 사람이 운영하는 개인
+-- 도구라, 이 규모에서는 새 권한 체계보다 이게 훨씬 간단하고 충분하다.
+create table recipe_reports (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  reason text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table recipe_reports enable row level security;
+create policy "anyone can report" on recipe_reports for insert with check (true);
+create policy "owner manages reports" on recipe_reports for all
+  using (auth.uid() = (select id from auth.users where email = 'gigimeal@gmail.com'));
 
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This
