@@ -941,6 +941,15 @@
     el.addEventListener('blur', function(){ updateDisplays(); });
   }
 
+  // App-wide: focusing any number field selects its current content, so typing a new value
+  // immediately replaces it instead of requiring "clear the 0 first, then type" every time.
+  // One delegated listener covers every numeric input on the page (recipe pct/weight, product
+  // weight/price/loss rate, ingredient purchase amount/price, etc.) without needing to wire it
+  // up per field — including ones that don't exist yet when the page first loads.
+  document.addEventListener('focusin', function(e){
+    if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'number') e.target.select();
+  });
+
   // With a single flour type, its % is trivially 100 (nothing to split with) — editing its
   // weight is really editing the recipe's total flour weight, so drive that anchor instead
   // (baseFlour in Mode A, targetTotal in Mode B) rather than treating it as a % of itself.
@@ -1848,9 +1857,12 @@
       var delBtn = row.querySelector('.product-del');
 
       nameEl.value = pd.name || '';
-      weightEl.value = pd.portion_weight || 0;
-      priceEl.value = pd.selling_price || 0;
-      lossEl.value = pd.loss_rate_pct || 0;
+      // Left blank (not "0") when unset so the placeholder ("1개당(g)" etc.) actually shows —
+      // a real value of 0 is meaningless for these fields anyway, and a brand-new product
+      // otherwise showed three indistinguishable "0"s with no way to tell which was which.
+      weightEl.value = pd.portion_weight > 0 ? pd.portion_weight : '';
+      priceEl.value = pd.selling_price > 0 ? pd.selling_price : '';
+      lossEl.value = pd.loss_rate_pct > 0 ? pd.loss_rate_pct : '';
 
       function saveFields(fields){
         supabase.from('products').update(fields).eq('id', pd.id).then(function(res){
