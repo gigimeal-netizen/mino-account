@@ -673,6 +673,13 @@
     -->
     <p class="hint" id="tagSharedBanner" style="display:none;">공유된 태그의 레시피 목록이에요. 하나를 눌러서 읽기 전용으로 볼 수 있어요.</p>
     <div id="tagSharedList" style="display:none;"></div>
+    <!--
+      1회용 초대 링크(?claim_share=/?claim_tag_share=) 랜딩 — 로그인해야만 클레임되므로, 아직
+      로그인 전이면 이 안내만 보이고("로그인하면 적용돼요"), 로그인이 완료되는 순간
+      tryClaimPendingInvite()가 자동으로 처리한 뒤 토스트로 결과를 알려준다(계산기에 뭘
+      채우지도, 이 배너를 계속 띄워두지도 않음 — 결과는 "공유받은 레시피" 목록에서 확인).
+    -->
+    <p class="hint" id="claimShareBanner" style="display:none;">초대 링크예요 — 로그인하면 자동으로 공유가 적용돼요.</p>
   </header>
 
   <section class="card recipe-toolbar">
@@ -1750,9 +1757,16 @@
   // 수신자 쪽(canSaveThisRecipe) 판단을 동시에 커버한다.
   var myRecipeShares = []; // rows from `recipe_shares`
   var myTagAccountShares = []; // rows from `tag_account_shares`
+  var myRecipeShareInvites = []; // rows from `recipe_share_invites` (1회용 초대 링크)
+  var myTagShareInvites = []; // rows from `tag_share_invites`
   var currentRecipeSaveAllowed = true; // 지금 계산기에 로드된 레시피를 저장해도 되는지 — renderSelectedRecipe()/newRecipe()가 갱신
   var sharedViewToken = new URLSearchParams(location.search).get('share');
   var tagSharedToken = new URLSearchParams(location.search).get('tag_share');
+  // 2026-07-25: 1회용 초대 링크(claim_recipe_share_invite/claim_tag_share_invite) — 로그인해야만
+  // 클레임이 되므로, 이 토큰들은 applyAuthUI()의 로그인 분기에서 tryClaimPendingInvite()가 처리한다.
+  var claimShareToken = new URLSearchParams(location.search).get('claim_share');
+  var claimTagShareToken = new URLSearchParams(location.search).get('claim_tag_share');
+  var claimAttempted = false; // 페이지 로드당 한 번만 시도 — applyAuthUI()가 로그인마다 여러 번 불릴 수 있어서
 
   var accountChipBtn = document.getElementById('accountChipBtn');
   var accountMenuEl = document.getElementById('accountMenu');
@@ -1863,6 +1877,7 @@
   var copyLinkBtn = document.getElementById('copyLinkBtn');
   var sharedBannerEl = document.getElementById('sharedBanner');
   var tagSharedBannerEl = document.getElementById('tagSharedBanner');
+  var claimShareBannerEl = document.getElementById('claimShareBanner');
   var tagSharedListEl = document.getElementById('tagSharedList');
   var subTextEl = document.getElementById('subText');
 
@@ -1993,6 +2008,27 @@
       if (res.error){ alert('태그 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
       myTagAccountShares = res.data || [];
     });
+  }
+
+  function loadMyRecipeShareInvites(){
+    return supabase.from('recipe_share_invites').select('*').then(function(res){
+      if (res.error){ alert('레시피 초대 링크 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myRecipeShareInvites = res.data || [];
+    });
+  }
+
+  function loadMyTagShareInvites(){
+    return supabase.from('tag_share_invites').select('*').then(function(res){
+      if (res.error){ alert('태그 초대 링크 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myTagShareInvites = res.data || [];
+    });
+  }
+
+  function claimShareUrl(token){
+    return location.origin + location.pathname + '?claim_share=' + token;
+  }
+  function claimTagShareUrl(token){
+    return location.origin + location.pathname + '?claim_tag_share=' + token;
   }
 
   // 레시피 소유자면 항상 저장 가능. 아니면 레시피 개별 공유(recipe_shares) 또는 이 레시피가 가진
@@ -3835,7 +3871,10 @@
 
   function openShareManagerModal(){
     switchShareTab('recipe');
-    Promise.all([loadMyRecipeShares(), loadMyTagAccountShares()]).then(function(){
+    Promise.all([
+      loadMyRecipeShares(), loadMyTagAccountShares(),
+      loadMyRecipeShareInvites(), loadMyTagShareInvites()
+    ]).then(function(){
       renderShareRecipesList();
       renderShareTagsList();
     });
@@ -3879,6 +3918,34 @@
     });
   }
 
+  // 미클레임 초대 링크(claimed_by가 null인 것) 한 줄 + 복사 + 취소 — 레시피 탭/태그 탭 공통.
+  // 클레임된 초대는 이미 위 renderGranteeRows() 목록에 실제 이메일로 나타나므로 여기 다시
+  // 표시하지 않는다(호출하는 쪽에서 미클레임만 걸러서 넘긴다). 대기 중인 게 없으면 아무것도
+  // 안 그린다 — "초대 링크 만들기" 버튼 하나로 이미 비어있는 상태가 충분히 명확해서.
+  function renderPendingInviteRows(containerEl, invites, urlFn, onCancel){
+    containerEl.innerHTML = '';
+    invites.forEach(function(inv){
+      var iRow = document.createElement('div');
+      iRow.className = 'link-row';
+      iRow.innerHTML =
+        '<p class="hint link-url"></p>' +
+        '<button type="button" class="io-btn">복사</button>' +
+        '<button type="button" class="io-btn danger">취소</button>';
+      var url = urlFn(inv.token);
+      iRow.querySelector('.link-url').textContent = url;
+      var buttons = iRow.querySelectorAll('button');
+      buttons[0].addEventListener('click', function(){
+        copyToClipboard(url);
+        showToast('링크를 복사했어요');
+      });
+      buttons[1].addEventListener('click', function(){
+        if (!confirm('이 초대 링크를 취소할까요? (아직 아무도 열지 않은 링크예요)')) return;
+        onCancel(inv);
+      });
+      containerEl.appendChild(iRow);
+    });
+  }
+
   function renderShareRecipesList(){
     shareRecipeListEl.innerHTML = '';
     var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
@@ -3915,6 +3982,10 @@
             '<input type="email" class="text-input share-add-email-input" autocomplete="off" placeholder="이메일로 공유 추가">' +
             '<button type="button" class="io-btn share-add-email-btn">추가</button>' +
           '</div>' +
+          '<div class="toolbar-divider"></div>' +
+          '<p class="hint">아직 가입 전인 사람에게는 1회용 초대 링크로 미리 공유해둘 수 있어요. 링크를 열고 로그인하는 순간 그 계정 앞으로 공유가 적용돼요.</p>' +
+          '<button type="button" class="add-btn share-create-invite-btn">+ 초대 링크 만들기</button>' +
+          '<div class="share-pending-invite-list"></div>' +
         '</div>';
       shareRecipeListEl.appendChild(row);
 
@@ -3927,6 +3998,8 @@
       var granteeListEl = row.querySelector('.share-grantee-list');
       var addEmailInput = row.querySelector('.share-add-email-input');
       var addEmailBtn = row.querySelector('.share-add-email-btn');
+      var createInviteBtn = row.querySelector('.share-create-invite-btn');
+      var pendingInviteListEl = row.querySelector('.share-pending-invite-list');
       var grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
       // 공유 대상이 아직 없을 때(grants가 비어있을 때)도 토글이 클릭한 값을 그대로 보여줘야 하고,
       // 그다음 "이메일로 공유 추가"가 그 값을 써야 한다 — grants.some(...)으로 매번 다시 계산하면
@@ -3959,6 +4032,20 @@
       refreshToggleButtons();
       refreshGrantees();
 
+      var pendingInvites = myRecipeShareInvites.filter(function(inv){ return inv.recipe_id === r.id && !inv.claimed_by; });
+      function refreshPendingInvites(){
+        renderPendingInviteRows(pendingInviteListEl, pendingInvites, claimShareUrl, function(inv){
+          supabase.from('recipe_share_invites').delete().eq('id', inv.id).then(function(res){
+            if (res.error){ alert('취소 실패: ' + res.error.message); return; }
+            myRecipeShareInvites = myRecipeShareInvites.filter(function(s){ return s.id !== inv.id; });
+            pendingInvites = myRecipeShareInvites.filter(function(s){ return s.recipe_id === r.id && !s.claimed_by; });
+            refreshPendingInvites();
+            showToast('초대 링크를 취소했어요');
+          });
+        });
+      }
+      refreshPendingInvites();
+
       function setCanSaveForAll(canSave){
         pendingCanSave = canSave;
         refreshToggleButtons();
@@ -3970,6 +4057,18 @@
       }
       allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
       denyBtn.addEventListener('click', function(){ setCanSaveForAll(false); });
+
+      createInviteBtn.addEventListener('click', function(){
+        supabase.rpc('create_recipe_share_invite', { p_recipe_id: r.id, p_can_save: pendingCanSave }).then(function(res){
+          if (res.error){ alert('초대 링크 생성 실패: ' + res.error.message); return; }
+          loadMyRecipeShareInvites().then(function(){
+            pendingInvites = myRecipeShareInvites.filter(function(s){ return s.recipe_id === r.id && !s.claimed_by; });
+            refreshPendingInvites();
+            copyToClipboard(claimShareUrl(res.data));
+            showToast('초대 링크를 만들어서 복사했어요');
+          });
+        });
+      });
 
       addEmailBtn.addEventListener('click', function(){
         var email = addEmailInput.value.trim();
@@ -4047,6 +4146,10 @@
             '<input type="email" class="text-input share-add-email-input" autocomplete="off" placeholder="이메일로 공유 추가">' +
             '<button type="button" class="io-btn share-add-email-btn">추가</button>' +
           '</div>' +
+          '<div class="toolbar-divider"></div>' +
+          '<p class="hint">아직 가입 전인 사람에게는 1회용 초대 링크로 미리 공유해둘 수 있어요. 링크를 열고 로그인하는 순간 그 계정 앞으로 공유가 적용돼요.</p>' +
+          '<button type="button" class="add-btn share-create-invite-btn">+ 초대 링크 만들기</button>' +
+          '<div class="share-pending-invite-list"></div>' +
         '</div>';
       shareTagListEl.appendChild(row);
 
@@ -4059,6 +4162,8 @@
       var granteeListEl = row.querySelector('.share-grantee-list');
       var addEmailInput = row.querySelector('.share-add-email-input');
       var addEmailBtn = row.querySelector('.share-add-email-btn');
+      var createInviteBtn = row.querySelector('.share-create-invite-btn');
+      var pendingInviteListEl = row.querySelector('.share-pending-invite-list');
       var grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
       // 레시피 탭과 같은 이유 — grants가 비어있을 때도 토글 클릭이 반영되고 그 값이 "공유 추가"에
       // 쓰이도록, pendingCanSave가 이 화면에서 선택된 값의 유일한 출처.
@@ -4089,6 +4194,20 @@
       refreshToggleButtons();
       refreshGrantees();
 
+      var pendingInvites = myTagShareInvites.filter(function(inv){ return inv.owner_id === currentUser.id && inv.tag === tag && !inv.claimed_by; });
+      function refreshPendingInvites(){
+        renderPendingInviteRows(pendingInviteListEl, pendingInvites, claimTagShareUrl, function(inv){
+          supabase.from('tag_share_invites').delete().eq('id', inv.id).then(function(res){
+            if (res.error){ alert('취소 실패: ' + res.error.message); return; }
+            myTagShareInvites = myTagShareInvites.filter(function(s){ return s.id !== inv.id; });
+            pendingInvites = myTagShareInvites.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag && !s.claimed_by; });
+            refreshPendingInvites();
+            showToast('초대 링크를 취소했어요');
+          });
+        });
+      }
+      refreshPendingInvites();
+
       function setCanSaveForAll(canSave){
         pendingCanSave = canSave;
         refreshToggleButtons();
@@ -4100,6 +4219,18 @@
       }
       allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
       denyBtn.addEventListener('click', function(){ setCanSaveForAll(false); });
+
+      createInviteBtn.addEventListener('click', function(){
+        supabase.rpc('create_tag_share_invite', { p_tag: tag, p_can_save: pendingCanSave }).then(function(res){
+          if (res.error){ alert('초대 링크 생성 실패: ' + res.error.message); return; }
+          loadMyTagShareInvites().then(function(){
+            pendingInvites = myTagShareInvites.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag && !s.claimed_by; });
+            refreshPendingInvites();
+            copyToClipboard(claimTagShareUrl(res.data));
+            showToast('초대 링크를 만들어서 복사했어요');
+          });
+        });
+      });
 
       addEmailBtn.addEventListener('click', function(){
         var email = addEmailInput.value.trim();
@@ -4515,6 +4646,7 @@
       loadMyIngredients();
       loadMyRecipeShares();
       loadMyTagAccountShares();
+      tryClaimPendingInvite();
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
@@ -4598,6 +4730,37 @@
         });
         tagSharedListEl.appendChild(btn);
       });
+    });
+  }
+
+  // 1회용 초대 링크(`?claim_share=`/`?claim_tag_share=`) — ?share=/?tag_share=(읽기전용, 로그인
+  // 여부와 무관하게 항상 동작)와 달리 로그인해야만 클레임이 성립하므로, 계산기를 채우는 대신
+  // 로그인 전엔 안내 배너만 띄우고 실제 처리는 applyAuthUI()의 로그인 분기에서
+  // tryClaimPendingInvite()가 담당한다.
+  function initClaimShareBanner(){
+    subTextEl.style.display = 'none';
+    claimShareBannerEl.style.display = 'block';
+  }
+
+  function tryClaimPendingInvite(){
+    if (claimAttempted || !currentUser) return;
+    if (!claimShareToken && !claimTagShareToken) return;
+    claimAttempted = true;
+    var isRecipe = !!claimShareToken;
+    var rpcName = isRecipe ? 'claim_recipe_share_invite' : 'claim_tag_share_invite';
+    var params = isRecipe ? { p_token: claimShareToken } : { p_token: claimTagShareToken };
+    supabase.rpc(rpcName, params).then(function(res){
+      if (res.error){ alert('초대 링크 처리 실패: ' + res.error.message); return; }
+      claimShareBannerEl.style.display = 'none';
+      if (res.data === 'ok' || res.data === 'already_yours'){
+        loadMyRecipes(); // "공유받은 레시피" 목록에 방금 늘어난 항목 반영
+        showToast('공유가 적용됐어요 — "공유받은 레시피"에서 확인해보세요');
+      } else if (res.data === 'already_claimed'){
+        alert('이 초대 링크는 이미 다른 계정에서 사용됐어요.');
+      } else if (res.data === 'not_found'){
+        alert('유효하지 않은 초대 링크예요.');
+      }
+      // 'is_owner'는 본인 소유라 조용히 무시 — 이미 접근 권한이 있으니 알릴 게 없다.
     });
   }
 
@@ -4818,7 +4981,11 @@
     // the OAuth round trip completes — which can land back on the site root instead of
     // this page. Pin it to this exact URL (this same string must also be added to
     // Supabase's Authentication → URL Configuration → Redirect URLs allow-list).
-    var loginRedirect = location.origin + location.pathname;
+    // 2026-07-25: includes location.search now (not just pathname) — a `?claim_share=`/
+    // `?claim_tag_share=` invite token in the URL used to get silently dropped across the
+    // OAuth round trip, since the redirect target never carried it. `?share=`/`?tag_share=`
+    // (read-only links) are unaffected either way since those are already handled idempotently.
+    var loginRedirect = location.origin + location.pathname + location.search;
     googleBtn.addEventListener('click', function(){
       if (supabase) supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: loginRedirect } });
     });
@@ -4878,6 +5045,7 @@
   initAccountMode();
   if (sharedViewToken) initSharedView();
   if (tagSharedToken) initTagSharedView();
+  if (claimShareToken || claimTagShareToken) initClaimShareBanner();
 
   render();
 })();

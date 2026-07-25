@@ -301,6 +301,109 @@ begin
       set can_save = excluded.can_save, shared_with_email = excluded.shared_with_email;
 end; $$;
 
+-- 2026-07-25: 1회용 초대 링크 — share_*_with_email은 상대가 이미 가입까지 끝난 계정이어야만
+-- 동작해서, 아직 가입 전인 사람에게는 미리 공유해둘 방법이 없었다. 소유자가 링크를 만들어
+-- 카톡/메일 등으로 직접 전달하면, 상대가 그 링크를 열고 로그인(또는 가입)하는 순간 그 계정
+-- 앞으로 공유가 자동 적용되고 링크는 소멸한다(claimed_by가 한 번 채워지면 끝) — 먼저 여는
+-- 사람이 그 자리를 가져가는 구조라 1회용이 안전상 필수. 이 테이블 자체는 owner만
+-- select/update/delete 가능(익명/타인 열람 정책은 일부러 안 둠 — 클레임은 아래 RPC 하나를
+-- 통해서만, 이 파일 맨 위 "share_token is not null 정책 안 씀" 설계 원칙과 같은 이유).
+create table recipe_share_invites (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  can_save boolean not null default false,
+  token uuid not null default gen_random_uuid(),
+  claimed_by uuid references auth.users(id) on delete set null,
+  claimed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table recipe_share_invites enable row level security;
+create policy "owner full access" on recipe_share_invites for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+create or replace function create_recipe_share_invite(p_recipe_id uuid, p_can_save boolean default false)
+returns uuid language plpgsql security definer as $$
+declare new_token uuid;
+begin
+  if not exists (select 1 from recipes where id = p_recipe_id and owner_id = auth.uid()) then
+    raise exception '본인 소유 레시피만 초대 링크를 만들 수 있어요';
+  end if;
+  insert into recipe_share_invites (recipe_id, owner_id, can_save)
+    values (p_recipe_id, auth.uid(), p_can_save)
+    returning token into new_token;
+  return new_token;
+end; $$;
+
+-- 반환값: 'ok'(방금 적용됨) | 'already_yours'(같은 계정으로 재방문, 무해) |
+-- 'already_claimed'(다른 계정이 먼저 가져감) | 'is_owner'(본인 링크, 조용히 무시) | 'not_found'.
+-- "select ... for update"로 동시 클레임 레이스(두 사람이 같은 순간에 같은 링크를 열었을 때) 방지.
+create or replace function claim_recipe_share_invite(p_token uuid)
+returns text language plpgsql security definer as $$
+declare inv recipe_share_invites%rowtype;
+declare my_email text;
+begin
+  select * into inv from recipe_share_invites where token = p_token for update;
+  if inv.id is null then return 'not_found'; end if;
+  if inv.owner_id = auth.uid() then return 'is_owner'; end if;
+  if inv.claimed_by is not null then
+    return case when inv.claimed_by = auth.uid() then 'already_yours' else 'already_claimed' end;
+  end if;
+  select email into my_email from auth.users where id = auth.uid();
+  insert into recipe_shares (recipe_id, shared_with_user_id, shared_with_email, can_save)
+    values (inv.recipe_id, auth.uid(), coalesce(my_email, ''), inv.can_save)
+    on conflict (recipe_id, shared_with_user_id) do update
+      set can_save = excluded.can_save, shared_with_email = excluded.shared_with_email;
+  update recipe_share_invites set claimed_by = auth.uid(), claimed_at = now() where id = inv.id;
+  return 'ok';
+end; $$;
+grant execute on function claim_recipe_share_invite(uuid) to authenticated;
+
+-- 태그용 — 위와 완전히 대칭 (tag_account_shares 대상).
+create table tag_share_invites (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  tag text not null,
+  can_save boolean not null default false,
+  token uuid not null default gen_random_uuid(),
+  claimed_by uuid references auth.users(id) on delete set null,
+  claimed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table tag_share_invites enable row level security;
+create policy "owner full access" on tag_share_invites for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+create or replace function create_tag_share_invite(p_tag text, p_can_save boolean default false)
+returns uuid language plpgsql security definer as $$
+declare new_token uuid;
+begin
+  insert into tag_share_invites (owner_id, tag, can_save) values (auth.uid(), p_tag, p_can_save)
+    returning token into new_token;
+  return new_token;
+end; $$;
+
+create or replace function claim_tag_share_invite(p_token uuid)
+returns text language plpgsql security definer as $$
+declare inv tag_share_invites%rowtype;
+declare my_email text;
+begin
+  select * into inv from tag_share_invites where token = p_token for update;
+  if inv.id is null then return 'not_found'; end if;
+  if inv.owner_id = auth.uid() then return 'is_owner'; end if;
+  if inv.claimed_by is not null then
+    return case when inv.claimed_by = auth.uid() then 'already_yours' else 'already_claimed' end;
+  end if;
+  select email into my_email from auth.users where id = auth.uid();
+  insert into tag_account_shares (owner_id, tag, shared_with_user_id, shared_with_email, can_save)
+    values (inv.owner_id, inv.tag, auth.uid(), coalesce(my_email, ''), inv.can_save)
+    on conflict (owner_id, tag, shared_with_user_id) do update
+      set can_save = excluded.can_save, shared_with_email = excluded.shared_with_email;
+  update tag_share_invites set claimed_by = auth.uid(), claimed_at = now() where id = inv.id;
+  return 'ok';
+end; $$;
+grant execute on function claim_tag_share_invite(uuid) to authenticated;
+
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This
 -- SECURITY DEFINER function is the standard Supabase-recommended workaround: it runs as its
