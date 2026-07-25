@@ -684,7 +684,7 @@
 
   <section class="card recipe-toolbar">
     <div class="toolbar-icons">
-      <input class="recipe-name" id="recipeName" value="기본 바게트 반죽" aria-label="레시피 이름">
+      <input class="recipe-name" id="recipeName" value="새 레시피" aria-label="레시피 이름">
       <div class="account-chip-wrap" id="newRecipeWrap">
         <button class="icon-btn" id="newRecipeBtn" aria-label="새 레시피 만들기">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -759,12 +759,12 @@
     <h2>기준 밀가루량 &amp; 배율</h2>
     <div class="field-row" id="baseFlourRow">
       <span class="field-label">기준 밀가루</span>
-      <input type="number" inputmode="decimal" id="baseFlour" value="1000" min="0" step="10">
+      <input type="number" inputmode="decimal" id="baseFlour" value="0" min="0" step="10">
       <span class="unit">g</span>
     </div>
     <div class="pmpm">
       <button id="multMinus" aria-label="배율 줄이기">−</button>
-      <input type="number" inputmode="decimal" id="multInput" value="2" step="0.1" min="0.1" style="max-width:100px;">
+      <input type="number" inputmode="decimal" id="multInput" value="1" step="0.1" min="0.1" style="max-width:100px;">
       <button id="multPlus" aria-label="배율 늘리기">+</button>
       <span class="unit">배</span>
     </div>
@@ -775,7 +775,7 @@
     <h2>목표 총 반죽량</h2>
     <div class="field-row">
       <span class="field-label">총 반죽량</span>
-      <input type="number" inputmode="decimal" id="targetTotal" value="3000" min="0" step="10">
+      <input type="number" inputmode="decimal" id="targetTotal" value="0" min="0" step="10">
       <span class="unit">g</span>
     </div>
     <p class="hint" id="modeBHint">원하는 총 무게를 입력하면 재료 비율에 맞춰 밀가루량을 역산합니다.</p>
@@ -1166,20 +1166,24 @@
     applyTheme(next);
   });
 
+  // 2026-07-25: 처음 열었을 때 "기본 바게트 반죽"이라는 실제 값이 채워진 예시 레시피가 무조건
+  // 보이던 것을, newRecipe('bread')가 만드는 빈 템플릿과 완전히 같은 값으로 바꿨다 — 새로 만든
+  // 빈 레시피처럼 보이도록(밀가루 100%, 나머지 0%, 배율 1). 정적 HTML의 recipeName/baseFlour/
+  // multInput/targetTotal 기본값도 이와 짝을 맞춰 함께 바꿨다.
   var state = {
     mode: 'A',
     type: 'bread', // 'bread' (engine A: baker's %) | 'confection' | 'other' (engine B: absolute weight)
     flours: [
       { ingredientId: null, name: '밀가루', pct: 100 }
     ],
-    baseFlour: 1000,
-    multiplier: 2,
-    targetTotal: 3000,
+    baseFlour: 0,
+    multiplier: 1,
+    targetTotal: 0,
     portions: [],
     ingredients: [
-      { ingredientId: null, name: '물', pct: 65 },
-      { ingredientId: null, name: '소금', pct: 2 },
-      { ingredientId: null, name: '이스트', pct: 1 }
+      { ingredientId: null, name: '물', pct: 0 },
+      { ingredientId: null, name: '소금', pct: 0 },
+      { ingredientId: null, name: '이스트', pct: 0 }
     ]
   };
 
