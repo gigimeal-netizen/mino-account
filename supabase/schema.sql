@@ -183,3 +183,18 @@ returns setof recipes language sql security definer as $$
   select * from recipes where share_token = p_token;
 $$;
 grant execute on function get_recipe_by_share_token(uuid) to anon;
+
+-- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
+-- directly — that requires the service_role key, which must never reach the browser. This
+-- SECURITY DEFINER function is the standard Supabase-recommended workaround: it runs as its
+-- owner (the role that created it in the SQL editor, which does have rights on auth.users),
+-- and only ever deletes auth.uid() itself, so a logged-in user can only ever delete their own
+-- account, never anyone else's. Every one of this app's tables already references
+-- auth.users(id) on delete cascade, so this single delete is enough to also remove all of
+-- that user's recipes/ingredients/products/composite products — no separate cleanup needed.
+create or replace function delete_own_account()
+returns void language plpgsql security definer as $$
+begin
+  delete from auth.users where id = auth.uid();
+end; $$;
+grant execute on function delete_own_account() to authenticated;

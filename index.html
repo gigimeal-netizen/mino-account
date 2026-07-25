@@ -137,6 +137,8 @@
   .menu-btn:first-child{ margin-top: 0; }
   .menu-btn:hover{ border-color: var(--accent); color: var(--accent); }
   .menu-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+  .menu-btn.danger{ color: var(--danger); border-color: var(--danger); }
+  .menu-btn.danger:hover{ background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 
   /* Recipe toolbar: name + new/save always visible; search/share/delete only once logged in */
   .toolbar-divider{ border-top: 1px solid var(--border); margin: 16px 0; }
@@ -465,9 +467,14 @@
     max-width: 580px; margin: 0 auto;
   }
   .subpage-header h2{
-    margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 800;
-    color: var(--ink);
+    flex: 1 1 auto; min-width: 0; margin: 0; font-family: var(--font-display);
+    font-size: 15px; font-weight: 800; color: var(--ink);
   }
+  /* Empty by default — showSubpage() moves the single shared theme-toggle button and
+     account-chip (with its popover) in here from wherever they currently are (the main
+     header, or another subpage's own slot), so the top-right of every subpage matches the
+     main calculator's header instead of looking empty, with zero duplicated login/menu logic. */
+  .subpage-header-actions{ flex: 0 0 auto; }
   .subpage-body{ padding: 18px; max-width: 580px; margin: 0 auto; }
   .subpage-body h3{
     font-family: var(--font-display); font-size: 13px; font-weight: 800;
@@ -566,7 +573,7 @@
         <p class="eyebrow">MINO · 계량 도구 · 내 계정</p>
         <h1>제빵 계산기</h1>
       </div>
-      <div class="header-actions">
+      <div class="header-actions" id="mainHeaderActions">
         <button class="icon-btn theme-toggle" id="themeToggleBtn" aria-label="화면 모드 전환">
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="4"></circle>
@@ -583,7 +590,7 @@
             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
           </svg>
         </button>
-        <div class="account-chip-wrap">
+        <div class="account-chip-wrap" id="accountChipWrap">
           <button class="icon-btn account-chip" id="accountChipBtn" aria-label="로그인">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
@@ -603,6 +610,7 @@
               <button class="menu-btn" id="openCostCalcBtn">레시피 원가 계산</button>
               <button class="menu-btn" id="openCompositeProductsBtn">조합 제품 원가 계산</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
+              <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
             <p class="hint" id="authHint" style="display:none;"></p>
             <p class="hint" style="margin-top:8px;"><a href="terms.html" style="color:var(--ink-soft);">이용약관 및 개인정보처리방침</a></p>
@@ -805,6 +813,7 @@
         </svg>
       </button>
       <h2>재료 관리</h2>
+      <div class="header-actions subpage-header-actions"></div>
     </div>
   </div>
   <div class="subpage-body">
@@ -833,6 +842,7 @@
         </svg>
       </button>
       <h2>레시피 원가 계산</h2>
+      <div class="header-actions subpage-header-actions"></div>
     </div>
   </div>
   <div class="subpage-body">
@@ -872,6 +882,7 @@
         </svg>
       </button>
       <h2>조합 제품 원가 계산</h2>
+      <div class="header-actions subpage-header-actions"></div>
     </div>
   </div>
   <div class="subpage-body">
@@ -1501,6 +1512,7 @@
   var accountMenuEl = document.getElementById('accountMenu');
   var googleBtn = document.getElementById('googleBtn');
   var logoutBtn = document.getElementById('logoutBtn');
+  var deleteAccountBtn = document.getElementById('deleteAccountBtn');
   var newRecipeBtn = document.getElementById('newRecipeBtn');
   var authHintEl = document.getElementById('authHint');
   var saveBtn = document.getElementById('saveBtn');
@@ -2825,9 +2837,29 @@
   // to a different page" rather than "a dialog popped up here."
   var calculatorWrapEl = document.querySelector('.wrap');
   var calculatorFooterEl = document.querySelector('.footer');
+  var mainHeaderActionsEl = document.getElementById('mainHeaderActions');
+  var accountChipWrapEl = document.getElementById('accountChipWrap');
+  // showSubpage() hides any OTHER subpage that's currently open (not just the calculator) so
+  // that navigating straight from one subpage's account menu to another (e.g. 재료 관리 ->
+  // 조합 제품 원가 계산 without going back to the calculator first) can't leave two subpages
+  // visible stacked on top of each other — every openXModal() function already calls this
+  // unconditionally, so this is the one place that needs to know about "some other subpage
+  // might already be open" rather than every caller having to check.
   function showSubpage(pageEl){
+    document.querySelectorAll('.subpage').forEach(function(p){
+      if (p !== pageEl) p.style.display = 'none';
+    });
     calculatorWrapEl.style.display = 'none';
     calculatorFooterEl.style.display = 'none';
+    // The theme toggle and account chip (with its popover) are single shared elements, moved
+    // into whichever screen is currently on top — the main header when nothing's open, or
+    // here — rather than duplicated per screen, so there's exactly one working copy of the
+    // login/theme logic no matter where they're currently rendered.
+    var slot = pageEl.querySelector('.subpage-header-actions');
+    if (slot){
+      slot.appendChild(themeToggleBtn);
+      slot.appendChild(accountChipWrapEl);
+    }
     pageEl.style.display = 'block';
     window.scrollTo(0, 0);
   }
@@ -2835,6 +2867,8 @@
     pageEl.style.display = 'none';
     calculatorWrapEl.style.display = '';
     calculatorFooterEl.style.display = '';
+    mainHeaderActionsEl.appendChild(themeToggleBtn);
+    mainHeaderActionsEl.appendChild(accountChipWrapEl);
   }
 
   function openIngredientManagerModal(){
@@ -3233,6 +3267,26 @@
     });
     logoutBtn.addEventListener('click', function(){
       if (supabase) supabase.auth.signOut();
+    });
+    // Client keys (anon/authenticated) can never delete an auth.users row directly — only
+    // delete_own_account() (SECURITY DEFINER, see schema.sql) can, and only for auth.uid()
+    // itself. Every table here already references auth.users(id) on delete cascade, so this
+    // one delete also wipes every recipe/ingredient/product/composite product this user
+    // owns — hence the blunt, explicit confirm() text, matching the same single-confirm
+    // pattern every other delete in this app already uses (recipe/ingredient/product/
+    // composite-product), just with a longer, more specific warning given the stakes here.
+    deleteAccountBtn.addEventListener('click', function(){
+      if (!supabase || !currentUser) return;
+      var label = currentUser.email || currentUser.id;
+      if (!confirm(
+        '"' + label + '" 계정을 완전히 삭제할까요?\n\n' +
+        '저장된 모든 레시피, 재료DB, 제품, 조합 제품이 함께 영구 삭제되며 되돌릴 수 없어요.'
+      )) return;
+      supabase.rpc('delete_own_account').then(function(res){
+        if (res.error){ alert('회원 탈퇴 실패: ' + res.error.message); return; }
+        supabase.auth.signOut();
+        showToast('계정이 삭제됐어요');
+      });
     });
     saveBtn.addEventListener('click', function(){
       if (!currentUser) { alert('먼저 로그인해주세요'); return; }
