@@ -137,6 +137,10 @@
   .menu-btn:first-child{ margin-top: 0; }
   .menu-btn:hover{ border-color: var(--accent); color: var(--accent); }
   .menu-btn:focus-visible{ outline: 3px solid var(--accent); outline-offset: 2px; }
+  /* 2026-07-25: 계정 메뉴가 8개 항목까지 늘어나면서 구분 없는 한 덩어리 목록이 되어, 항상 보이는
+     항목/계정 기능/세션(로그아웃·탈퇴)을 얕게 나눠 스캔하기 쉽게 한다. .toolbar-divider(16px 여백)는
+     이 좁은 팝오버엔 너무 성겨서 여백을 줄인 전용 규칙을 둔다. */
+  .menu-divider{ border-top: 1px solid var(--border); margin: 8px 0; }
   .menu-btn.danger{ color: var(--danger); border-color: var(--danger); }
   .menu-btn.danger:hover{ background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
 
@@ -650,6 +654,7 @@
                  로그인 없이도 쓸 수 있어서, 다른 항목들처럼 #loggedInRow 안에 두지 않는다. -->
             <button class="menu-btn" id="openArchiveBtn">레시피 아카이브</button>
             <button class="menu-btn" id="openHelpBtn">도움말</button>
+            <div class="menu-divider"></div>
             <div id="authRow">
               <!-- Kakao login button removed 2026-07-24 — Supabase always requests the
                    account_email scope for Kakao (can't be overridden client-side), and this
@@ -664,6 +669,7 @@
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
               <button class="menu-btn" id="openReportsBtn" style="display:none;">신고 내역</button>
+              <div class="menu-divider"></div>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
@@ -1885,6 +1891,10 @@
   var claimShareToken = new URLSearchParams(location.search).get('claim_share');
   var claimTagShareToken = new URLSearchParams(location.search).get('claim_tag_share');
   var claimAttempted = false; // 페이지 로드당 한 번만 시도 — applyAuthUI()가 로그인마다 여러 번 불릴 수 있어서
+  // 2026-07-25: ?share=/?tag_share=/?claim_* 랜딩은 subText 자리에 자기만의 안내 배너를 띄우고
+  // 그 상태를 페이지 수명 내내 유지한다 — applyAuthUI()가 로그인/로그아웃마다 subText를
+  // 관리하더라도 이런 특수 랜딩 화면에서는 손대면 안 된다.
+  var inSpecialLandingView = !!(sharedViewToken || tagSharedToken || claimShareToken || claimTagShareToken);
 
   var accountChipBtn = document.getElementById('accountChipBtn');
   var accountMenuEl = document.getElementById('accountMenu');
@@ -5126,6 +5136,9 @@
       accountChipBtn.title = label;
       accountChipBtn.classList.add('primary'); // filled = logged in; the icon alone doesn't change
       logoutBtn.textContent = '로그아웃 (' + label + ')';
+      // 2026-07-25: 로그인 완료 후에도 "구글 계정으로 로그인해서..." 안내가 그대로 남아있던 버그 —
+      // 이 함수가 로그인 상태를 반영할 때 subText도 같이 관리한다(단, 특수 랜딩 화면은 건드리지 않음).
+      if (!inSpecialLandingView) subTextEl.style.display = 'none';
       authRowEl.style.display = 'none';
       loggedInRowEl.style.display = '';
       updateSaveButtonVisibility();
@@ -5143,6 +5156,7 @@
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
       accountChipBtn.classList.remove('primary');
+      if (!inSpecialLandingView) subTextEl.style.display = '';
       authRowEl.style.display = '';
       loggedInRowEl.style.display = 'none';
       saveBtn.style.display = 'none';
