@@ -645,7 +645,6 @@
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
               <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
-              <button class="menu-btn" id="openRecipeCategoriesBtn">카테고리별 보기</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
@@ -699,6 +698,19 @@
         <div class="field-row">
           <input type="text" id="recipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색 및 불러오기">
           <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
+          <!--
+            2026-07-25: 계정 메뉴(설정성 항목들)에서 이쪽으로 옮김 — "이름으로 찾기"(검색창)와
+            "카테고리로 찾기"가 같은 성격의 두 가지 방법인데, 하나는 메인 화면에 바로 보이고
+            하나는 메뉴 안에 숨어있는 게 어색하다는 피드백.
+          -->
+          <button type="button" class="icon-btn" id="openRecipeCategoriesBtn" aria-label="카테고리별 보기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </button>
         </div>
         <div class="combo-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
