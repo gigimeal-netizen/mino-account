@@ -4185,9 +4185,17 @@
     // "바게트"를 갖고 있는데 남이 공유한 "바게트"를 저장 — 이름 매칭만으로는 내 것을 찾아버림).
     // selectedRecipeId가 없거나(새 레시피) 내가 소유한 레시피를 가리킬 때만 이름으로 덮어쓸
     // 후보를 찾는다 — 그 외엔 항상 새 레시피로 저장(진짜 독립된 사본).
-    var loadedRecipeIsMine = !selectedRecipeId || myRecipes.some(function(r){
-      return r.id === selectedRecipeId && r.owner_id === currentUser.id;
-    });
+    // mySelected: 지금 로드돼 있는 게 실제로 내 소유 레시피면 그 행 자체(이름을 뭐라고 고쳤든
+    // 상관없이 이 id가 업데이트 대상) — 2026-07-25: 예전엔 이름으로만 찾아서, 제목을 고치고
+    // 저장하면 "다른 이름의 새 레시피"로 갈라져 저장되고 거기 연결된 원가 계산(재료 연결·제품)을
+    // 매번 새로 해야 하는 문제가 있었다. id 매칭을 이름 매칭보다 우선해서, 제목만 고쳐도 같은
+    // 행이 그대로 업데이트되게(따라서 cost_snapshot/연결된 products도 안 끊기게) 고쳤다.
+    var mySelected = selectedRecipeId
+      ? myRecipes.find(function(r){ return r.id === selectedRecipeId && r.owner_id === currentUser.id; })
+      : null;
+    var loadedRecipeIsMine = !selectedRecipeId || !!mySelected;
+    // "새 레시피" 상태에서 기존 레시피와 같은 이름을 그대로 입력해 저장하는 경우(선택된 게
+    // 없을 때만)를 위한 폴백 — 실제로 로드된 레시피가 있으면(mySelected) 그게 항상 우선한다.
     var sameNameOwned = myRecipes.find(function(r){ return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name; });
 
     // 2026-07-25: 공유받은 레시피를 저장하는데 이름이 내 기존 레시피와 겹치면, 조용히 새로 저장해서
@@ -4212,7 +4220,7 @@
       return;
     }
 
-    finishSaveRecipe(payload, loadedRecipeIsMine ? sameNameOwned : null);
+    finishSaveRecipe(payload, mySelected || (loadedRecipeIsMine ? sameNameOwned : null));
   }
 
   function closeAccountMenu(){
@@ -5618,17 +5626,14 @@
       if (!e.target.closest('.account-chip-wrap')) closeAccountMenu();
     });
 
-    // If the user hand-edits the name after loading a recipe (instead of using "새
-    // 레시피" or picking a different one from search), `selectedRecipeId` would otherwise
-    // keep pointing at the recipe that was loaded, not the name now on screen — so share/
-    // delete could silently act on the wrong recipe. Drop the selection the moment the name
-    // changes; saving still works fine afterward since that's matched by name, not this id.
-    // (Only fires on real typing — setting .value from code, e.g. when loading a recipe,
-    // doesn't dispatch an input event.)
-    recipeNameInput.addEventListener('input', function(){
-      if (selectedRecipeId) clearSelectedRecipe();
-      markDirty();
-    });
+    // 2026-07-25: 예전엔 이름 칸을 고치는 순간 selectedRecipeId를 지웠다 — "레시피 제목을
+    // 고치면 다른 이름의 새 레시피로 저장돼서, 거기 연결된 원가 계산(재료 연결·제품)을 새로
+    // 해야 한다"는 번거로움의 원인이었다. selectedRecipeId가 사라지면 saveCurrentRecipe()가
+    // "내 소유 레시피 중 이 새 이름과 같은 것"을 찾는데, 방금 바꾼 이름과 같은 레시피는 당연히
+    // 없으니 매번 새 행으로 insert됐다. 이제는 이름만 고쳐도 selectedRecipeId(따라서 공유/삭제
+    // 버튼과 저장 시 "어느 행을 업데이트할지")를 그대로 유지한다 — 이름 수정은 "이 레시피를
+    // 다른 이름으로 부르기"일 뿐, 다른 레시피가 되는 게 아니다.
+    recipeNameInput.addEventListener('input', markDirty);
     notesInput.addEventListener('input', markDirty);
     recipeTagsInput.addEventListener('input', markDirty);
 
