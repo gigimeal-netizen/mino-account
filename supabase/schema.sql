@@ -13,7 +13,10 @@ create table recipes (
   owner_id uuid not null references auth.users(id) on delete cascade,
   recipe_name text not null default '이름 없는 레시피',
   recipe_type text not null default 'bread', -- 'bread' (baker's %) | 'confection' | 'other' (both: absolute weight)
-  category text not null default '',         -- free-text grouping (제빵/제과/소스/크림 ...), user-defined, same convention as ingredients.category
+  category text not null default '',         -- 2026-07-25: superseded by `tags` below (a recipe now carries several free-text
+                                              -- labels like a board's tags, not just one) — column kept for existing data, unused going forward
+  tags text[] not null default '{}',         -- free-text, multiple per recipe (제빵/OO제과/... — a recipe can have both a "type" tag
+                                              -- and a "vendor" tag at once), same free-text philosophy as ingredients.category
   mode text not null default 'A',
   base_flour numeric not null default 0,
   multiplier numeric not null default 1,
@@ -196,48 +199,52 @@ returns setof recipes language sql security definer as $$
 $$;
 grant execute on function get_recipe_by_share_token(uuid) to anon;
 
--- 카테고리 전체 공유: 레시피 한 개가 아니라 (소유자, 카테고리) 쌍에 링크를 건다. 실시간이라
--- 스냅샷이 아님 — 링크를 만든 뒤 그 카테고리에 레시피를 더 추가해도 같은 링크로 바로 보인다.
-create table category_shares (
+-- 태그 전체 공유: 레시피 한 개가 아니라 (소유자, 태그) 쌍에 링크를 건다. 실시간이라
+-- 스냅샷이 아님 — 링크를 만든 뒤 그 태그를 단 레시피를 더 추가해도 같은 링크로 바로 보인다.
+-- 2026-07-25: 레시피당 하나였던 category를 "게시판 태그처럼" 여러 개(recipes.tags text[])로
+-- 쓸 수 있게 바꾸면서, 공유도 category_shares(레시피당 카테고리 하나 전제)에서 이 tag_shares로
+-- 완전히 교체됐다 — 옛 category_shares/set_category_share_token/get_recipes_by_category_share_token은
+-- 더 이상 쓰지 않는다.
+create table tag_shares (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
-  category text not null,
+  tag text not null,
   share_token uuid not null default gen_random_uuid(),
   created_at timestamptz not null default now(),
-  unique (owner_id, category)
+  unique (owner_id, tag)
 );
-alter table category_shares enable row level security;
-create policy "owner full access" on category_shares for all
+alter table tag_shares enable row level security;
+create policy "owner full access" on tag_shares for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
--- Issue or revoke a category share link. Owner only. Re-enabling an already-shared category
--- reuses the row (upsert) rather than erroring, so toggling on/off/on doesn't need a delete
--- first — same "링크 켜기/끄기" ergonomics as set_recipe_share_token().
-create or replace function set_category_share_token(p_category text, p_enable boolean)
+-- Issue or revoke a tag share link. Owner only. Re-enabling an already-shared tag reuses the
+-- row (upsert) rather than erroring, so toggling on/off/on doesn't need a delete first — same
+-- "링크 켜기/끄기" ergonomics as set_recipe_share_token().
+create or replace function set_tag_share_token(p_tag text, p_enable boolean)
 returns uuid language plpgsql security definer as $$
 declare new_token uuid;
 begin
   if p_enable then
-    insert into category_shares (owner_id, category, share_token)
-      values (auth.uid(), p_category, gen_random_uuid())
-      on conflict (owner_id, category) do update set share_token = excluded.share_token
+    insert into tag_shares (owner_id, tag, share_token)
+      values (auth.uid(), p_tag, gen_random_uuid())
+      on conflict (owner_id, tag) do update set share_token = excluded.share_token
       returning share_token into new_token;
   else
-    delete from category_shares where owner_id = auth.uid() and category = p_category;
+    delete from tag_shares where owner_id = auth.uid() and tag = p_tag;
     new_token := null;
   end if;
   return new_token;
 end; $$;
 
--- Anonymous, real-time lookup: every recipe currently in that (owner, category) pair, not a
--- frozen list taken when the link was created.
-create or replace function get_recipes_by_category_share_token(p_token uuid)
+-- Anonymous, real-time lookup: every recipe whose tags array currently contains that tag, not
+-- a frozen list taken when the link was created.
+create or replace function get_recipes_by_tag_share_token(p_token uuid)
 returns setof recipes language sql security definer as $$
   select r.* from recipes r
-  join category_shares cs on cs.owner_id = r.owner_id and cs.category = r.category
-  where cs.share_token = p_token;
+  join tag_shares ts on ts.owner_id = r.owner_id and ts.tag = any(r.tags)
+  where ts.share_token = p_token;
 $$;
-grant execute on function get_recipes_by_category_share_token(uuid) to anon;
+grant execute on function get_recipes_by_tag_share_token(uuid) to anon;
 
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This

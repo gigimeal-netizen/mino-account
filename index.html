@@ -297,24 +297,25 @@
   .acc-row-header .acc-row-select{ flex: 0 0 auto; width: 20px; height: 20px; }
   .acc-row-header .acc-row-toggle{ flex: 1 1 auto; min-width: 0; }
 
-  /* 카테고리별 보기: 카테고리마다 헤더(이름+개수+공유 버튼) + 그 아래 레시피 이름 목록.
+  /* 태그별 보기: 태그마다 헤더(이름+개수+공유 버튼) + 그 아래 레시피 이름 목록. 레시피
+     하나가 태그를 여러 개 가지면 그만큼 여러 그룹에 동시에 나타난다(게시판 태그처럼).
      레시피 행은 아코디언이 아니라 그냥 클릭하면 바로 불러오는 단순한 목록이라 acc-row
      계열을 그대로 쓰지 않고 별도로 가볍게 스타일링한다. */
-  .category-group{ padding: 14px 0; border-bottom: 1px solid var(--border); }
-  .category-group:last-of-type{ border-bottom: none; }
-  .category-group-header{ display: flex; align-items: center; gap: 8px; }
-  .category-group-name{
+  .tag-group{ padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .tag-group:last-of-type{ border-bottom: none; }
+  .tag-group-header{ display: flex; align-items: center; gap: 8px; }
+  .tag-group-name{
     flex: 1 1 auto; min-width: 0; font-family: var(--font-display);
     font-weight: 800; font-size: 15px; color: var(--ink);
   }
-  .category-group-count{ flex: 0 0 auto; font-size: 12.5px; color: var(--ink-soft); }
-  .category-recipe-list{ margin-top: 8px; }
-  .category-recipe-row{
+  .tag-group-count{ flex: 0 0 auto; font-size: 12.5px; color: var(--ink-soft); }
+  .tag-recipe-list{ margin-top: 8px; }
+  .tag-recipe-row{
     display: block; width: 100%; padding: 10px 4px; border: none; background: transparent;
     text-align: left; font-family: var(--font-body); font-size: 14px; color: var(--ink);
     cursor: pointer; border-radius: 8px;
   }
-  .category-recipe-row:hover{ background: var(--bg-elevated); }
+  .tag-recipe-row:hover{ background: var(--bg-elevated); }
 
   /* 조합 제품 (여러 레시피를 합친 제품): a composite row holds several component rows, each
      a recipe-picker + its own weight/loss rate — reuses .ing-link-combo (already
@@ -664,13 +665,13 @@
     <p class="sub" id="subText">구글 계정으로 로그인해서 내 레시피를 저장하고 공유해요.</p>
     <p class="hint" id="sharedBanner" style="display:none;">공유된 레시피를 읽기 전용으로 보고 있어요. 저장하려면 본인 계정으로 로그인한 뒤 새로 저장해주세요.</p>
     <!--
-      ?category_share=<token> 랜딩 — ?share=<token>과 달리 레시피가 여러 개라 계산기에
+      ?tag_share=<token> 랜딩 — ?share=<token>과 달리 레시피가 여러 개라 계산기에
       바로 채우지 않고, 목록에서 하나 고르게 한다(고른 뒤에는 applyRecipeRowToState()로
-      똑같이 계산기에 채워짐). category_shares는 실시간이라, 나중에 그 카테고리에 레시피가
+      똑같이 계산기에 채워짐). tag_shares는 실시간이라, 나중에 그 태그를 단 레시피가
       추가되면 새로고침 시 이 목록에도 바로 나타난다.
     -->
-    <p class="hint" id="categorySharedBanner" style="display:none;">공유된 카테고리의 레시피 목록이에요. 하나를 눌러서 읽기 전용으로 볼 수 있어요.</p>
-    <div id="categorySharedList" style="display:none;"></div>
+    <p class="hint" id="tagSharedBanner" style="display:none;">공유된 태그의 레시피 목록이에요. 하나를 눌러서 읽기 전용으로 볼 수 있어요.</p>
+    <div id="tagSharedList" style="display:none;"></div>
   </header>
 
   <section class="card recipe-toolbar">
@@ -697,7 +698,7 @@
         </svg>
       </button>
     </div>
-    <input type="text" id="recipeCategory" class="text-input" autocomplete="off" placeholder="카테고리 (예: 제빵) — 선택 사항" style="width:100%;margin-top:8px;">
+    <input type="text" id="recipeTags" class="text-input" autocomplete="off" placeholder="태그 (쉼표로 구분, 예: 제빵, OO제과) — 선택 사항" style="width:100%;margin-top:8px;">
 
     <div id="libraryCard" style="display:none;">
       <div class="toolbar-divider"></div>
@@ -707,10 +708,10 @@
           <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
           <!--
             2026-07-25: 계정 메뉴(설정성 항목들)에서 이쪽으로 옮김 — "이름으로 찾기"(검색창)와
-            "카테고리로 찾기"가 같은 성격의 두 가지 방법인데, 하나는 메인 화면에 바로 보이고
+            "태그로 찾기"가 같은 성격의 두 가지 방법인데, 하나는 메인 화면에 바로 보이고
             하나는 메뉴 안에 숨어있는 게 어색하다는 피드백.
           -->
-          <button type="button" class="icon-btn" id="openRecipeCategoriesBtn" aria-label="카테고리별 보기">
+          <button type="button" class="icon-btn" id="openRecipeTagsBtn" aria-label="태그별 보기">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"></rect>
               <rect x="14" y="3" width="7" height="7"></rect>
@@ -1057,25 +1058,26 @@
 </div>
 
 <!--
-  카테고리별 보기 — 레시피를 category(자유 입력, 메인 화면 #recipeCategory)별로 묶어서
-  브라우즈 + 카테고리 단위 공유만 하는 화면. 카테고리 수정은 여기서 안 하고 메인 화면에서.
+  태그별 보기 — 레시피를 tags(자유 입력, 여러 개, 메인 화면 #recipeTags)별로 묶어서
+  브라우즈 + 태그 단위 공유만 하는 화면. 태그 수정은 여기서 안 하고 메인 화면에서.
+  레시피 하나가 태그를 여러 개 가지면 그 개수만큼 여러 그룹에 동시에 나타난다.
 -->
-<div class="subpage" id="recipeCategoriesPage" style="display:none;">
+<div class="subpage" id="recipeTagsPage" style="display:none;">
   <div class="subpage-header">
     <div class="subpage-header-inner">
-      <button class="icon-btn" id="closeRecipeCategoriesBtn" aria-label="계산기로 돌아가기">
+      <button class="icon-btn" id="closeRecipeTagsBtn" aria-label="계산기로 돌아가기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
-      <h2>카테고리별 보기</h2>
+      <h2>태그별 보기</h2>
       <div class="header-actions subpage-header-actions"></div>
     </div>
   </div>
   <div class="subpage-body">
-    <p class="hint">레시피를 카테고리별로 모아서 보여줘요. 카테고리는 레시피 이름 옆 입력칸에서 정할 수 있어요.</p>
-    <input type="text" id="recipeCategorySearchInput" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
-    <div id="recipeCategoriesList"></div>
+    <p class="hint">레시피를 태그별로 모아서 보여줘요. 태그는 레시피 이름 옆 입력칸에서 쉼표로 구분해 여러 개 달 수 있어요.</p>
+    <input type="text" id="recipeTagSearchInput" class="text-input" autocomplete="off" placeholder="이름/태그로 검색" style="width:100%;margin-bottom:14px;">
+    <div id="recipeTagsList"></div>
   </div>
 </div>
 
@@ -1144,7 +1146,7 @@
   var flourWeightLabel = document.getElementById('flourWeightLabel');
   var toastEl = document.getElementById('toast');
   var recipeNameInput = document.getElementById('recipeName');
-  var recipeCategoryInput = document.getElementById('recipeCategory');
+  var recipeTagsInput = document.getElementById('recipeTags');
   var notesInput = document.getElementById('notesInput');
   var baseFlourRowEl = document.getElementById('baseFlourRow');
   var modeAHintEl = document.getElementById('modeAHint');
@@ -1694,7 +1696,7 @@
   var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
   var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
   var sharedViewToken = new URLSearchParams(location.search).get('share');
-  var categorySharedToken = new URLSearchParams(location.search).get('category_share');
+  var tagSharedToken = new URLSearchParams(location.search).get('tag_share');
 
   var accountChipBtn = document.getElementById('accountChipBtn');
   var accountMenuEl = document.getElementById('accountMenu');
@@ -1774,11 +1776,11 @@
   // unpriced state back into the list the moment it changes, not just into costCalcBody.
   var activeCostRowSummaryEl = null;
   var activeCostRowWarnIconEl = null;
-  var openRecipeCategoriesBtn = document.getElementById('openRecipeCategoriesBtn');
-  var recipeCategoriesPageEl = document.getElementById('recipeCategoriesPage');
-  var closeRecipeCategoriesBtn = document.getElementById('closeRecipeCategoriesBtn');
-  var recipeCategorySearchInput = document.getElementById('recipeCategorySearchInput');
-  var recipeCategoriesListEl = document.getElementById('recipeCategoriesList');
+  var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
+  var recipeTagsPageEl = document.getElementById('recipeTagsPage');
+  var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
+  var recipeTagSearchInput = document.getElementById('recipeTagSearchInput');
+  var recipeTagsListEl = document.getElementById('recipeTagsList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
@@ -1793,8 +1795,8 @@
   var linkUrlTextEl = document.getElementById('linkUrlText');
   var copyLinkBtn = document.getElementById('copyLinkBtn');
   var sharedBannerEl = document.getElementById('sharedBanner');
-  var categorySharedBannerEl = document.getElementById('categorySharedBanner');
-  var categorySharedListEl = document.getElementById('categorySharedList');
+  var tagSharedBannerEl = document.getElementById('tagSharedBanner');
+  var tagSharedListEl = document.getElementById('tagSharedList');
   var subTextEl = document.getElementById('subText');
 
   var selectedRecipeId = null; // id of the recipe currently loaded via the search box
@@ -1831,7 +1833,10 @@
     return {
       recipe_name: recipeNameInput.value || '이름 없는 레시피',
       recipe_type: state.type,
-      category: (recipeCategoryInput.value || '').trim(),
+      // 게시판 태그처럼 레시피 하나에 여러 개 — 쉼표로 구분해 한 칸에 입력받아 여기서
+      // 배열로 쪼갠다(빈 항목은 제거). 중복은 그냥 둬도 무방 — 태그별 보기의 그룹핑/공유
+      // 매칭 모두 중복이 있어도 안전하게 동작한다.
+      tags: recipeTagsInput.value.split(',').map(function(s){ return s.trim(); }).filter(Boolean),
       mode: state.mode,
       base_flour: state.baseFlour,
       multiplier: state.multiplier,
@@ -1852,7 +1857,7 @@
   // system starts fresh with its own schema, no recipe.json migration.
   function applyRecipeRowToState(row){
     recipeNameInput.value = row.recipe_name || '';
-    recipeCategoryInput.value = row.category || '';
+    recipeTagsInput.value = (Array.isArray(row.tags) ? row.tags : []).join(', ');
     notesInput.value = row.notes || '';
     state.type = (row.recipe_type === 'confection' || row.recipe_type === 'other') ? row.recipe_type : 'bread';
     state.mode = row.mode === 'B' ? 'B' : 'A';
@@ -3250,60 +3255,66 @@
     showToast('레시피를 불러왔어요');
   }
 
-  function categoryShareUrl(token){
-    return location.origin + location.pathname + '?category_share=' + token;
+  function tagShareUrl(token){
+    return location.origin + location.pathname + '?tag_share=' + token;
   }
 
-  var myCategoryShares = []; // rows from category_shares: { owner_id, category, share_token }
-  function loadMyCategoryShares(){
-    return supabase.from('category_shares').select('*').then(function(res){
-      if (res.error){ alert('카테고리 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
-      myCategoryShares = res.data || [];
+  var myTagShares = []; // rows from tag_shares: { owner_id, tag, share_token }
+  function loadMyTagShares(){
+    return supabase.from('tag_shares').select('*').then(function(res){
+      if (res.error){ alert('태그 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myTagShares = res.data || [];
     });
   }
 
-  // "카테고리별 보기" — 브라우즈 + 카테고리 단위 공유 전용 화면(카테고리 수정은 메인 화면의
-  // #recipeCategory에서). 이름/카테고리 자유 검색 후 recipe.category(빈 문자열은 "미분류"로
-  // 표시, 실제 그룹 키는 빈 문자열 그대로 유지 — 공유 RPC와 myCategoryShares 매칭에 원본
-  // 값이 필요) 기준으로 묶어서 카테고리 헤더(이름+개수+공유) + 레시피 목록을 그린다. 레시피
-  // 행 클릭은 "내 레시피" 검색창에서 고를 때와 완전히 같은 동작(applyRecipeRowToState() +
-  // renderSelectedRecipe()) — 새 로직 아님, 재사용.
-  function renderRecipeCategoriesList(query){
-    recipeCategoriesListEl.innerHTML = '';
+  // "태그별 보기" — 브라우즈 + 태그 단위 공유 전용 화면(태그 수정은 메인 화면의 #recipeTags
+  // 에서). 이름/태그 자유 검색 후 recipe.tags 기준으로 묶는데, 게시판 태그처럼 레시피 하나가
+  // 여러 개를 가질 수 있어서 **태그 개수만큼 여러 그룹에 동시에 나타난다**(예: ["OO제과","빵"]
+  // 태그면 두 그룹 모두에 표시). 태그가 하나도 없으면 "미분류"(내부 키는 빈 문자열 그대로 —
+  // 공유 RPC/myTagShares 매칭에 원본 값이 필요) 하나에만 들어간다. 레시피 행 클릭은 "내
+  // 레시피" 검색창에서 고를 때와 완전히 같은 동작(applyRecipeRowToState() + renderSelectedRecipe())
+  // — 새 로직 아님, 재사용.
+  function renderRecipeTagsList(query){
+    recipeTagsListEl.innerHTML = '';
     var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
     var q = (query || '').trim().toLowerCase();
     var filtered = owned.filter(function(r){
-      return !q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1 || (r.category || '').toLowerCase().indexOf(q) !== -1;
+      if (!q) return true;
+      if ((r.recipe_name || '').toLowerCase().indexOf(q) !== -1) return true;
+      return (Array.isArray(r.tags) ? r.tags : []).some(function(t){ return t.toLowerCase().indexOf(q) !== -1; });
     });
     if (filtered.length === 0){
       var empty = document.createElement('p');
       empty.className = 'hint';
       empty.textContent = owned.length === 0 ? '아직 등록된 레시피가 없어요.' : '검색 결과가 없어요';
-      recipeCategoriesListEl.appendChild(empty);
+      recipeTagsListEl.appendChild(empty);
       return;
     }
-    var groups = {}; // raw category (빈 문자열 = 미분류) -> recipes[]
+    var groups = {}; // raw tag (빈 문자열 = 미분류) -> recipes[]
     var order = [];
     filtered.forEach(function(r){
-      var raw = (r.category || '').trim();
-      if (!(raw in groups)){ groups[raw] = []; order.push(raw); }
-      groups[raw].push(r);
+      var tags = Array.isArray(r.tags) ? r.tags : [];
+      var effectiveTags = tags.length > 0 ? tags : [''];
+      effectiveTags.forEach(function(raw){
+        if (!(raw in groups)){ groups[raw] = []; order.push(raw); }
+        groups[raw].push(r);
+      });
     });
     order.sort(function(a, b){
       if (a === '') return 1;
       if (b === '') return -1;
       return a.localeCompare(b, 'ko');
     });
-    order.forEach(function(rawCat){
-      var recipesInGroup = groups[rawCat];
-      var displayName = rawCat || '미분류';
+    order.forEach(function(rawTag){
+      var recipesInGroup = groups[rawTag];
+      var displayName = rawTag || '미분류';
       var groupEl = document.createElement('div');
-      groupEl.className = 'category-group';
+      groupEl.className = 'tag-group';
       groupEl.innerHTML =
-        '<div class="category-group-header">' +
-          '<span class="category-group-name"></span>' +
-          '<span class="category-group-count"></span>' +
-          '<button type="button" class="icon-btn category-share-btn" aria-label="카테고리 공유">' +
+        '<div class="tag-group-header">' +
+          '<span class="tag-group-name"></span>' +
+          '<span class="tag-group-count"></span>' +
+          '<button type="button" class="icon-btn tag-share-btn" aria-label="태그 공유">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
               '<circle cx="18" cy="5" r="3"></circle>' +
               '<circle cx="6" cy="12" r="3"></circle>' +
@@ -3313,61 +3324,61 @@
             '</svg>' +
           '</button>' +
         '</div>' +
-        '<div class="share-panel category-share-panel" style="display:none;">' +
+        '<div class="share-panel tag-share-panel" style="display:none;">' +
           '<div class="field-row">' +
             '<span class="field-label">링크 공유</span>' +
-            '<button type="button" class="io-btn category-toggle-link-btn">링크 켜기</button>' +
+            '<button type="button" class="io-btn tag-toggle-link-btn">링크 켜기</button>' +
           '</div>' +
-          '<div class="link-row category-link-row" style="display:none;">' +
-            '<p class="hint link-url category-link-url"></p>' +
-            '<button type="button" class="io-btn category-copy-link-btn">복사</button>' +
+          '<div class="link-row tag-link-row" style="display:none;">' +
+            '<p class="hint link-url tag-link-url"></p>' +
+            '<button type="button" class="io-btn tag-copy-link-btn">복사</button>' +
           '</div>' +
         '</div>' +
-        '<div class="category-recipe-list"></div>';
-      recipeCategoriesListEl.appendChild(groupEl);
+        '<div class="tag-recipe-list"></div>';
+      recipeTagsListEl.appendChild(groupEl);
 
-      var nameEl = groupEl.querySelector('.category-group-name');
-      var countEl = groupEl.querySelector('.category-group-count');
-      var shareBtn = groupEl.querySelector('.category-share-btn');
-      var sharePanelEl = groupEl.querySelector('.category-share-panel');
-      var toggleLinkBtnEl = groupEl.querySelector('.category-toggle-link-btn');
-      var categoryLinkRowEl = groupEl.querySelector('.category-link-row');
-      var linkUrlEl = groupEl.querySelector('.category-link-url');
-      var copyLinkBtnEl = groupEl.querySelector('.category-copy-link-btn');
-      var recipeListEl = groupEl.querySelector('.category-recipe-list');
+      var nameEl = groupEl.querySelector('.tag-group-name');
+      var countEl = groupEl.querySelector('.tag-group-count');
+      var shareBtn = groupEl.querySelector('.tag-share-btn');
+      var sharePanelEl = groupEl.querySelector('.tag-share-panel');
+      var toggleLinkBtnEl = groupEl.querySelector('.tag-toggle-link-btn');
+      var tagLinkRowEl = groupEl.querySelector('.tag-link-row');
+      var linkUrlEl = groupEl.querySelector('.tag-link-url');
+      var copyLinkBtnEl = groupEl.querySelector('.tag-copy-link-btn');
+      var recipeListEl = groupEl.querySelector('.tag-recipe-list');
 
       nameEl.textContent = displayName;
       countEl.textContent = recipesInGroup.length + '개';
 
-      function refreshCategoryShareUI(){
-        var share = myCategoryShares.find(function(cs){ return cs.category === rawCat; });
+      function refreshTagShareUI(){
+        var share = myTagShares.find(function(ts){ return ts.tag === rawTag; });
         if (share){
           toggleLinkBtnEl.textContent = '링크 끄기';
-          linkUrlEl.textContent = categoryShareUrl(share.share_token);
-          categoryLinkRowEl.style.display = 'flex';
+          linkUrlEl.textContent = tagShareUrl(share.share_token);
+          tagLinkRowEl.style.display = 'flex';
         } else {
           toggleLinkBtnEl.textContent = '링크 켜기';
-          categoryLinkRowEl.style.display = 'none';
+          tagLinkRowEl.style.display = 'none';
         }
       }
-      refreshCategoryShareUI();
+      refreshTagShareUI();
 
       shareBtn.addEventListener('click', function(){
         sharePanelEl.style.display = sharePanelEl.style.display === 'none' ? 'block' : 'none';
       });
       toggleLinkBtnEl.addEventListener('click', function(){
-        var enable = !myCategoryShares.some(function(cs){ return cs.category === rawCat; });
-        supabase.rpc('set_category_share_token', { p_category: rawCat, p_enable: enable }).then(function(res){
-          if (res.error){ alert('카테고리 공유 설정 실패: ' + res.error.message); return; }
-          myCategoryShares = myCategoryShares.filter(function(cs){ return cs.category !== rawCat; });
+        var enable = !myTagShares.some(function(ts){ return ts.tag === rawTag; });
+        supabase.rpc('set_tag_share_token', { p_tag: rawTag, p_enable: enable }).then(function(res){
+          if (res.error){ alert('태그 공유 설정 실패: ' + res.error.message); return; }
+          myTagShares = myTagShares.filter(function(ts){ return ts.tag !== rawTag; });
           if (enable && res.data){
-            myCategoryShares.push({ owner_id: currentUser.id, category: rawCat, share_token: res.data });
-            copyToClipboard(categoryShareUrl(res.data));
+            myTagShares.push({ owner_id: currentUser.id, tag: rawTag, share_token: res.data });
+            copyToClipboard(tagShareUrl(res.data));
             showToast('공유 링크를 복사했어요');
           } else {
             showToast('공유 링크를 껐어요');
           }
-          refreshCategoryShareUI();
+          refreshTagShareUI();
         });
       });
       copyLinkBtnEl.addEventListener('click', function(){
@@ -3378,12 +3389,12 @@
       recipesInGroup.forEach(function(r){
         var recipeBtn = document.createElement('button');
         recipeBtn.type = 'button';
-        recipeBtn.className = 'category-recipe-row';
+        recipeBtn.className = 'tag-recipe-row';
         recipeBtn.textContent = r.recipe_name || '이름 없는 레시피';
         recipeBtn.addEventListener('click', function(){
           applyRecipeRowToState(r);
           renderSelectedRecipe(r);
-          closeRecipeCategoriesModal();
+          closeRecipeTagsModal();
           showToast('레시피를 불러왔어요');
         });
         recipeListEl.appendChild(recipeBtn);
@@ -3488,7 +3499,7 @@
   function newRecipe(type){
     state.type = type || 'bread';
     recipeNameInput.value = '새 레시피';
-    recipeCategoryInput.value = '';
+    recipeTagsInput.value = '';
     notesInput.value = '';
     state.mode = 'A';
     state.baseFlour = 0;
@@ -3615,18 +3626,18 @@
     if (e.key === 'Escape' && ingredientManagerPageEl.style.display !== 'none') closeIngredientManagerModal();
   });
 
-  function openRecipeCategoriesModal(){
-    recipeCategorySearchInput.value = ''; // don't carry over a filter from the last time this was open
-    loadMyCategoryShares().then(function(){ renderRecipeCategoriesList(); });
-    showSubpage(recipeCategoriesPageEl);
-    closeRecipeCategoriesBtn.focus();
+  function openRecipeTagsModal(){
+    recipeTagSearchInput.value = ''; // don't carry over a filter from the last time this was open
+    loadMyTagShares().then(function(){ renderRecipeTagsList(); });
+    showSubpage(recipeTagsPageEl);
+    closeRecipeTagsBtn.focus();
   }
-  function closeRecipeCategoriesModal(){
-    hideSubpage(recipeCategoriesPageEl);
+  function closeRecipeTagsModal(){
+    hideSubpage(recipeTagsPageEl);
   }
-  closeRecipeCategoriesBtn.addEventListener('click', closeRecipeCategoriesModal);
+  closeRecipeTagsBtn.addEventListener('click', closeRecipeTagsModal);
   document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && recipeCategoriesPageEl.style.display !== 'none') closeRecipeCategoriesModal();
+    if (e.key === 'Escape' && recipeTagsPageEl.style.display !== 'none') closeRecipeTagsModal();
   });
 
   // Switches between the two tabs sharing one "원가 계산" subpage. Neither tab's own list/
@@ -4062,11 +4073,11 @@
       libraryCardEl.style.display = 'none';
       closeIngredientManagerModal();
       closeCostCalcModal();
-      closeRecipeCategoriesModal();
+      closeRecipeTagsModal();
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
-      myCategoryShares = [];
+      myTagShares = [];
       recipeSearchInput.value = '';
       clearSelectedRecipe();
       markClean();
@@ -4095,41 +4106,41 @@
     });
   }
 
-  // Landing for a `?category_share=<token>` link — unlike ?share=, this points at
-  // potentially several recipes, so it can't just pre-fill the calculator with "the one"
-  // recipe. Shows a plain clickable list instead; picking one loads it into the calculator
-  // the same way applyRecipeRowToState() always does. Real-time (get_recipes_by_category_share_token
-  // re-queries live), so a recipe added to this category after the link was shared still
-  // shows up here on a fresh visit/reload — no re-sharing needed.
-  function initCategorySharedView(){
+  // Landing for a `?tag_share=<token>` link — unlike ?share=, this points at potentially
+  // several recipes, so it can't just pre-fill the calculator with "the one" recipe. Shows a
+  // plain clickable list instead; picking one loads it into the calculator the same way
+  // applyRecipeRowToState() always does. Real-time (get_recipes_by_tag_share_token re-queries
+  // live), so a recipe tagged with this after the link was shared still shows up here on a
+  // fresh visit/reload — no re-sharing needed.
+  function initTagSharedView(){
     subTextEl.style.display = 'none';
-    categorySharedBannerEl.style.display = 'block';
-    categorySharedListEl.style.display = 'block';
+    tagSharedBannerEl.style.display = 'block';
+    tagSharedListEl.style.display = 'block';
 
     if (!supabase){
-      categorySharedBannerEl.textContent = 'Supabase 설정이 안 돼 있어서 공유 링크를 열 수 없어요.';
+      tagSharedBannerEl.textContent = 'Supabase 설정이 안 돼 있어서 공유 링크를 열 수 없어요.';
       return;
     }
-    supabase.rpc('get_recipes_by_category_share_token', { p_token: categorySharedToken }).then(function(res){
+    supabase.rpc('get_recipes_by_tag_share_token', { p_token: tagSharedToken }).then(function(res){
       if (res.error || !res.data){
-        categorySharedBannerEl.textContent = '공유 링크를 찾을 수 없어요 (잘못됐거나 공유가 꺼졌을 수 있어요).';
+        tagSharedBannerEl.textContent = '공유 링크를 찾을 수 없어요 (잘못됐거나 공유가 꺼졌을 수 있어요).';
         return;
       }
       if (res.data.length === 0){
-        categorySharedBannerEl.textContent = '이 카테고리에는 아직 레시피가 없어요.';
+        tagSharedBannerEl.textContent = '이 태그가 달린 레시피가 아직 없어요.';
         return;
       }
-      categorySharedListEl.innerHTML = '';
+      tagSharedListEl.innerHTML = '';
       res.data.forEach(function(r){
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'category-recipe-row';
+        btn.className = 'tag-recipe-row';
         btn.textContent = r.recipe_name || '이름 없는 레시피';
         btn.addEventListener('click', function(){
           applyRecipeRowToState(r);
           showToast('레시피를 불러왔어요');
         });
-        categorySharedListEl.appendChild(btn);
+        tagSharedListEl.appendChild(btn);
       });
     });
   }
@@ -4148,12 +4159,12 @@
       closeAccountMenu();
       openCostCalcModal();
     });
-    openRecipeCategoriesBtn.addEventListener('click', function(){
+    openRecipeTagsBtn.addEventListener('click', function(){
       closeAccountMenu();
-      openRecipeCategoriesModal();
+      openRecipeTagsModal();
     });
-    recipeCategorySearchInput.addEventListener('input', function(){
-      renderRecipeCategoriesList(recipeCategorySearchInput.value);
+    recipeTagSearchInput.addEventListener('input', function(){
+      renderRecipeTagsList(recipeTagSearchInput.value);
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
       if (!currentUser) return;
@@ -4345,7 +4356,7 @@
       markDirty();
     });
     notesInput.addEventListener('input', markDirty);
-    recipeCategoryInput.addEventListener('input', markDirty);
+    recipeTagsInput.addEventListener('input', markDirty);
 
     // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
     // the OAuth round trip completes — which can land back on the site root instead of
@@ -4410,7 +4421,7 @@
 
   initAccountMode();
   if (sharedViewToken) initSharedView();
-  if (categorySharedToken) initCategorySharedView();
+  if (tagSharedToken) initTagSharedView();
 
   render();
 })();
