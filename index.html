@@ -3738,20 +3738,18 @@
   document.getElementById('newConfectionBtn').addEventListener('click', function(){ closeNewRecipeMenu(); newRecipe('confection'); });
   document.getElementById('newOtherBtn').addEventListener('click', function(){ closeNewRecipeMenu(); newRecipe('other'); });
 
-  function saveCurrentRecipe(){
-    var payload = serializeCurrentRecipe();
-    // 2026-07-25: 지금 화면에 로드된 게 남이 공유한(내 소유가 아닌) 레시피일 때는, 그 이름이
-    // 내 기존 레시피와 우연히 같더라도 절대 그걸로 매칭하지 않는다 — 안 그러면 "공유받은
-    // 레시피 저장"이 새 사본을 만드는 대신 내 동명 레시피를 조용히 덮어써버린다(예: 내가 이미
-    // "바게트"를 갖고 있는데 남이 공유한 "바게트"를 저장 — 이름 매칭만으로는 내 것을 찾아버림).
-    // selectedRecipeId가 없거나(새 레시피) 내가 소유한 레시피를 가리킬 때만 이름으로 덮어쓸
-    // 후보를 찾는다 — 그 외엔 항상 새 레시피로 저장(진짜 독립된 사본).
-    var loadedRecipeIsMine = !selectedRecipeId || myRecipes.some(function(r){
-      return r.id === selectedRecipeId && r.owner_id === currentUser.id;
-    });
-    var existing = loadedRecipeIsMine
-      ? myRecipes.find(function(r){ return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name; })
-      : null;
+  // "바게트 (2)"처럼, 내가 소유한 레시피 이름과 안 겹치는 이름을 하나 만들어준다 — 공유받은
+  // 레시피를 "새 이름으로 저장" 선택했을 때 프롬프트에 채워줄 기본값.
+  function suggestUniqueOwnedName(baseName){
+    var ownedNames = myRecipes.filter(function(r){ return r.owner_id === currentUser.id; })
+      .map(function(r){ return r.recipe_name; });
+    if (ownedNames.indexOf(baseName) === -1) return baseName;
+    var i = 2;
+    while (ownedNames.indexOf(baseName + ' (' + i + ')') !== -1) i++;
+    return baseName + ' (' + i + ')';
+  }
+
+  function finishSaveRecipe(payload, existing){
     var query = existing
       ? supabase.from('recipes').update(payload).eq('id', existing.id).select().single()
       : supabase.from('recipes').insert(Object.assign({ owner_id: currentUser.id }, payload)).select().single();
@@ -3763,6 +3761,44 @@
       loadMyRecipes();
       showToast('레시피를 저장했어요');
     });
+  }
+
+  function saveCurrentRecipe(){
+    var payload = serializeCurrentRecipe();
+    // 2026-07-25: 지금 화면에 로드된 게 남이 공유한(내 소유가 아닌) 레시피일 때는, 그 이름이
+    // 내 기존 레시피와 우연히 같더라도 절대 그걸로 매칭하지 않는다 — 안 그러면 "공유받은
+    // 레시피 저장"이 새 사본을 만드는 대신 내 동명 레시피를 조용히 덮어써버린다(예: 내가 이미
+    // "바게트"를 갖고 있는데 남이 공유한 "바게트"를 저장 — 이름 매칭만으로는 내 것을 찾아버림).
+    // selectedRecipeId가 없거나(새 레시피) 내가 소유한 레시피를 가리킬 때만 이름으로 덮어쓸
+    // 후보를 찾는다 — 그 외엔 항상 새 레시피로 저장(진짜 독립된 사본).
+    var loadedRecipeIsMine = !selectedRecipeId || myRecipes.some(function(r){
+      return r.id === selectedRecipeId && r.owner_id === currentUser.id;
+    });
+    var sameNameOwned = myRecipes.find(function(r){ return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name; });
+
+    // 2026-07-25: 공유받은 레시피를 저장하는데 이름이 내 기존 레시피와 겹치면, 조용히 새로 저장해서
+    // "내 레시피에 똑같은 이름이 두 개" 상태로 만들지 않는다 — 저장을 진행하기 전에 어느 쪽을
+    // 원하는지 명시적으로 물어본다(눌러보기 전엔 구분이 안 된다는 피드백).
+    if (!loadedRecipeIsMine && sameNameOwned){
+      var overwrite = confirm(
+        '"' + payload.recipe_name + '" 이름의 레시피가 이미 있어요.\n\n' +
+        '확인: 기존 레시피를 덮어씁니다.\n' +
+        '취소: 새 이름으로 따로 저장합니다.'
+      );
+      if (overwrite){
+        finishSaveRecipe(payload, sameNameOwned);
+        return;
+      }
+      var suggested = suggestUniqueOwnedName(payload.recipe_name);
+      var newName = prompt('새 레시피 이름을 입력해주세요', suggested);
+      if (newName === null) return; // 완전히 취소하면 저장도 취소
+      payload.recipe_name = newName.trim() || suggested;
+      recipeNameInput.value = payload.recipe_name;
+      finishSaveRecipe(payload, null);
+      return;
+    }
+
+    finishSaveRecipe(payload, loadedRecipeIsMine ? sameNameOwned : null);
   }
 
   function closeAccountMenu(){
