@@ -668,14 +668,6 @@
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
               <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
               <button class="menu-btn" id="openShareManagerBtn">공유 관리</button>
-              <!-- 2026-07-25: 메인 화면(레시피 검색 카드)에서 여기로 옮김 — 자주 안 쓰는 도구라
-                   계정 메뉴가 더 맞는 자리. 실제 파일 입력/미리보기는 레시피 검색 카드에 그대로
-                   있고, 여기 버튼은 그걸 트리거만 한다. 처음엔 .menu-btn 두 줄로 넣었다가
-                   "메뉴가 너무 길다"는 피드백으로 바로 한 줄(작은 버튼 2개)로 합쳤다. -->
-              <div class="field-row" style="margin-top:4px;">
-                <button type="button" class="io-btn" id="exportRecipesCsvBtn">CSV 내보내기</button>
-                <button type="button" class="io-btn" id="importRecipesCsvBtn">CSV 가져오기</button>
-              </div>
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
               <button class="menu-btn" id="openReportsBtn" style="display:none;">신고 내역</button>
@@ -774,26 +766,6 @@
         <div class="combo-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
       <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
-      <!--
-        2026-07-25: 레시피 CSV 내보내기/가져오기 — 재료 관리의 CSV 기능과 같은 철학. 이 앱이
-        내보낸 형식만 가져올 수 있다(외부 형식 매핑 화면 없음 — 재료 원장과 달리 "다른 곳에서
-        만든 레시피 CSV"라는 실사용 케이스가 없어서). 가져오기는 절대 조용히 덮어쓰지 않고
-        항상 미리보기(체크박스)를 거친다.
-        2026-07-25 재배치: 트리거 버튼(CSV로 내보내기/가져오기)은 계정 메뉴로 옮겼다 — 메인
-        화면에 도구가 계속 쌓여서 실제 계산기(모드 선택 등)에 닿기까지 스크롤이 길어진다는
-        피드백. 숨김 파일 입력·미리보기 영역 자체는 여기 그대로 둔다(항상 보이는 곳이라
-        계정 메뉴 어디서 눌렀든 여기로 스크롤해서 보여주면 되므로 옮길 필요 없음).
-      -->
-      <input type="file" id="importRecipesCsvInput" accept=".csv,text/csv" style="display:none;">
-      <div id="recipeImportPreview" style="display:none;">
-        <p class="hint" id="recipeImportSummary"></p>
-        <div id="recipeImportNewList"></div>
-        <div id="recipeImportChangedList"></div>
-        <div class="field-row">
-          <button type="button" class="io-btn primary" id="applyRecipeImportBtn">적용</button>
-          <button type="button" class="io-btn" id="cancelRecipeImportBtn">취소</button>
-        </div>
-      </div>
       <!--
         2026-07-25: 계정 기반 공유(레시피 개별 + 태그)로 나에게 공유된 레시피 목록 — 이름을
         몰라도 검색창 없이 눈에 바로 띄게 하려는 용도. 소유자 쪽 "누구에게 공유했는지" 관리는
@@ -1181,6 +1153,33 @@
     </div>
     <div id="shareRecipeTabPanel">
       <p class="hint">레시피를 계정(이메일)으로 공유해요. 공개는 상대가 저장(자기 계정에 사본 생성)까지 가능, 비공개는 열람만 가능해요. 회수하면 즉시 접근이 끊겨요.</p>
+      <!--
+        2026-07-25: CSV 내보내기/가져오기 — 계정 메뉴에서 여기로 다시 옮김. "레시피를 다루는
+        작업(공유/CSV)을 한 화면에 모아달라"는 요청 + 체크박스로 골라서 CSV로 내보내는 기능
+        추가. "전체 내보내기"는 그대로 한 번에 되고, 체크박스는 그중 일부만 내보내고 싶을 때
+        쓰는 추가 옵션 — 개별 레시피 공유 설정(펼쳐서 이메일 추가하는 것)은 그대로 하나씩 연다.
+      -->
+      <div class="field-row" style="margin-bottom:14px;">
+        <button type="button" class="io-btn" id="exportRecipesCsvBtn">전체 CSV로 내보내기</button>
+        <button type="button" class="io-btn" id="importRecipesCsvBtn">CSV 가져오기</button>
+      </div>
+      <input type="file" id="importRecipesCsvInput" accept=".csv,text/csv" style="display:none;">
+      <div id="recipeImportPreview" style="display:none;">
+        <p class="hint" id="recipeImportSummary"></p>
+        <div id="recipeImportNewList"></div>
+        <div id="recipeImportChangedList"></div>
+        <div class="field-row">
+          <button type="button" class="io-btn primary" id="applyRecipeImportBtn">적용</button>
+          <button type="button" class="io-btn" id="cancelRecipeImportBtn">취소</button>
+        </div>
+      </div>
+      <div class="field-row" id="shareRecipeBulkToolbar" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 1 auto;">
+          <input type="checkbox" id="shareRecipeSelectAllCheckbox">
+          <span>전체 선택</span>
+        </label>
+        <button type="button" class="io-btn" id="exportSelectedRecipesCsvBtn" style="display:none;flex:0 0 auto;">선택 항목 CSV로 내보내기</button>
+      </div>
       <div id="shareRecipeList"></div>
     </div>
     <div id="shareTagTabPanel" style="display:none;">
@@ -2161,6 +2160,10 @@
   var shareTagTabPanelEl = document.getElementById('shareTagTabPanel');
   var shareRecipeListEl = document.getElementById('shareRecipeList');
   var shareTagListEl = document.getElementById('shareTagList');
+  var shareRecipeSelectAllCheckbox = document.getElementById('shareRecipeSelectAllCheckbox');
+  var exportSelectedRecipesCsvBtn = document.getElementById('exportSelectedRecipesCsvBtn');
+  var selectedShareRecipeIds = {}; // id -> true, only for currently-checked rows in the 레시피별 공유 tab's list
+  var lastVisibleShareRecipes = []; // the owned recipe list from the most recent renderShareRecipesList() call
   var openHelpBtn = document.getElementById('openHelpBtn');
   var helpPageEl = document.getElementById('helpPage');
   var closeHelpBtn = document.getElementById('closeHelpBtn');
@@ -2554,6 +2557,20 @@
   function exportSingleRecipeCsv(recipe){
     var safeName = (recipe.recipe_name || '이름 없는 레시피').replace(/[\/\\:*?"<>|]/g, '_');
     downloadCsvRows(buildRecipeCsvRows(recipe), '레시피_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
+  }
+
+  // 2026-07-25: 공유 관리의 "레시피별 공유" 탭에 체크박스가 추가되면서, 전체가 아니라 고른
+  // 것만 CSV로 내보내는 경로 — exportRecipesCsv()와 같은 파일명 패턴, 골라진 레시피 id
+  // 순서 그대로(체크한 순서가 아니라 recipeIds 배열 순서, 호출부에서 lastVisibleShareRecipes
+  // 순서로 넘겨준다).
+  function exportSelectedRecipesCsv(recipeIds){
+    var idSet = {};
+    recipeIds.forEach(function(id){ idSet[id] = true; });
+    var chosen = myRecipes.filter(function(r){ return idSet[r.id]; });
+    if (chosen.length === 0) return;
+    var rows = [];
+    chosen.forEach(function(r){ rows = rows.concat(buildRecipeCsvRows(r)); });
+    downloadCsvRows(rows, '레시피목록_선택_' + new Date().toISOString().slice(0, 10) + '.csv');
   }
 
   // Minimal CSV parser handling quoted fields (so a category or name containing a comma,
@@ -3140,14 +3157,14 @@
   // bulk select (재료 관리 / 조합 제품 원가 계산 / 레시피 원가 계산) — each just passes its own
   // checkbox/button/selection-map/last-rendered-list, so this one function is the only place
   // the checked/indeterminate/count logic needs to be right.
-  function refreshBulkToolbar(selectAllCheckbox, deleteBtn, selectedIds, visibleItems){
+  function refreshBulkToolbar(selectAllCheckbox, actionBtn, selectedIds, visibleItems, labelPrefix){
     var visibleIds = visibleItems.map(function(item){ return item.id; });
     var selectedVisibleCount = visibleIds.filter(function(id){ return selectedIds[id]; }).length;
     selectAllCheckbox.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
     selectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
     var totalSelected = Object.keys(selectedIds).length;
-    deleteBtn.style.display = totalSelected > 0 ? 'inline-block' : 'none';
-    deleteBtn.textContent = '선택 삭제 (' + totalSelected + ')';
+    actionBtn.style.display = totalSelected > 0 ? 'inline-block' : 'none';
+    actionBtn.textContent = (labelPrefix || '선택 삭제') + ' (' + totalSelected + ')';
   }
   // lastVisibleIngredients etc. are read here (rather than this taking a list parameter) so
   // it can be called from anywhere — a single row's own checkbox handler included — without
@@ -3160,6 +3177,9 @@
   }
   function refreshCompositeBulkToolbar(){
     refreshBulkToolbar(compositeSelectAllCheckbox, deleteSelectedCompositeBtn, selectedCompositeIds, lastVisibleCompositeProducts);
+  }
+  function refreshShareRecipeBulkToolbar(){
+    refreshBulkToolbar(shareRecipeSelectAllCheckbox, exportSelectedRecipesCsvBtn, selectedShareRecipeIds, lastVisibleShareRecipes, '선택 항목 CSV로 내보내기');
   }
 
   // 원가 계산 레시피 탭을 열 때 한 번 전부 불러온다 — RLS가 owner 소유 제품으로만 스코프해주니
@@ -4863,12 +4883,13 @@
 
   function renderShareRecipesList(){
     shareRecipeListEl.innerHTML = '';
-    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    var owned = lastVisibleShareRecipes = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
     if (owned.length === 0){
       var empty = document.createElement('p');
       empty.className = 'hint';
       empty.textContent = '아직 등록된 레시피가 없어요.';
       shareRecipeListEl.appendChild(empty);
+      refreshShareRecipeBulkToolbar();
       return;
     }
     owned.forEach(function(r){
@@ -4876,6 +4897,7 @@
       row.className = 'acc-row';
       row.innerHTML =
         '<div class="acc-row-header">' +
+          '<input type="checkbox" class="acc-row-select" aria-label="선택">' +
           '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
             '<div class="acc-row-toggle-top">' +
               '<span class="acc-row-name-label"></span>' +
@@ -4904,6 +4926,13 @@
         '</div>';
       shareRecipeListEl.appendChild(row);
 
+      var selectCheckbox = row.querySelector('.acc-row-select');
+      selectCheckbox.checked = !!selectedShareRecipeIds[r.id];
+      selectCheckbox.addEventListener('change', function(){
+        if (selectCheckbox.checked) selectedShareRecipeIds[r.id] = true;
+        else delete selectedShareRecipeIds[r.id];
+        refreshShareRecipeBulkToolbar();
+      });
       var toggleBtn = row.querySelector('.acc-row-toggle');
       var nameLabelEl = row.querySelector('.acc-row-name-label');
       var summaryEl = row.querySelector('.acc-row-toggle-summary');
@@ -5015,6 +5044,7 @@
         }
       });
     });
+    refreshShareRecipeBulkToolbar();
   }
 
   // 소유한 레시피들의 tags를 평탄화·중복제거 — renderRecipeTagsList()의 그룹핑과 같은 소스.
@@ -5846,11 +5876,19 @@
     });
 
     exportRecipesCsvBtn.addEventListener('click', function(){
-      closeAccountMenu();
       exportRecipesCsv();
     });
+    shareRecipeSelectAllCheckbox.addEventListener('change', function(){
+      var checked = shareRecipeSelectAllCheckbox.checked;
+      shareRecipeListEl.querySelectorAll('.acc-row-select').forEach(function(cb){
+        cb.checked = checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    exportSelectedRecipesCsvBtn.addEventListener('click', function(){
+      exportSelectedRecipesCsv(Object.keys(selectedShareRecipeIds));
+    });
     importRecipesCsvBtn.addEventListener('click', function(){
-      closeAccountMenu();
       importRecipesCsvInput.value = ''; // clear so picking the same file twice still fires 'change'
       importRecipesCsvInput.click();
     });
