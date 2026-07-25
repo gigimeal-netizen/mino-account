@@ -854,6 +854,7 @@
   <div class="subpage-body">
     <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요.</p>
     <button class="add-btn" id="addCompositeProductBtn" style="margin-top:0;margin-bottom:14px;">+ 조합 제품 추가</button>
+    <input type="text" id="compositeProductsSearch" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
     <div id="compositeProductsList"></div>
   </div>
 </div>
@@ -1507,6 +1508,7 @@
   var compositeProductsPageEl = document.getElementById('compositeProductsPage');
   var closeCompositeProductsBtn = document.getElementById('closeCompositeProductsBtn');
   var compositeProductsListEl = document.getElementById('compositeProductsList');
+  var compositeProductsSearchInput = document.getElementById('compositeProductsSearch');
   var myCompositeProducts = []; // composite_products rows, each with a nested .composite_product_components array
   var costModalRecipe = null; // independent working copy of whichever recipe is loaded in the cost-calc modal
   var libraryCardEl = document.getElementById('libraryCard');
@@ -2234,7 +2236,7 @@
   // rhythm as renderIngredientManager()/renderProductsList()) — each row closes over its own
   // `cp`/`comp` record directly rather than going through a data-idx pass, since there's no
   // reorder concern here either.
-  function renderCompositeProductsList(){
+  function renderCompositeProductsList(query){
     compositeProductsListEl.innerHTML = '';
     if (myCompositeProducts.length === 0){
       var empty = document.createElement('p');
@@ -2243,7 +2245,18 @@
       compositeProductsListEl.appendChild(empty);
       return;
     }
-    myCompositeProducts.forEach(function(cp){
+    var q = (query || '').trim().toLowerCase();
+    var visible = myCompositeProducts.filter(function(cp){
+      return !q || (cp.name || '').toLowerCase().indexOf(q) !== -1;
+    });
+    if (visible.length === 0){
+      var noMatch = document.createElement('p');
+      noMatch.className = 'hint';
+      noMatch.textContent = '검색 결과가 없어요';
+      compositeProductsListEl.appendChild(noMatch);
+      return;
+    }
+    visible.forEach(function(cp){
       var row = document.createElement('div');
       row.className = 'composite-row';
       row.innerHTML =
@@ -2431,7 +2444,7 @@
         supabase.from('composite_products').delete().eq('id', cp.id).then(function(res){
           if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
           myCompositeProducts = myCompositeProducts.filter(function(other){ return other.id !== cp.id; });
-          renderCompositeProductsList();
+          renderCompositeProductsList(compositeProductsSearchInput.value);
           showToast('조합 제품을 삭제했어요');
         });
       });
@@ -2696,6 +2709,7 @@
   });
 
   function openCompositeProductsModal(){
+    compositeProductsSearchInput.value = ''; // don't carry over a filter from the last time this was open
     loadCompositeProducts();
     showSubpage(compositeProductsPageEl);
     closeCompositeProductsBtn.focus();
@@ -2928,6 +2942,7 @@
         if (res.error){ alert('조합 제품 추가 실패: ' + res.error.message); return; }
         res.data.composite_product_components = [];
         myCompositeProducts.push(res.data);
+        compositeProductsSearchInput.value = ''; // clear any filter — otherwise the new row could render invisible if it doesn't match
         renderCompositeProductsList();
         var rows = compositeProductsListEl.querySelectorAll('.composite-name');
         var last = rows[rows.length - 1];
@@ -2959,6 +2974,9 @@
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
       renderIngredientManager(ingredientManagerSearchInput.value);
+    });
+    compositeProductsSearchInput.addEventListener('input', function(){
+      renderCompositeProductsList(compositeProductsSearchInput.value);
     });
     document.getElementById('addProductBtn').addEventListener('click', function(){
       if (!currentUser || !costModalRecipe) return;
