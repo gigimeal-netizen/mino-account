@@ -650,13 +650,6 @@
             </svg>
           </button>
           <div class="account-menu" id="accountMenu" style="display:none;">
-            <!-- 로그인 여부와 무관하게 항상 보이는 항목 — 로그인 없이도 쓸 수 있어서, 다른
-                 항목들처럼 #loggedInRow 안에 두지 않는다. 레시피 아카이브는 2026-07-25에
-                 여기서 .recipe-toolbar의 아이콘 버튼으로 옮겨졌다(발견성 — #libraryCard 자체가
-                 로그인 전엔 안 보여서, 검색창 옆이 아니라 로그인 여부와 무관하게 항상 보이는
-                 자리가 필요했다). -->
-            <button class="menu-btn" id="openHelpBtn">도움말</button>
-            <div class="menu-divider"></div>
             <div id="authRow">
               <!-- Kakao login button removed 2026-07-24 — Supabase always requests the
                    account_email scope for Kakao (can't be overridden client-side), and this
@@ -675,6 +668,12 @@
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
+            <!-- 2026-07-25: 로그인 여부와 무관하게 항상 보이지만(그래서 #loggedInRow/#authRow
+                 밖에 둠), 위 계정 기능들보다 훨씬 드물게 쓰여서 일부러 맨 아래(이용약관 링크
+                 바로 위)로 뺐다 — 예전엔 메뉴 맨 위에 있었는데, "쓰는 빈도가 낮다면서 왜
+                 제일 눈에 띄는 자리에 있냐"는 지적을 받고서 재배치. -->
+            <div class="menu-divider"></div>
+            <button class="menu-btn" id="openHelpBtn">도움말</button>
             <p class="hint" id="authHint" style="display:none;"></p>
             <p class="hint" style="margin-top:8px;"><a href="terms.html" style="color:var(--ink-soft);">이용약관 및 개인정보처리방침</a></p>
           </div>
