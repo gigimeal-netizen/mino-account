@@ -1957,7 +1957,9 @@
         parsed = parseEmbeddedUnit(rawName);
         if (parsed){
           name = (rawName.slice(0, parsed.index) + rawName.slice(parsed.index + parsed.matchText.length))
-            .replace(/^[\s()\-–_,·]+|[\s()\-–_,·]+$/g, '')
+            .replace(/[(（][\s\-–_,·]*[)）]/g, '')            // drop now-empty ( )/（ ） pairs the removed weight leaves behind mid-string (e.g. "호박씨(1KG)-중국산" -> "호박씨()-중국산" -> "호박씨-중국산")
+            .replace(/[\s\-–_,·]{2,}/g, ' ')                  // collapse repeated separators left dangling next to each other
+            .replace(/^[\s()\-–_,·]+|[\s()\-–_,·]+$/g, '')    // trim leftover separators at the very start/end
             .trim();
           if (!name) name = rawName; // never end up with a blank name
         }
