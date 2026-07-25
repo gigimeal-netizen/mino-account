@@ -227,6 +227,15 @@
     flex: 1 1 100%; text-align: right;
   }
 
+  /* CSV 가져오기 미리보기 — 체크박스 한 줄짜리 목록, 재료 관리 카드 안의 다른 h3들과 같은
+     "제품 & 원가" 스타일 소제목을 재사용한다. */
+  .import-row{
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
+    border-bottom: 1px dashed var(--border); font-size: 13.5px; cursor: pointer;
+  }
+  .import-row:last-of-type{ border-bottom: none; }
+  .import-row input[type="checkbox"]{ flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px; }
+
   /* Products (제품 & 원가): same row rhythm as the ingredient manager — name+delete on top,
      portion weight/selling price on a wrapping line, computed cost/margin below. */
   .product-row{ padding: 12px 0; border-bottom: 1px solid var(--border); }
@@ -823,6 +832,25 @@
          scrolling past however long the list has grown — only finding the just-added row
          afterward needs a scroll, which the click handler does automatically. -->
     <button class="add-btn" id="addIngredientMasterBtn" style="margin-top:0;margin-bottom:14px;">+ 재료 추가</button>
+    <div class="field-row" style="margin-bottom:14px;">
+      <button type="button" class="io-btn" id="exportIngredientsCsvBtn">CSV로 내보내기</button>
+      <button type="button" class="io-btn" id="importIngredientsCsvBtn">CSV 가져오기</button>
+    </div>
+    <input type="file" id="importIngredientsCsvInput" accept=".csv,text/csv" style="display:none;">
+    <!--
+      CSV 가져오기 미리보기 — 이름이 같은 재료의 값이 바뀌었으면 바로 덮어쓰지 않고, 기존
+      값과 새 값을 나란히 보여준 뒤 체크박스로 골라서 적용할 항목만 반영한다(요청: "다른
+      값이면 확인하는 시스템"). 새로 추가되는 재료도 같은 화면에서 같이 확인.
+    -->
+    <div id="ingredientImportPreview" style="display:none;">
+      <p class="hint" id="ingredientImportSummary"></p>
+      <div id="ingredientImportNewList"></div>
+      <div id="ingredientImportChangedList"></div>
+      <div class="field-row">
+        <button type="button" class="io-btn primary" id="applyIngredientImportBtn">적용</button>
+        <button type="button" class="io-btn" id="cancelIngredientImportBtn">취소</button>
+      </div>
+    </div>
     <div id="ingredientManagerList"></div>
     <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
   </div>
@@ -1523,6 +1551,17 @@
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
   var ingredientManagerUnpricedHintEl = document.getElementById('ingredientManagerUnpricedHint');
+  var exportIngredientsCsvBtn = document.getElementById('exportIngredientsCsvBtn');
+  var importIngredientsCsvBtn = document.getElementById('importIngredientsCsvBtn');
+  var importIngredientsCsvInput = document.getElementById('importIngredientsCsvInput');
+  var ingredientImportPreviewEl = document.getElementById('ingredientImportPreview');
+  var ingredientImportSummaryEl = document.getElementById('ingredientImportSummary');
+  var ingredientImportNewListEl = document.getElementById('ingredientImportNewList');
+  var ingredientImportChangedListEl = document.getElementById('ingredientImportChangedList');
+  var applyIngredientImportBtn = document.getElementById('applyIngredientImportBtn');
+  var cancelIngredientImportBtn = document.getElementById('cancelIngredientImportBtn');
+  var pendingImportNew = [];     // rows from the CSV with no matching existing ingredient
+  var pendingImportChanged = []; // rows matching an existing ingredient whose amount/unit/price differs
   var openCostCalcBtn = document.getElementById('openCostCalcBtn');
   var costCalcPageEl = document.getElementById('costCalcPage');
   var closeCostCalcBtn = document.getElementById('closeCostCalcBtn');
@@ -1742,6 +1781,159 @@
   }
 
   var unitLabels = { g: 'g', kg: 'kg', ml: 'ml', l: 'l', ea: '개' };
+
+  // 재료 목록을 CSV로 저장/불러오기 — 진짜 .xlsx 읽기/쓰기는 라이브러리가 있어야 하지만, CSV는
+  // 엑셀/구글 스프레드시트/넘버스 어디서든 PC·모바일 구분 없이 그냥 열리고 저장되기 때문에
+  // 사용자 입장에서는 "엑셀로 내보내고 불러오기"와 체감상 같으면서 외부 의존성이 필요 없다.
+  // 콤마/줄바꿈이 포함된 값은 큰따옴표로 감싸고, 내부 큰따옴표는 두 번 반복해서 이스케이프.
+  function csvField(v){
+    var s = String(v == null ? '' : v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function exportIngredientsCsv(){
+    var header = ['이름', '카테고리', '구매량', '구매단위', '구매가격', '사용여부'];
+    var rows = myIngredients.map(function(ig){
+      return [
+        ig.name || '', ig.category || '', ig.purchase_amount || 0, ig.purchase_unit_type || 'g',
+        ig.purchase_price || 0, ig.is_active === false ? '사용중지' : '사용중'
+      ];
+    });
+    var csv = [header].concat(rows).map(function(r){ return r.map(csvField).join(','); }).join('\r\n');
+    // ﻿ (UTF-8 BOM) is required for Excel specifically — without it, Excel guesses the
+    // system ANSI codepage instead of UTF-8 and every Korean name renders as broken text.
+    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '재료목록_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Minimal CSV parser handling quoted fields (so a category or name containing a comma,
+  // exported by this same feature or typed in Excel, round-trips correctly) — deliberately
+  // not a full RFC 4180 implementation, just enough for what exportIngredientsCsv() produces
+  // and what a normal Excel/Sheets save-as-CSV produces.
+  function parseCsv(text){
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    var rows = [], row = [], field = '', inQuotes = false;
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i + 1] === '"'){ field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else if (c === '"'){
+        inQuotes = true;
+      } else if (c === ','){
+        row.push(field); field = '';
+      } else if (c === '\r'){
+        // skip — \r\n line endings are handled by the \n branch below
+      } else if (c === '\n'){
+        row.push(field); rows.push(row); row = []; field = '';
+      } else {
+        field += c;
+      }
+    }
+    if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+    return rows.filter(function(r){ return !(r.length === 1 && r[0] === ''); });
+  }
+
+  // Parses the picked file and, rather than writing straight to Supabase, builds two review
+  // lists — per the explicit request: "다른 값이면 확인하는 시스템" (ask before applying a
+  // changed value, e.g. butter's price moving from 60,000원 on 7/20 to 100,000원 on 7/25).
+  // Matching is by whitespace/case-normalized name (normalizeForMatch(), same helper the
+  // ingredient-linker's auto-match already uses) — an unmatched name becomes a new-ingredient
+  // candidate, a matched name whose amount/unit/price differ from what's stored becomes a
+  // changed-value candidate; a matched name with no difference is silently skipped (nothing
+  // to confirm). Neither list is written to Supabase until renderIngredientImportPreview()'s
+  // checkboxes are reviewed and 적용 is clicked.
+  function handleIngredientCsvImport(text){
+    var rows = parseCsv(text);
+    if (rows.length === 0){ alert('CSV 내용을 읽을 수 없어요.'); return; }
+    var startIdx = (rows[0][0] || '').trim() === '이름' ? 1 : 0;
+    pendingImportNew = [];
+    pendingImportChanged = [];
+    for (var i = startIdx; i < rows.length; i++){
+      var r = rows[i];
+      var name = (r[0] || '').trim();
+      if (!name) continue;
+      var category = (r[1] || '').trim();
+      var amount = parseFloat(r[2]) || 0;
+      var unit = (r[3] || 'g').trim();
+      if (['g', 'kg', 'ml', 'l', 'ea'].indexOf(unit) === -1) unit = 'g';
+      var price = parseFloat(r[4]) || 0;
+      var norm = normalizeForMatch(name);
+      var existing = myIngredients.find(function(ig){ return normalizeForMatch(ig.name) === norm; });
+      if (!existing){
+        pendingImportNew.push({ name: name, category: category, purchase_amount: amount, purchase_unit_type: unit, purchase_price: price });
+      } else if (existing.purchase_amount !== amount || existing.purchase_unit_type !== unit || existing.purchase_price !== price){
+        pendingImportChanged.push({
+          ig: existing,
+          fields: {
+            purchase_amount: amount, purchase_unit_type: unit, purchase_price: price,
+            price_per_gram: computePricePerGram(amount, unit, price)
+          },
+          oldText: (existing.purchase_amount || 0) + (unitLabels[existing.purchase_unit_type] || existing.purchase_unit_type) + ' · ' + (existing.purchase_price || 0) + '원',
+          newText: amount + (unitLabels[unit] || unit) + ' · ' + price + '원'
+        });
+      }
+    }
+    renderIngredientImportPreview();
+  }
+
+  function renderIngredientImportPreview(){
+    ingredientManagerListEl.style.display = 'none';
+    document.getElementById('addIngredientMasterBtn').style.display = 'none';
+    ingredientImportPreviewEl.style.display = 'block';
+    if (pendingImportNew.length === 0 && pendingImportChanged.length === 0){
+      ingredientImportSummaryEl.textContent = '변경 사항이 없어요 — 모든 재료가 이미 최신 상태예요.';
+    } else {
+      ingredientImportSummaryEl.textContent =
+        '새 재료 ' + pendingImportNew.length + '개, 가격 변경 ' + pendingImportChanged.length + '개를 찾았어요. 적용할 항목을 확인해주세요.';
+    }
+    ingredientImportNewListEl.innerHTML = '';
+    if (pendingImportNew.length > 0){
+      var h3a = document.createElement('h3');
+      h3a.textContent = '새로 추가될 재료';
+      ingredientImportNewListEl.appendChild(h3a);
+      pendingImportNew.forEach(function(item, idx){
+        var label = document.createElement('label');
+        label.className = 'import-row';
+        label.innerHTML =
+          '<input type="checkbox" checked data-kind="new" data-idx="' + idx + '"> ' +
+          '<span>' + escapeHtml(item.name) + ' — ' + item.purchase_amount + (unitLabels[item.purchase_unit_type] || item.purchase_unit_type) +
+          ' · ' + item.purchase_price + '원' + (item.category ? ' (' + escapeHtml(item.category) + ')' : '') + '</span>';
+        ingredientImportNewListEl.appendChild(label);
+      });
+    }
+    ingredientImportChangedListEl.innerHTML = '';
+    if (pendingImportChanged.length > 0){
+      var h3b = document.createElement('h3');
+      h3b.textContent = '가격이 변경된 재료';
+      ingredientImportChangedListEl.appendChild(h3b);
+      pendingImportChanged.forEach(function(item, idx){
+        var label = document.createElement('label');
+        label.className = 'import-row';
+        label.innerHTML =
+          '<input type="checkbox" checked data-kind="changed" data-idx="' + idx + '"> ' +
+          '<span>' + escapeHtml(item.ig.name) + ' — 기존 ' + escapeHtml(item.oldText) + ' → 새값 ' + escapeHtml(item.newText) + '</span>';
+        ingredientImportChangedListEl.appendChild(label);
+      });
+    }
+  }
+
+  function closeIngredientImportPreview(){
+    ingredientImportPreviewEl.style.display = 'none';
+    ingredientManagerListEl.style.display = '';
+    document.getElementById('addIngredientMasterBtn').style.display = '';
+    pendingImportNew = [];
+    pendingImportChanged = [];
+  }
 
   // "재료 관리" card (opened from the account menu): a structural rebuild per ingredient
   // (add/deactivate change the list), each row wired independently right after it's built —
@@ -3226,6 +3418,55 @@
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
       renderIngredientManager(ingredientManagerSearchInput.value);
+    });
+    exportIngredientsCsvBtn.addEventListener('click', exportIngredientsCsv);
+    importIngredientsCsvBtn.addEventListener('click', function(){
+      importIngredientsCsvInput.value = ''; // clear so picking the same file twice still fires 'change'
+      importIngredientsCsvInput.click();
+    });
+    importIngredientsCsvInput.addEventListener('change', function(){
+      var file = importIngredientsCsvInput.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        handleIngredientCsvImport(String(reader.result));
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+    cancelIngredientImportBtn.addEventListener('click', closeIngredientImportPreview);
+    applyIngredientImportBtn.addEventListener('click', function(){
+      if (!currentUser) return;
+      var newChecked = Array.prototype.slice.call(ingredientImportNewListEl.querySelectorAll('input[data-kind="new"]:checked'))
+        .map(function(el){ return pendingImportNew[parseInt(el.dataset.idx, 10)]; });
+      var changedChecked = Array.prototype.slice.call(ingredientImportChangedListEl.querySelectorAll('input[data-kind="changed"]:checked'))
+        .map(function(el){ return pendingImportChanged[parseInt(el.dataset.idx, 10)]; });
+      if (newChecked.length === 0 && changedChecked.length === 0){ closeIngredientImportPreview(); return; }
+      var tasks = newChecked.map(function(item){
+        return supabase.from('ingredients').insert({
+          owner_id: currentUser.id, name: item.name, category: item.category,
+          purchase_amount: item.purchase_amount, purchase_unit_type: item.purchase_unit_type,
+          purchase_price: item.purchase_price,
+          price_per_gram: computePricePerGram(item.purchase_amount, item.purchase_unit_type, item.purchase_price)
+        }).select().single();
+      }).concat(changedChecked.map(function(item){
+        return supabase.from('ingredients').update(item.fields).eq('id', item.ig.id).select().single();
+      }));
+      Promise.all(tasks).then(function(results){
+        var failed = 0;
+        results.forEach(function(res, i){
+          if (res.error){ failed++; return; }
+          if (i < newChecked.length){
+            myIngredients.push(res.data);
+          } else {
+            var changedItem = changedChecked[i - newChecked.length];
+            Object.keys(changedItem.fields).forEach(function(k){ changedItem.ig[k] = changedItem.fields[k]; });
+          }
+        });
+        closeIngredientImportPreview();
+        renderIngredientManager();
+        if (failed > 0) alert('일부 항목 저장에 실패했어요 (' + failed + '개).');
+        else showToast((newChecked.length + changedChecked.length) + '개 항목을 적용했어요');
+      });
     });
     compositeProductsSearchInput.addEventListener('input', function(){
       renderCompositeProductsList(compositeProductsSearchInput.value);
