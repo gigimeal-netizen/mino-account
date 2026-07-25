@@ -207,6 +207,13 @@
     flex: 0 0 auto; font-size: 11.5px; color: var(--ink-soft); background: var(--bg-elevated);
     border-radius: 999px; padding: 2px 8px;
   }
+  /* Bulk-select checkbox sits beside (not inside) .acc-row-toggle — a <button> can't
+     validly contain another interactive control like a checkbox, and nesting them would
+     make every checkbox click also fire the row's expand/collapse. As true siblings inside
+     this flex row, checking a box never touches the toggle button at all. */
+  .ing-row-header{ display: flex; align-items: center; gap: 10px; }
+  .ing-row-header .acc-row-select{ flex: 0 0 auto; width: 20px; height: 20px; }
+  .ing-row-header .acc-row-toggle{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top{ display:flex; align-items:center; gap:8px; flex-wrap: wrap; }
   .ing-mgr-name{ flex: 1 1 auto; min-width: 0; }
   .ingredient-mgr-top .io-btn{ flex: 0 0 auto; padding: 8px 12px; min-height: 0; }
@@ -883,6 +890,20 @@
         <button type="button" class="io-btn primary" id="applyIngredientImportBtn">적용</button>
         <button type="button" class="io-btn" id="cancelIngredientImportBtn">취소</button>
       </div>
+    </div>
+    <!--
+      일괄/선택 삭제 — 개별 행의 "완전 삭제"는 사용중지 상태여야만 나오는 안전장치가 있지만
+      (재료 하나씩 정리할 때), 여러 개를 한 번에 정리하고 싶을 때는 그 두 단계를 매번 거치는
+      게 번거롭다는 요청. 체크박스로 고른 재료를 상태와 무관하게 바로 삭제하되, 확인창
+      한 번은 유지해서 실수로 전체 삭제되는 일은 막는다. "전체 선택"은 지금 검색으로 걸러진
+      행만 대상으로 하므로, 검색으로 좁혀서 그 안에서만 일괄 삭제하는 것도 가능하다.
+    -->
+    <div class="field-row" id="ingredientBulkToolbar" style="margin-bottom:14px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 1 auto;">
+        <input type="checkbox" id="ingredientSelectAllCheckbox">
+        <span>전체 선택</span>
+      </label>
+      <button type="button" class="io-btn danger" id="deleteSelectedIngredientsBtn" style="display:none;flex:0 0 auto;">선택 삭제</button>
     </div>
     <div id="ingredientManagerList"></div>
     <p class="hint">구매량과 가격을 입력하면 g당 단가가 자동으로 계산돼요. "개" 단위는 무게로 환산할 수 없어서 아직 원가 계산에는 반영되지 않아요. ml/l은 밀도를 1(물 기준)로 가정해요.</p>
@@ -1584,6 +1605,10 @@
   var ingredientManagerListEl = document.getElementById('ingredientManagerList');
   var ingredientManagerSearchInput = document.getElementById('ingredientManagerSearch');
   var ingredientManagerUnpricedHintEl = document.getElementById('ingredientManagerUnpricedHint');
+  var ingredientSelectAllCheckbox = document.getElementById('ingredientSelectAllCheckbox');
+  var deleteSelectedIngredientsBtn = document.getElementById('deleteSelectedIngredientsBtn');
+  var selectedIngredientIds = {}; // id -> true, only for currently-checked rows; reset whenever the list re-renders after a delete
+  var lastVisibleIngredients = []; // the `visible` list from the most recent renderIngredientManager() call, so refreshIngredientBulkToolbar() can be called from anywhere (a single row's own checkbox handler included) without needing it passed in
   var exportIngredientsCsvBtn = document.getElementById('exportIngredientsCsvBtn');
   var importIngredientsCsvBtn = document.getElementById('importIngredientsCsvBtn');
   var importIngredientsCsvInput = document.getElementById('importIngredientsCsvInput');
@@ -2113,7 +2138,7 @@
     ingredientManagerUnpricedHintEl.style.display = unpricedCount > 0 ? 'block' : 'none';
     ingredientManagerUnpricedHintEl.textContent = unpricedCount > 0 ? ('단가 미입력 재료 ' + unpricedCount + '개') : '';
     var q = (query || '').trim().toLowerCase();
-    var visible = myIngredients.filter(function(ig){
+    var visible = lastVisibleIngredients = myIngredients.filter(function(ig){
       if (!q) return true;
       return (ig.name || '').toLowerCase().indexOf(q) !== -1 ||
              (ig.category || '').toLowerCase().indexOf(q) !== -1;
@@ -2131,21 +2156,24 @@
         return '<option value="' + u + '"' + (ig.purchase_unit_type === u ? ' selected' : '') + '>' + unitLabels[u] + '</option>';
       }).join('');
       row.innerHTML =
-        '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
-          '<div class="acc-row-toggle-top">' +
-            '<span class="acc-row-name-label"></span>' +
-            '<span class="ing-mgr-inactive-badge" style="display:none;">사용중지</span>' +
-            '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="단가 미입력">' +
-              '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
-              '<line x1="12" y1="9" x2="12" y2="13"></line>' +
-              '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
-            '</svg>' +
-            '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<polyline points="6 9 12 15 18 9"></polyline>' +
-            '</svg>' +
-          '</div>' +
-          '<div class="acc-row-toggle-summary"></div>' +
-        '</button>' +
+        '<div class="ing-row-header">' +
+          '<input type="checkbox" class="acc-row-select" aria-label="선택">' +
+          '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+            '<div class="acc-row-toggle-top">' +
+              '<span class="acc-row-name-label"></span>' +
+              '<span class="ing-mgr-inactive-badge" style="display:none;">사용중지</span>' +
+              '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="단가 미입력">' +
+                '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
+                '<line x1="12" y1="9" x2="12" y2="13"></line>' +
+                '<line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+              '</svg>' +
+              '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="6 9 12 15 18 9"></polyline>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="acc-row-toggle-summary"></div>' +
+          '</button>' +
+        '</div>' +
         '<div class="acc-row-detail" style="display:none;">' +
           '<div class="ingredient-mgr-top">' +
             '<input class="ing-mgr-name text-input">' +
@@ -2165,6 +2193,7 @@
         '</div>';
       ingredientManagerListEl.appendChild(row);
 
+      var selectCheckbox = row.querySelector('.acc-row-select');
       var accToggleBtn = row.querySelector('.acc-row-toggle');
       var nameLabelEl = row.querySelector('.acc-row-name-label');
       var inactiveBadgeEl = row.querySelector('.ing-mgr-inactive-badge');
@@ -2187,6 +2216,13 @@
       statusToggleBtn.textContent = ig.is_active === false ? '복원' : '사용중지';
       statusToggleBtn.classList.toggle('danger', ig.is_active !== false);
       inactiveBadgeEl.style.display = ig.is_active === false ? 'inline-block' : 'none';
+
+      selectCheckbox.checked = !!selectedIngredientIds[ig.id];
+      selectCheckbox.addEventListener('change', function(){
+        if (selectCheckbox.checked) selectedIngredientIds[ig.id] = true;
+        else delete selectedIngredientIds[ig.id];
+        refreshIngredientBulkToolbar();
+      });
 
       // List-first, detail-on-click (accordion, same pattern as 조합 제품/레시피 원가 계산):
       // name + a live 단가/g summary + a red warning icon (when unpriced, only for still-
@@ -2269,12 +2305,31 @@
           supabase.from('ingredients').delete().eq('id', ig.id).then(function(res){
             if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
             myIngredients = myIngredients.filter(function(other){ return other.id !== ig.id; });
+            delete selectedIngredientIds[ig.id];
             renderIngredientManager(ingredientManagerSearchInput.value);
             showToast('재료를 삭제했어요');
           });
         });
       }
     });
+    refreshIngredientBulkToolbar();
+  }
+
+  // Keeps the "전체 선택" checkbox and "선택 삭제 (N)" button in sync with
+  // selectedIngredientIds against whichever rows are currently visible (i.e. matching the
+  // active search filter, tracked in lastVisibleIngredients) — selecting "전체" only selects
+  // what's actually on screen, so narrowing the search first and then "전체 선택" is how a
+  // subset gets bulk-deleted. Reads lastVisibleIngredients rather than taking a parameter so
+  // it can be called from anywhere — a single row's own checkbox handler included — without
+  // that call site needing to know or re-derive the current filtered list itself.
+  function refreshIngredientBulkToolbar(){
+    var visibleIds = lastVisibleIngredients.map(function(ig){ return ig.id; });
+    var selectedVisibleCount = visibleIds.filter(function(id){ return selectedIngredientIds[id]; }).length;
+    ingredientSelectAllCheckbox.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+    ingredientSelectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+    var totalSelected = Object.keys(selectedIngredientIds).length;
+    deleteSelectedIngredientsBtn.style.display = totalSelected > 0 ? 'inline-block' : 'none';
+    deleteSelectedIngredientsBtn.textContent = '선택 삭제 (' + totalSelected + ')';
   }
 
   function loadProducts(recipeId){
@@ -3582,6 +3637,27 @@
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
       renderIngredientManager(ingredientManagerSearchInput.value);
+    });
+    ingredientSelectAllCheckbox.addEventListener('change', function(){
+      var checked = ingredientSelectAllCheckbox.checked;
+      ingredientManagerListEl.querySelectorAll('.acc-row-select').forEach(function(cb){
+        cb.checked = checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    deleteSelectedIngredientsBtn.addEventListener('click', function(){
+      var ids = Object.keys(selectedIngredientIds);
+      if (ids.length === 0) return;
+      var names = myIngredients.filter(function(ig){ return selectedIngredientIds[ig.id]; }).map(function(ig){ return ig.name; });
+      var preview = names.slice(0, 5).join(', ') + (names.length > 5 ? ' 외 ' + (names.length - 5) + '개' : '');
+      if (!confirm(ids.length + '개 재료를 완전히 삭제할까요?\n(' + preview + ')\n\n이 재료들을 쓰던 레시피가 있다면 그 안의 이름은 남지만 다시 연결할 수 없게 돼요.')) return;
+      supabase.from('ingredients').delete().in('id', ids).then(function(res){
+        if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+        myIngredients = myIngredients.filter(function(ig){ return !selectedIngredientIds[ig.id]; });
+        selectedIngredientIds = {};
+        renderIngredientManager(ingredientManagerSearchInput.value);
+        showToast(ids.length + '개 재료를 삭제했어요');
+      });
     });
     exportIngredientsCsvBtn.addEventListener('click', exportIngredientsCsv);
     importIngredientsCsvBtn.addEventListener('click', function(){
