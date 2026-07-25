@@ -68,15 +68,49 @@ create table products (
   updated_at timestamptz not null default now()
 );
 
+-- A product doesn't always come from a single recipe (e.g. 소보로빵 = 소보로 반죽 + 빵 반죽,
+-- two entirely separate recipes combined). composite_products is the deliberately-separate
+-- entity for that case — components each reference their own recipe + finished weight + their
+-- own loss rate (different shapes from the same or different batches can trim differently).
+-- The plain `products` table above stays as the simple "one recipe, several sizes" case.
+create table composite_products (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default '새 조합 제품',
+  selling_price numeric not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table composite_product_components (
+  id uuid primary key default gen_random_uuid(),
+  composite_product_id uuid not null references composite_products(id) on delete cascade,
+  recipe_id uuid references recipes(id) on delete cascade, -- nullable: a new component starts
+                                                            -- unassigned until a recipe is picked
+  weight_g numeric not null default 0,      -- 이 구성요소가 완제품에 들어가는 무게(성형 완료 기준)
+  loss_rate_pct numeric not null default 0, -- 이 구성요소만의 재단/성형 손실률(%)
+  created_at timestamptz not null default now()
+);
+
 alter table recipes enable row level security;
 alter table recipe_shares enable row level security;
 alter table ingredients enable row level security;
 alter table products enable row level security;
+alter table composite_products enable row level security;
+alter table composite_product_components enable row level security;
 
 create policy "owner full access" on ingredients for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "owner full access" on products for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "owner full access" on composite_products for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+-- composite_product_components has no owner_id of its own, so it checks ownership via its
+-- parent — safe as a plain subquery (unlike recipes/recipe_shares) since composite_products'
+-- own policy only checks a column directly and never queries this table back, so there's no
+-- cycle for Postgres to recurse on.
+create policy "owner full access via parent" on composite_product_components for all
+  using (exists (select 1 from composite_products cp where cp.id = composite_product_id and cp.owner_id = auth.uid()))
+  with check (exists (select 1 from composite_products cp where cp.id = composite_product_id and cp.owner_id = auth.uid()));
 
 -- recipes' "shared read access" policy needs to check recipe_shares, and recipe_shares'
 -- "owner manages shares" policy needs to check recipes — a direct subquery in either
