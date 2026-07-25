@@ -630,9 +630,9 @@
   .bottom-nav-btn svg{ width: 22px; height: 22px; }
   .bottom-nav-btn.active{ color: var(--accent); }
   .bottom-nav-btn:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
-  /* 2026-07-25: 결과 복사 버튼이 예전 고정 푸터의 .copy-btn에서 공유 패널의 .io-btn으로
-     옮겨갔다 — "복사됨" 성공 색상 표시는 그대로 유지. */
-  .io-btn.copied{ background: var(--success); border-color: var(--success); color:#fff; }
+  /* 2026-07-25: 결과 복사 버튼이 예전 고정 푸터의 .copy-btn을 거쳐 지금은 .stamp-card 안의
+     아이콘 버튼(.icon-btn)이다 — "복사됨" 성공 색상 표시는 그대로 유지. */
+  .icon-btn.copied{ background: var(--success); border-color: var(--success); color:#fff; }
 
   .toast{
     position: fixed; left:50%; bottom: 90px; transform: translateX(-50%);
@@ -867,8 +867,10 @@
   </section>
 
   <!-- 2026-07-25: moved out of the old fixed sticky footer (screenshot-confirmed placement:
-       재료 카드와 메모 카드 사이) — see .stamp-card CSS note. The "결과 복사" button that used
-       to sit next to it now lives inside 공유 패널 as #copyResultBtn. -->
+       재료 카드와 메모 카드 사이) — see .stamp-card CSS note. #copyResultBtn briefly lived
+       inside 공유 패널 (owner-only) the same day, but a non-member/no-share-permission user
+       has no share panel to open at all — moved it here instead so 클립보드 복사 works for
+       anyone regardless of login/ownership, same as the old footer button always did. -->
   <section class="card stamp-card">
     <div class="stamp">
       <span class="num" id="stampTotal">0</span>
@@ -880,6 +882,12 @@
       <div class="footer-value" id="totalWeightText">0g</div>
       <div class="footer-dirty" id="footerDirtyHint" style="display:none;">● 저장 안 된 변경사항 있음</div>
     </div>
+    <button type="button" class="icon-btn" id="copyResultBtn" aria-label="계산 결과 클립보드로 복사">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+      </svg>
+    </button>
   </section>
 
   <section class="card">
@@ -912,14 +920,6 @@
       </button>
     </div>
     <div class="share-panel" id="selectedSharePanel" style="display:none;">
-      <!-- 2026-07-25: 하단 고정 푸터를 없애면서(#stampTotal 등이 재료/메모 카드 사이로 이동)
-           거기 있던 "결과 복사" 버튼이 갈 곳이 없어졌다 — 공유 버튼을 누르면 여는 이 패널
-           안에 그대로 옮겨서 기능을 유지한다. -->
-      <div class="field-row">
-        <span class="field-label">계산 결과</span>
-        <button class="io-btn" id="copyResultBtn">클립보드 복사</button>
-      </div>
-      <div class="toolbar-divider"></div>
       <div class="field-row">
         <span class="field-label">링크 공유</span>
         <button class="io-btn" id="toggleLinkBtn">링크 켜기</button>
@@ -2030,11 +2030,10 @@
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
   });
 
-  // Copy results — 2026-07-25: moved from the old fixed footer into #selectedSharePanel
-  // (#copyResultBtn), reachable via the 공유 아이콘. Note this narrows availability slightly
-  // versus the old always-visible footer button: the share panel only shows for a
-  // selected/owned recipe (shareSelectedBtn's isOwner gate), so an ad-hoc calculation with no
-  // recipe ever saved/selected has no copy-to-clipboard path anymore.
+  // Copy results — 2026-07-25: moved from the old fixed footer into .stamp-card as a small
+  // icon button (#copyResultBtn), right next to the stamp — briefly lived inside the owner-only
+  // share panel the same day, but that hid it from non-members/no-share-permission users
+  // entirely, so it moved somewhere always reachable regardless of login/ownership instead.
   document.getElementById('copyResultBtn').addEventListener('click', function(){
     var lines = [recipeNameInput.value, ''];
     var total;
@@ -2068,10 +2067,11 @@
 
     var btn = document.getElementById('copyResultBtn');
     var showCopyToast = function(){
+      // 아이콘 전용 버튼이라(텍스트 라벨 없음) textContent를 바꾸면 SVG가 지워진다 — 성공
+      // 표시는 색상 변화(.copied)와 토스트 메시지만으로 한다.
       showToast('복사되었습니다');
-      btn.textContent = '복사됨';
       btn.classList.add('copied');
-      setTimeout(function(){ btn.textContent = '클립보드 복사'; btn.classList.remove('copied'); }, 1600);
+      setTimeout(function(){ btn.classList.remove('copied'); }, 1600);
     };
 
     if (navigator.clipboard && navigator.clipboard.writeText){
