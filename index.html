@@ -3928,6 +3928,11 @@
       var addEmailInput = row.querySelector('.share-add-email-input');
       var addEmailBtn = row.querySelector('.share-add-email-btn');
       var grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
+      // 공유 대상이 아직 없을 때(grants가 비어있을 때)도 토글이 클릭한 값을 그대로 보여줘야 하고,
+      // 그다음 "이메일로 공유 추가"가 그 값을 써야 한다 — grants.some(...)으로 매번 다시 계산하면
+      // 대상이 없는 동안은 항상 false(비공개)로 보여서, 공개를 눌러도 화면이 그대로인 것처럼 보이는
+      // 버그가 있었다. pendingCanSave가 지금 이 화면에서 선택된 값의 유일한 출처.
+      var pendingCanSave = grants.some(function(g){ return g.can_save; });
 
       nameLabelEl.textContent = r.recipe_name || '이름 없는 레시피';
 
@@ -3935,9 +3940,8 @@
         summaryEl.textContent = grants.length ? (grants.length + '명과 공유중') : '';
       }
       function refreshToggleButtons(){
-        var canSave = grants.some(function(g){ return g.can_save; });
-        allowBtn.classList.toggle('primary', canSave);
-        denyBtn.classList.toggle('primary', !canSave);
+        allowBtn.classList.toggle('primary', pendingCanSave);
+        denyBtn.classList.toggle('primary', !pendingCanSave);
       }
       function refreshGrantees(){
         renderGranteeRows(granteeListEl, grants, function(g){
@@ -3946,7 +3950,6 @@
             myRecipeShares = myRecipeShares.filter(function(s){ return !(s.recipe_id === r.id && s.shared_with_user_id === g.shared_with_user_id); });
             grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
             refreshSummary();
-            refreshToggleButtons();
             refreshGrantees();
             showToast('공유를 회수했어요');
           });
@@ -3957,11 +3960,12 @@
       refreshGrantees();
 
       function setCanSaveForAll(canSave){
-        if (grants.length === 0){ refreshToggleButtons(); return; } // 공유 대상이 아직 없으면 토글만 반영
+        pendingCanSave = canSave;
+        refreshToggleButtons();
+        if (grants.length === 0) return; // 아직 공유 대상이 없으면 로컬로만 기억, 다음 "공유 추가"에 이 값이 쓰인다
         supabase.from('recipe_shares').update({ can_save: canSave }).eq('recipe_id', r.id).then(function(res){
           if (res.error){ alert('설정 변경 실패: ' + res.error.message); return; }
           grants.forEach(function(g){ g.can_save = canSave; });
-          refreshToggleButtons();
         });
       }
       allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
@@ -3970,8 +3974,7 @@
       addEmailBtn.addEventListener('click', function(){
         var email = addEmailInput.value.trim();
         if (!email) return;
-        var canSave = grants.some(function(g){ return g.can_save; });
-        supabase.rpc('share_recipe_with_email', { p_recipe_id: r.id, p_email: email, p_can_save: canSave }).then(function(res){
+        supabase.rpc('share_recipe_with_email', { p_recipe_id: r.id, p_email: email, p_can_save: pendingCanSave }).then(function(res){
           if (res.error){ alert('공유 실패: ' + res.error.message); return; }
           addEmailInput.value = '';
           loadMyRecipeShares().then(function(){
@@ -4057,6 +4060,9 @@
       var addEmailInput = row.querySelector('.share-add-email-input');
       var addEmailBtn = row.querySelector('.share-add-email-btn');
       var grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
+      // 레시피 탭과 같은 이유 — grants가 비어있을 때도 토글 클릭이 반영되고 그 값이 "공유 추가"에
+      // 쓰이도록, pendingCanSave가 이 화면에서 선택된 값의 유일한 출처.
+      var pendingCanSave = grants.some(function(g){ return g.can_save; });
 
       nameLabelEl.textContent = tag;
 
@@ -4064,9 +4070,8 @@
         summaryEl.textContent = grants.length ? (grants.length + '명과 공유중') : '';
       }
       function refreshToggleButtons(){
-        var canSave = grants.some(function(g){ return g.can_save; });
-        allowBtn.classList.toggle('primary', canSave);
-        denyBtn.classList.toggle('primary', !canSave);
+        allowBtn.classList.toggle('primary', pendingCanSave);
+        denyBtn.classList.toggle('primary', !pendingCanSave);
       }
       function refreshGrantees(){
         renderGranteeRows(granteeListEl, grants, function(g){
@@ -4075,7 +4080,6 @@
             myTagAccountShares = myTagAccountShares.filter(function(s){ return s.id !== g.id; });
             grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
             refreshSummary();
-            refreshToggleButtons();
             refreshGrantees();
             showToast('공유를 회수했어요');
           });
@@ -4086,11 +4090,12 @@
       refreshGrantees();
 
       function setCanSaveForAll(canSave){
-        if (grants.length === 0){ refreshToggleButtons(); return; }
+        pendingCanSave = canSave;
+        refreshToggleButtons();
+        if (grants.length === 0) return;
         supabase.from('tag_account_shares').update({ can_save: canSave }).eq('owner_id', currentUser.id).eq('tag', tag).then(function(res){
           if (res.error){ alert('설정 변경 실패: ' + res.error.message); return; }
           grants.forEach(function(g){ g.can_save = canSave; });
-          refreshToggleButtons();
         });
       }
       allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
@@ -4099,8 +4104,7 @@
       addEmailBtn.addEventListener('click', function(){
         var email = addEmailInput.value.trim();
         if (!email) return;
-        var canSave = grants.some(function(g){ return g.can_save; });
-        supabase.rpc('share_tag_with_email', { p_tag: tag, p_email: email, p_can_save: canSave }).then(function(res){
+        supabase.rpc('share_tag_with_email', { p_tag: tag, p_email: email, p_can_save: pendingCanSave }).then(function(res){
           if (res.error){ alert('공유 실패: ' + res.error.message); return; }
           addEmailInput.value = '';
           loadMyTagAccountShares().then(function(){
