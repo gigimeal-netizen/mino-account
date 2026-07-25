@@ -232,6 +232,7 @@
   .product-cost-inputs{ display:flex; align-items:center; gap:6px; flex-wrap: wrap; margin-top: 8px; }
   .product-weight{ flex: 1 1 90px; min-width: 0; }
   .product-price{ flex: 1 1 90px; min-width: 0; }
+  .product-loss{ flex: 1 1 80px; min-width: 0; }
   .product-cost-result{
     font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
     text-align: right; margin-top: 6px;
@@ -1777,6 +1778,17 @@
   // matching the same "recompute into existing nodes" rhythm updateDisplays() itself uses
   // for the main calculator. costModalRecipe is the cost-calc modal's own independent copy
   // of whichever recipe is currently loaded there (see openCostCalcRecipe()).
+  // A product's portion_weight is its finished/shaped weight, but the dough that went into
+  // it costs more than that per gram once trim loss (재단/성형 파지) is accounted for —
+  // (총 반죽 − 성형완료 총중량) ÷ 총 반죽 × 100 = 로스율 means it took 1/(1-로스율) grams of
+  // dough to yield 1 gram of finished product. Applied per product (not per recipe) since one
+  // batch can be shaped into several different products with different trim ratios (e.g. PLF
+  // dough cut into both croissants and pains au chocolat).
+  function effectiveCostPerGram(costPerGram, lossRatePct){
+    var loss = Math.max(0, Math.min(99, parseFloat(lossRatePct) || 0)) / 100;
+    return loss > 0 ? costPerGram / (1 - loss) : costPerGram;
+  }
+
   function refreshProductCosts(){
     if (!costModalRecipe) return;
     var cost = computeRecipeCostPerGramFor(costModalRecipe);
@@ -1786,14 +1798,18 @@
     costProductsListEl.querySelectorAll('.product-row').forEach(function(row){
       var weightEl = row.querySelector('.product-weight');
       var priceEl = row.querySelector('.product-price');
+      var lossEl = row.querySelector('.product-loss');
       var resultEl = row.querySelector('.product-cost-result');
       var weight = parseFloat(weightEl.value) || 0;
       var price = parseFloat(priceEl.value) || 0;
-      var productCost = Math.round(cost.costPerGram * weight);
+      var lossRate = Math.max(0, Math.min(99, parseFloat(lossEl.value) || 0));
+      var effCostPerGram = effectiveCostPerGram(cost.costPerGram, lossRate);
+      var productCost = Math.round(effCostPerGram * weight);
       var margin = price - productCost;
       var marginRate = price > 0 ? Math.round(margin / price * 100) : null;
       resultEl.textContent = '원가 ' + productCost + '원 · 마진 ' + margin + '원' +
-        (marginRate !== null ? ' (마진율 ' + marginRate + '%)' : '');
+        (marginRate !== null ? ' (마진율 ' + marginRate + '%)' : '') +
+        (lossRate > 0 ? ' (로스 ' + lossRate + '% 반영)' : '');
     });
   }
 
@@ -1819,6 +1835,8 @@
           '<span class="unit">g</span>' +
           '<input class="product-price" type="number" inputmode="decimal" placeholder="판매가">' +
           '<span class="unit">원</span>' +
+          '<input class="product-loss" type="number" inputmode="decimal" step="0.1" min="0" max="99" placeholder="로스율">' +
+          '<span class="unit">%</span>' +
         '</div>' +
         '<div class="product-cost-result"></div>';
       costProductsListEl.appendChild(row);
@@ -1826,11 +1844,13 @@
       var nameEl = row.querySelector('.product-name');
       var weightEl = row.querySelector('.product-weight');
       var priceEl = row.querySelector('.product-price');
+      var lossEl = row.querySelector('.product-loss');
       var delBtn = row.querySelector('.product-del');
 
       nameEl.value = pd.name || '';
       weightEl.value = pd.portion_weight || 0;
       priceEl.value = pd.selling_price || 0;
+      lossEl.value = pd.loss_rate_pct || 0;
 
       function saveFields(fields){
         supabase.from('products').update(fields).eq('id', pd.id).then(function(res){
@@ -1846,13 +1866,16 @@
       function saveWeightPrice(){
         saveFields({
           portion_weight: parseFloat(weightEl.value) || 0,
-          selling_price: parseFloat(priceEl.value) || 0
+          selling_price: parseFloat(priceEl.value) || 0,
+          loss_rate_pct: Math.max(0, Math.min(99, parseFloat(lossEl.value) || 0))
         });
       }
       weightEl.addEventListener('input', refreshProductCosts);
       priceEl.addEventListener('input', refreshProductCosts);
+      lossEl.addEventListener('input', refreshProductCosts);
       weightEl.addEventListener('blur', saveWeightPrice);
       priceEl.addEventListener('blur', saveWeightPrice);
+      lossEl.addEventListener('blur', saveWeightPrice);
 
       delBtn.addEventListener('click', function(){
         if (!confirm('"' + (pd.name || '이 제품') + '"을 삭제할까요?')) return;
@@ -2520,7 +2543,14 @@
     });
     document.getElementById('addProductBtn').addEventListener('click', function(){
       if (!currentUser || !costModalRecipe) return;
-      supabase.from('products').insert({ owner_id: currentUser.id, recipe_id: costModalRecipe.id, name: '새 제품' }).select().single().then(function(res){
+      // Same batch, different shapes (e.g. PLF dough cut into both croissants and pains au
+      // chocolat) usually share roughly the same trim loss — inherit the last product's
+      // 로스율 as a starting point instead of making the user retype the same number every
+      // time; they can still edit it per product if one shape actually trims differently.
+      var inheritedLossRate = myProducts.length > 0 ? (myProducts[myProducts.length - 1].loss_rate_pct || 0) : 0;
+      supabase.from('products').insert({
+        owner_id: currentUser.id, recipe_id: costModalRecipe.id, name: '새 제품', loss_rate_pct: inheritedLossRate
+      }).select().single().then(function(res){
         if (res.error){ alert('제품 추가 실패: ' + res.error.message); return; }
         myProducts.push(res.data);
         renderProductsList();

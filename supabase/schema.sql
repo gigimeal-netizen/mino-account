@@ -61,8 +61,9 @@ create table products (
   owner_id uuid not null references auth.users(id) on delete cascade,
   recipe_id uuid not null references recipes(id) on delete cascade,
   name text not null default '새 제품',
-  portion_weight numeric not null default 0, -- 1개당 중량(g)
+  portion_weight numeric not null default 0, -- 1개당 중량(g, 성형 완료 기준)
   selling_price numeric not null default 0,
+  loss_rate_pct numeric not null default 0, -- 재단/성형 손실률(%) — (총 반죽 - 성형완료 총중량)/총 반죽 × 100
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
