@@ -475,6 +475,7 @@
      header, or another subpage's own slot), so the top-right of every subpage matches the
      main calculator's header instead of looking empty, with zero duplicated login/menu logic. */
   .subpage-header-actions{ flex: 0 0 auto; }
+  .cost-tabs{ margin-bottom: 18px; }
   .subpage-body{ padding: 18px; max-width: 580px; margin: 0 auto; }
   .subpage-body h3{
     font-family: var(--font-display); font-size: 13px; font-weight: 800;
@@ -607,8 +608,7 @@
             </div>
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
-              <button class="menu-btn" id="openCostCalcBtn">레시피 원가 계산</button>
-              <button class="menu-btn" id="openCompositeProductsBtn">조합 제품 원가 계산</button>
+              <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
@@ -832,6 +832,11 @@
   원가 계산 서브페이지 — 레시피 작성 화면과 완전히 분리된 별도 화면. 재료 이름(레시피에 쓰인
   그대로, 예: "버터")과 원가 계산용 재료DB 연결(예: "앵커버터")은 여기서만 다룬다 — 레시피
   편집 화면의 재료 이름 칸은 이 연결과 무관하게 항상 그대로 표시된다.
+
+  2026-07-25: 레시피 원가 계산 / 조합 제품 원가 계산이 원래 별개의 두 서브페이지였다가 한
+  화면 + 탭으로 병합됐다 — 둘 다 "원가 계산"이라는 같은 목적의 화면인데 메뉴에 항목이 두
+  개로 나뉘어 있어 헷갈린다는 피드백. 각 탭 안의 목록/상세 로직 자체는 손대지 않고, 탭
+  전환에 따라 두 패널(#costRecipeTabPanel/#costCompositeTabPanel) 중 하나만 보이게 했다.
 -->
 <div class="subpage" id="costCalcPage" style="display:none;">
   <div class="subpage-header">
@@ -841,55 +846,47 @@
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
-      <h2>레시피 원가 계산</h2>
+      <h2>원가 계산</h2>
       <div class="header-actions subpage-header-actions"></div>
     </div>
   </div>
   <div class="subpage-body">
-    <p class="hint">레시피를 선택하면 재료를 재료DB와 연결하고, 이 레시피로 파는 제품의 원가/마진을 확인할 수 있어요.</p>
-    <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
-    <div id="costRecipeList"></div>
+    <div class="field-row cost-tabs">
+      <button type="button" class="io-btn primary" id="costTabRecipeBtn" aria-selected="true">레시피</button>
+      <button type="button" class="io-btn" id="costTabCompositeBtn" aria-selected="false">조합 제품</button>
+    </div>
+    <div id="costRecipeTabPanel">
+      <p class="hint">레시피를 선택하면 재료를 재료DB와 연결하고, 이 레시피로 파는 제품의 원가/마진을 확인할 수 있어요.</p>
+      <input type="text" id="costRecipeSearchInput" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
+      <div id="costRecipeList"></div>
+      <!--
+        A single shared detail block, moved into whichever recipe row's slot is clicked open
+        (see renderCostRecipesList()) rather than rebuilt per row — the ingredient-linking and
+        product/cost logic underneath (openCostCalcRecipe(), renderCostIngredientsList(), etc.)
+        is unchanged from before this screen became a list; only the picker around it changed.
+      -->
+      <div id="costCalcBody" class="acc-row-detail" style="display:none;">
+        <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
+        <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
+        <div id="costIngredientsList"></div>
+        <div class="toolbar-divider"></div>
+        <h3>제품 &amp; 원가</h3>
+        <p class="hint">이 레시피로 실제 파는 단위(예: "휘낭시에 30g")를 등록하면, 위에서 계산된 g당 원가로 개당 원가와 판매가 대비 마진을 자동으로 보여줘요.</p>
+        <div id="costProductsList"></div>
+        <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
+      </div>
+    </div>
     <!--
-      A single shared detail block, moved into whichever recipe row's slot is clicked open
-      (see renderCostRecipesList()) rather than rebuilt per row — the ingredient-linking and
-      product/cost logic underneath (openCostCalcRecipe(), renderCostIngredientsList(), etc.)
-      is unchanged from before this screen became a list; only the picker around it changed.
+      조합 제품: 레시피 하나에 속하지 않는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽, 서로
+      다른 레시피 두 개를 합친 것)을 위한 탭. "제품 & 원가"(레시피 하나 : 제품 여러 개)와는
+      별개 — 저건 그대로 두고 이건 완전히 새로운 개념.
     -->
-    <div id="costCalcBody" class="acc-row-detail" style="display:none;">
-      <p class="hint" id="costCostPerGramHint">이 레시피의 g당 원가: 0원/g</p>
-      <p class="hint warn-hint" id="costUnpricedHint" style="display:none;">일부 재료의 단가가 없어 원가가 정확하지 않을 수 있어요.</p>
-      <div id="costIngredientsList"></div>
-      <div class="toolbar-divider"></div>
-      <h3>제품 &amp; 원가</h3>
-      <p class="hint">이 레시피로 실제 파는 단위(예: "휘낭시에 30g")를 등록하면, 위에서 계산된 g당 원가로 개당 원가와 판매가 대비 마진을 자동으로 보여줘요.</p>
-      <div id="costProductsList"></div>
-      <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
+    <div id="costCompositeTabPanel" style="display:none;">
+      <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요. 구성요소는 레시피뿐 아니라 소금 뿌리기처럼 재료 하나만 추가할 수도 있어요.</p>
+      <button class="add-btn" id="addCompositeProductBtn" style="margin-top:0;margin-bottom:14px;">+ 조합 제품 추가</button>
+      <input type="text" id="compositeProductsSearch" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
+      <div id="compositeProductsList"></div>
     </div>
-  </div>
-</div>
-
-<!--
-  조합 제품 서브페이지 — 레시피 하나에 속하지 않는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽,
-  서로 다른 레시피 두 개를 합친 것)을 위한 별도 화면. "제품 & 원가"(레시피 하나 : 제품 여러
-  개)와는 별개 — 저 화면은 그대로 두고 이건 완전히 새로운 개념으로 추가한다.
--->
-<div class="subpage" id="compositeProductsPage" style="display:none;">
-  <div class="subpage-header">
-    <div class="subpage-header-inner">
-      <button class="icon-btn" id="closeCompositeProductsBtn" aria-label="계산기로 돌아가기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-      </button>
-      <h2>조합 제품 원가 계산</h2>
-      <div class="header-actions subpage-header-actions"></div>
-    </div>
-  </div>
-  <div class="subpage-body">
-    <p class="hint">서로 다른 레시피를 합쳐서 만드는 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)을 등록하면, 각 구성요소의 g당 원가를 자동으로 더해서 전체 원가와 마진을 보여줘요. 구성요소는 레시피뿐 아니라 소금 뿌리기처럼 재료 하나만 추가할 수도 있어요.</p>
-    <button class="add-btn" id="addCompositeProductBtn" style="margin-top:0;margin-bottom:14px;">+ 조합 제품 추가</button>
-    <input type="text" id="compositeProductsSearch" class="text-input" autocomplete="off" placeholder="이름으로 검색" style="width:100%;margin-bottom:14px;">
-    <div id="compositeProductsList"></div>
   </div>
 </div>
 
@@ -1536,9 +1533,14 @@
   var costUnpricedHintEl = document.getElementById('costUnpricedHint');
   var costIngredientsListEl = document.getElementById('costIngredientsList');
   var costProductsListEl = document.getElementById('costProductsList');
-  var openCompositeProductsBtn = document.getElementById('openCompositeProductsBtn');
-  var compositeProductsPageEl = document.getElementById('compositeProductsPage');
-  var closeCompositeProductsBtn = document.getElementById('closeCompositeProductsBtn');
+  // 레시피 원가 계산 / 조합 제품 원가 계산 used to be two separate subpages; merged (2026-07-25)
+  // into one "원가 계산" subpage with a tab switch, since they're both the same kind of screen
+  // and having two nearly-identical menu entries was confusing. costCalcPageEl is now the one
+  // shared subpage for both tabs — see switchCostTab().
+  var costTabRecipeBtn = document.getElementById('costTabRecipeBtn');
+  var costTabCompositeBtn = document.getElementById('costTabCompositeBtn');
+  var costRecipeTabPanelEl = document.getElementById('costRecipeTabPanel');
+  var costCompositeTabPanelEl = document.getElementById('costCompositeTabPanel');
   var compositeProductsListEl = document.getElementById('compositeProductsList');
   var compositeProductsSearchInput = document.getElementById('compositeProductsSearch');
   var myCompositeProducts = []; // composite_products rows, each with a nested .composite_product_components array
@@ -2885,12 +2887,34 @@
     if (e.key === 'Escape' && ingredientManagerPageEl.style.display !== 'none') closeIngredientManagerModal();
   });
 
+  // Switches between the two tabs sharing one "원가 계산" subpage. Neither tab's own list/
+  // detail DOM is torn down on switch-away — just hidden — so an expanded recipe row (and
+  // wherever costCalcBody currently sits) survives flipping to 조합 제품 and back. The
+  // composite tab does re-fetch every time it's switched into, matching what
+  // openCompositeProductsModal() used to do on every open back when it was its own subpage.
+  function switchCostTab(tab){
+    var isRecipe = tab === 'recipe';
+    costTabRecipeBtn.classList.toggle('primary', isRecipe);
+    costTabRecipeBtn.setAttribute('aria-selected', isRecipe ? 'true' : 'false');
+    costTabCompositeBtn.classList.toggle('primary', !isRecipe);
+    costTabCompositeBtn.setAttribute('aria-selected', !isRecipe ? 'true' : 'false');
+    costRecipeTabPanelEl.style.display = isRecipe ? 'block' : 'none';
+    costCompositeTabPanelEl.style.display = isRecipe ? 'none' : 'block';
+    if (!isRecipe){
+      compositeProductsSearchInput.value = '';
+      loadCompositeProducts();
+    }
+  }
+  costTabRecipeBtn.addEventListener('click', function(){ switchCostTab('recipe'); });
+  costTabCompositeBtn.addEventListener('click', function(){ switchCostTab('composite'); });
+
   function openCostCalcModal(){
     costRecipeSearchInput.value = ''; // don't carry over a filter from the last time this was open
     costModalRecipe = null;
     activeCostRowSummaryEl = null;
     activeCostRowWarnIconEl = null;
     costCalcBodyEl.style.display = 'none';
+    switchCostTab('recipe'); // always open back on the 레시피 tab, same as each screen resetting itself before this merge
     renderCostRecipesList();
     showSubpage(costCalcPageEl);
     closeCostCalcBtn.focus();
@@ -2901,20 +2925,6 @@
   closeCostCalcBtn.addEventListener('click', closeCostCalcModal);
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && costCalcPageEl.style.display !== 'none') closeCostCalcModal();
-  });
-
-  function openCompositeProductsModal(){
-    compositeProductsSearchInput.value = ''; // don't carry over a filter from the last time this was open
-    loadCompositeProducts();
-    showSubpage(compositeProductsPageEl);
-    closeCompositeProductsBtn.focus();
-  }
-  function closeCompositeProductsModal(){
-    hideSubpage(compositeProductsPageEl);
-  }
-  closeCompositeProductsBtn.addEventListener('click', closeCompositeProductsModal);
-  document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && compositeProductsPageEl.style.display !== 'none') closeCompositeProductsModal();
   });
 
   // Recipe list for "레시피 원가 계산" — same list-first, click-to-expand accordion layout as
@@ -3126,7 +3136,6 @@
       libraryCardEl.style.display = 'none';
       closeIngredientManagerModal();
       closeCostCalcModal();
-      closeCompositeProductsModal();
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
@@ -3171,10 +3180,6 @@
     openCostCalcBtn.addEventListener('click', function(){
       closeAccountMenu();
       openCostCalcModal();
-    });
-    openCompositeProductsBtn.addEventListener('click', function(){
-      closeAccountMenu();
-      openCompositeProductsModal();
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
       if (!currentUser) return;
