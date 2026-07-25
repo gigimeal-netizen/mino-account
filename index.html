@@ -421,13 +421,17 @@
 
   /* 원가 계산 모달의 재료 연결 목록: 이름(레시피 그대로, 읽기 전용) + 재료DB 링크 콤보. */
   .cost-ing-row{
-    display: flex; align-items: center; gap: 10px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
     padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   .cost-ing-row:last-of-type{ border-bottom: none; }
   .cost-ing-name{
     flex: 0 0 auto; max-width: 40%; font-weight: 700; font-size: 14.5px;
     color: var(--ink); overflow-wrap: break-word;
+  }
+  .cost-ing-price{
+    flex: 1 1 100%; font-family: var(--font-mono); font-size: 12px;
+    color: var(--ink-soft); text-align: right;
   }
   .ing-link-input{
     width: 100%; display: block; font-family: var(--font-body); font-size: 14px;
@@ -779,6 +783,7 @@
       <div id="costIngredientsList"></div>
       <div class="toolbar-divider"></div>
       <h3>제품 &amp; 원가</h3>
+      <p class="hint">이 레시피로 실제 파는 단위(예: "휘낭시에 30g")를 등록하면, 위에서 계산된 g당 원가로 개당 원가와 판매가 대비 마진을 자동으로 보여줘요.</p>
       <div id="costProductsList"></div>
       <button class="add-btn" id="addProductBtn">+ 제품 추가</button>
     </div>
@@ -1562,31 +1567,44 @@
   // price_per_gram of 0 (never priced, or an 'ea'-unit ingredient that can't be weight-
   // converted) is treated as "unpriced" — contributes 0 cost and flags the result rather
   // than silently understating it.
-  function computeRecipeCostPerGramFor(recipeLike){
-    var totalCost = 0, totalWeight = 0, hasUnpriced = false;
-    function priceFor(row){
+  // Same ratio-based math as computeRecipeCostPerGramFor() used to do inline, but keeps each
+  // row's own weight/price/cost so the cost-calc modal can show "이 재료가 원가의 N%를
+  //차지해요" per ingredient, not just the recipe-wide total. `items` is in the same order as
+  // `recipeLike.flours.concat(recipeLike.ingredients)` (flours is always [] for engine B, so
+  // this is safe to do unconditionally rather than branching per type).
+  function computeCostBreakdown(recipeLike){
+    var isBread = recipeLike.type === 'bread';
+    var BASE = 100; // arbitrary basis (flour bucket = 100) for bread — only the ratio matters
+    var rows = recipeLike.flours.concat(recipeLike.ingredients);
+    var items = rows.map(function(row){
+      var w = isBread ? BASE * (parseFloat(row.pct) || 0) / 100 : (parseFloat(row.weight) || 0);
+      var pricePerGram = null;
       if (row.ingredientId){
         var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
-        if (found && found.price_per_gram > 0) return found.price_per_gram;
+        if (found && found.price_per_gram > 0) pricePerGram = found.price_per_gram;
       }
-      hasUnpriced = true;
-      return 0;
-    }
-    if (recipeLike.type === 'bread'){
-      var BASE = 100; // arbitrary basis (flour bucket = 100) — only the ratio matters
-      recipeLike.flours.concat(recipeLike.ingredients).forEach(function(row){
-        var w = BASE * (parseFloat(row.pct) || 0) / 100;
-        totalCost += w * priceFor(row);
-        totalWeight += w;
-      });
-    } else {
-      recipeLike.ingredients.forEach(function(row){
-        var w = parseFloat(row.weight) || 0;
-        totalCost += w * priceFor(row);
-        totalWeight += w;
-      });
-    }
-    return { costPerGram: totalWeight > 0 ? totalCost / totalWeight : 0, hasUnpriced: hasUnpriced };
+      return { row: row, weight: w, pricePerGram: pricePerGram, cost: pricePerGram !== null ? w * pricePerGram : 0 };
+    });
+    var totalWeight = items.reduce(function(s, it){ return s + it.weight; }, 0);
+    var totalCost = items.reduce(function(s, it){ return s + it.cost; }, 0);
+    var hasUnpriced = items.some(function(it){ return it.pricePerGram === null; });
+    return {
+      items: items, totalWeight: totalWeight, totalCost: totalCost,
+      costPerGram: totalWeight > 0 ? totalCost / totalWeight : 0,
+      hasUnpriced: hasUnpriced
+    };
+  }
+
+  // price_per_gram of 0 (never priced, or an 'ea'-unit ingredient that can't be weight-
+  // converted) is treated as "unpriced" — contributes 0 cost and flags the result rather
+  // than silently understating it. A recipe's cost-per-gram is scale-invariant — the ratio
+  // between ingredients is what matters, not whatever multiplier/target-total happens to be
+  // showing right now — so this takes a plain { type, flours, ingredients } rather than
+  // reading global state; the cost-calc modal loads its own independent copy of whichever
+  // recipe is picked there, unrelated to whatever's open in the main editor.
+  function computeRecipeCostPerGramFor(recipeLike){
+    var breakdown = computeCostBreakdown(recipeLike);
+    return { costPerGram: breakdown.costPerGram, hasUnpriced: breakdown.hasUnpriced };
   }
 
   function loadMyIngredients(){
@@ -2245,12 +2263,16 @@
   // Loads an independent working copy of the picked recipe's flours/ingredients — this never
   // touches the main calculator's `state`, so linking ingredients here is safe regardless of
   // whatever recipe (if any) is currently open in the editor behind this modal.
+  // migrateIngredientRow() (the same exact-name auto-match applyRecipeRowToState() runs when
+  // loading a recipe into the main editor) runs here too — otherwise a recipe that's only
+  // ever been opened through this modal (never through the main editor) would show every
+  // ingredient as unlinked even when a same-named ingredient already exists in myIngredients.
   function openCostCalcRecipe(recipe){
     costModalRecipe = {
       id: recipe.id,
       type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
-      flours: (Array.isArray(recipe.flours) ? recipe.flours : []).map(function(f){ return Object.assign({}, f); }),
-      ingredients: (Array.isArray(recipe.ingredients) ? recipe.ingredients : []).map(function(i){ return Object.assign({}, i); })
+      flours: (Array.isArray(recipe.flours) ? recipe.flours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); }),
+      ingredients: (Array.isArray(recipe.ingredients) ? recipe.ingredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); })
     };
     costRecipeNameHeadingEl.textContent = recipe.recipe_name || '이름 없는 레시피';
     costNoRecipeHintEl.style.display = 'none';
@@ -2276,19 +2298,34 @@
 
   function renderCostIngredientsList(){
     costIngredientsListEl.innerHTML = '';
-    costModalRecipe.flours.concat(costModalRecipe.ingredients).forEach(function(row){
+    // Computed once per render so every row's "원가 기여 %" is against the same total —
+    // recomputed (via the full re-render in attachIngredientLinker's onChange below) whenever
+    // a link changes, so relinking one ingredient updates every row's share, not just its own.
+    var breakdown = computeCostBreakdown(costModalRecipe);
+    var rows = costModalRecipe.flours.concat(costModalRecipe.ingredients);
+    rows.forEach(function(row, idx){
+      var item = breakdown.items[idx];
       var rowEl = document.createElement('div');
       rowEl.className = 'cost-ing-row';
       rowEl.innerHTML =
         '<div class="cost-ing-name"></div>' +
-        '<div class="ing-link-combo"><input class="ing-link-input" autocomplete="off"><div class="combo-dropdown" style="display:none;"></div></div>';
+        '<div class="ing-link-combo"><input class="ing-link-input" autocomplete="off"><div class="combo-dropdown" style="display:none;"></div></div>' +
+        '<div class="cost-ing-price"></div>';
       costIngredientsListEl.appendChild(rowEl);
       rowEl.querySelector('.cost-ing-name').textContent = row.name || '';
+      var priceEl = rowEl.querySelector('.cost-ing-price');
+      if (item.pricePerGram !== null){
+        var contribution = breakdown.totalCost > 0 ? Math.round(item.cost / breakdown.totalCost * 100) : 0;
+        priceEl.textContent = (Math.round(item.pricePerGram * 100) / 100) + '원/g · 원가 기여 ' + contribution + '%';
+      } else {
+        priceEl.textContent = '단가 없음';
+        priceEl.classList.add('warn-hint');
+      }
       var input = rowEl.querySelector('.ing-link-input');
       var dropdown = rowEl.querySelector('.combo-dropdown');
       attachIngredientLinker(input, dropdown, row, function(){
         saveCostRecipeLinks();
-        refreshProductCosts();
+        renderCostIngredientsList(); // rebuild (its own tail already calls refreshProductCosts()) so price/contribution reflect the new link
       });
     });
     refreshProductCosts();
@@ -2370,7 +2407,18 @@
       supabase.from('ingredients').insert({ owner_id: currentUser.id, name: '새 재료' }).select().single().then(function(res){
         if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
         myIngredients.push(res.data);
-        renderIngredientManager(ingredientManagerSearchInput.value);
+        ingredientManagerSearchInput.value = ''; // clear any filter — otherwise the new row could render invisible if it doesn't match
+        renderIngredientManager();
+        // The list can get long enough that the newly-added row is off-screen below the
+        // "+ 재료 추가" button — scroll to it and focus its name field instead of leaving the
+        // user to hunt for it themselves.
+        var rows = ingredientManagerListEl.querySelectorAll('.ing-mgr-name');
+        var last = rows[rows.length - 1];
+        if (last){
+          last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          last.focus();
+          last.select();
+        }
       });
     });
     ingredientManagerSearchInput.addEventListener('input', function(){
