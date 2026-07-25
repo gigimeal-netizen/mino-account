@@ -44,6 +44,12 @@ create table recipes (
 create table recipe_shares (
   recipe_id uuid not null references recipes(id) on delete cascade,
   shared_with_user_id uuid not null references auth.users(id) on delete cascade,
+  shared_with_email text not null default '', -- denormalized copy of what the owner typed, so the
+                                               -- 공유 관리 screen can list recipients without needing
+                                               -- a separate auth.users lookup (client can't query it directly)
+  can_save boolean not null default false,    -- 2026-07-25: 공개(저장 가능)/비공개(저장 전용) — one flag per
+                                               -- recipe's account-share, applied uniformly to every recipient
+                                               -- (not per-person), toggled from 공유 관리
   created_at timestamptz not null default now(),
   primary key (recipe_id, shared_with_user_id)
 );
@@ -151,11 +157,40 @@ returns boolean language sql security definer stable as $$
   select exists (select 1 from recipe_shares where recipe_id = p_recipe_id and shared_with_user_id = auth.uid());
 $$;
 
--- Owner: full CRUD. Recipient of an account-share: read only.
+-- 2026-07-25: 태그 단위 계정 공유 — 레시피 하나하나가 아니라 (소유자, 태그) 쌍으로 계정을 지정해
+-- 공유한다. 기존 tag_shares(익명 링크, 태그 공유)와는 별개 — 이건 "누구인지"로 검사하는 계정 기반이라
+-- 회수(행 삭제)가 즉시, 확실하게 먹힌다는 점이 다르다. recipe_shares와 동일한 구조(can_save,
+-- shared_with_email)를 그대로 따른다.
+create table tag_account_shares (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  tag text not null,
+  shared_with_user_id uuid not null references auth.users(id) on delete cascade,
+  shared_with_email text not null default '',
+  can_save boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (owner_id, tag, shared_with_user_id)
+);
+alter table tag_account_shares enable row level security;
+create policy "owner full access" on tag_account_shares for all
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "recipient sees own share row" on tag_account_shares for select
+  using (shared_with_user_id = auth.uid());
+
+-- "이 레시피의 소유자가 나에게 이 레시피가 가진 태그 중 하나를 공유했는가"를 검사.
+create or replace function is_recipe_tag_shared_with_me(p_owner_id uuid, p_tags text[])
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from tag_account_shares
+    where owner_id = p_owner_id and shared_with_user_id = auth.uid() and tag = any(p_tags)
+  );
+$$;
+
+-- Owner: full CRUD. Recipient of an account-share (레시피 개별 공유 또는 태그 공유): read only.
 create policy "owner full access" on recipes for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "shared read access" on recipes for select
-  using (is_recipe_shared_with_me(id));
+  using (is_recipe_shared_with_me(id) or is_recipe_tag_shared_with_me(owner_id, tags));
 
 create policy "owner manages shares" on recipe_shares for all
   using (is_owner_of_recipe(recipe_id));
@@ -164,7 +199,9 @@ create policy "recipient sees own share row" on recipe_shares for select
 
 -- Share with a specific account by email. auth.users is never exposed to
 -- clients directly, so the lookup happens inside this SECURITY DEFINER function.
-create or replace function share_recipe_with_email(p_recipe_id uuid, p_email text)
+-- 2026-07-25: p_can_save 추가(공개/비공개), 이미 공유된 이메일을 다시 추가하면 에러 대신
+-- can_save/shared_with_email을 갱신(공유 관리 화면에서 "다시 추가 = 설정 변경"으로 쓸 수 있게).
+create or replace function share_recipe_with_email(p_recipe_id uuid, p_email text, p_can_save boolean default false)
 returns void language plpgsql security definer as $$
 declare target_id uuid;
 begin
@@ -175,8 +212,10 @@ begin
   if not exists (select 1 from recipes where id = p_recipe_id and owner_id = auth.uid()) then
     raise exception '본인 소유 레시피만 공유할 수 있어요';
   end if;
-  insert into recipe_shares (recipe_id, shared_with_user_id) values (p_recipe_id, target_id)
-    on conflict do nothing;
+  insert into recipe_shares (recipe_id, shared_with_user_id, shared_with_email, can_save)
+    values (p_recipe_id, target_id, p_email, p_can_save)
+    on conflict (recipe_id, shared_with_user_id) do update
+      set can_save = excluded.can_save, shared_with_email = excluded.shared_with_email;
 end; $$;
 
 -- Issue or revoke a share link's token. Owner only.
@@ -245,6 +284,22 @@ returns setof recipes language sql security definer as $$
   where ts.share_token = p_token;
 $$;
 grant execute on function get_recipes_by_tag_share_token(uuid) to anon;
+
+-- 태그 단위 "계정" 공유 추가 (tag_account_shares 테이블/정책은 위 is_recipe_tag_shared_with_me
+-- 근처에 정의됨) — share_recipe_with_email과 완전히 같은 모양, 대상 테이블/이메일만 다르다.
+create or replace function share_tag_with_email(p_tag text, p_email text, p_can_save boolean default false)
+returns void language plpgsql security definer as $$
+declare target_id uuid;
+begin
+  select id into target_id from auth.users where email = p_email;
+  if target_id is null then
+    raise exception '해당 이메일의 계정을 찾을 수 없어요';
+  end if;
+  insert into tag_account_shares (owner_id, tag, shared_with_user_id, shared_with_email, can_save)
+    values (auth.uid(), p_tag, target_id, p_email, p_can_save)
+    on conflict (owner_id, tag, shared_with_user_id) do update
+      set can_save = excluded.can_save, shared_with_email = excluded.shared_with_email;
+end; $$;
 
 -- 회원 탈퇴: the client (anon/authenticated key) can never delete a row from auth.users
 -- directly — that requires the service_role key, which must never reach the browser. This

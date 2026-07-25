@@ -653,6 +653,7 @@
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
               <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
+              <button class="menu-btn" id="openShareManagerBtn">공유 관리</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
               <button class="menu-btn danger" id="deleteAccountBtn">회원 탈퇴</button>
             </div>
@@ -723,6 +724,16 @@
         <div class="combo-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
       <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
+      <!--
+        2026-07-25: 계정 기반 공유(레시피 개별 + 태그)로 나에게 공유된 레시피 목록 — 이름을
+        몰라도 검색창 없이 눈에 바로 띄게 하려는 용도. 소유자 쪽 "누구에게 공유했는지" 관리는
+        여기가 아니라 계정 메뉴의 "공유 관리" 화면에서.
+      -->
+      <div id="sharedWithMeSection" style="display:none;">
+        <div class="toolbar-divider"></div>
+        <p class="field-label" style="margin-bottom:4px;">공유받은 레시피</p>
+        <div id="sharedWithMeList" class="tag-recipe-list"></div>
+      </div>
     </div>
   </section>
 
@@ -1055,6 +1066,42 @@
         <button type="button" class="io-btn danger" id="deleteSelectedCompositeBtn" style="display:none;flex:0 0 auto;">선택 삭제</button>
       </div>
       <div id="compositeProductsList"></div>
+    </div>
+  </div>
+</div>
+
+<!--
+  공유 관리 (2026-07-25) — 계정 기반 공유(레시피 개별 + 태그)로 "누구한테 공유했는지"를
+  한 화면에서 보고, 저장 가능/불가능(공개/비공개)을 정하고, 회수하는 소유자 전용 화면.
+  기존 링크 공유(share_token/tag_shares, "URL을 아는 사람 누구나")와는 완전히 별개 — 저건
+  #selectedSharePanel/태그별 보기의 공유 패널에 그대로 남아있고, 여기는 "이 계정만" 방식이라
+  회수하면 그 사람의 접근이 즉시, 확실하게 끊긴다.
+-->
+<div class="subpage" id="shareManagerPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeShareManagerBtn" aria-label="계산기 메인 화면으로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </button>
+      <h2>공유 관리</h2>
+      <div class="header-actions subpage-header-actions"></div>
+    </div>
+  </div>
+  <div class="subpage-body">
+    <div class="field-row cost-tabs">
+      <button type="button" class="io-btn primary" id="shareTabRecipeBtn" aria-selected="true">레시피별 공유</button>
+      <button type="button" class="io-btn" id="shareTabTagBtn" aria-selected="false">태그별 공유</button>
+    </div>
+    <div id="shareRecipeTabPanel">
+      <p class="hint">레시피를 계정(이메일)으로 공유해요. 공개는 상대가 저장(자기 계정에 사본 생성)까지 가능, 비공개는 열람만 가능해요. 회수하면 즉시 접근이 끊겨요.</p>
+      <div id="shareRecipeList"></div>
+    </div>
+    <div id="shareTagTabPanel" style="display:none;">
+      <p class="hint">태그 하나에 붙은 레시피 전체를 계정별로 한 번에 공유해요. 나중에 이 태그가 붙는 레시피도 자동으로 포함돼요. 공개/비공개, 회수는 레시피별 공유와 같아요.</p>
+      <div id="shareTagList"></div>
     </div>
   </div>
 </div>
@@ -1698,6 +1745,12 @@
   var currentUser = null;
   var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
   var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
+  // 2026-07-25: 계정 기반 공유(레시피 개별 + 태그) — RLS가 "내가 owner인 레시피/태그의 공유 행" +
+  // "나에게 공유된 행"을 합쳐서 돌려주므로, select('*') 한 번으로 소유자 쪽(공유 관리 화면)과
+  // 수신자 쪽(canSaveThisRecipe) 판단을 동시에 커버한다.
+  var myRecipeShares = []; // rows from `recipe_shares`
+  var myTagAccountShares = []; // rows from `tag_account_shares`
+  var currentRecipeSaveAllowed = true; // 지금 계산기에 로드된 레시피를 저장해도 되는지 — renderSelectedRecipe()/newRecipe()가 갱신
   var sharedViewToken = new URLSearchParams(location.search).get('share');
   var tagSharedToken = new URLSearchParams(location.search).get('tag_share');
 
@@ -1779,6 +1832,15 @@
   // unpriced state back into the list the moment it changes, not just into costCalcBody.
   var activeCostRowSummaryEl = null;
   var activeCostRowWarnIconEl = null;
+  var openShareManagerBtn = document.getElementById('openShareManagerBtn');
+  var shareManagerPageEl = document.getElementById('shareManagerPage');
+  var closeShareManagerBtn = document.getElementById('closeShareManagerBtn');
+  var shareTabRecipeBtn = document.getElementById('shareTabRecipeBtn');
+  var shareTabTagBtn = document.getElementById('shareTabTagBtn');
+  var shareRecipeTabPanelEl = document.getElementById('shareRecipeTabPanel');
+  var shareTagTabPanelEl = document.getElementById('shareTagTabPanel');
+  var shareRecipeListEl = document.getElementById('shareRecipeList');
+  var shareTagListEl = document.getElementById('shareTagList');
   var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
   var recipeTagsPageEl = document.getElementById('recipeTagsPage');
   var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
@@ -1786,6 +1848,8 @@
   var recipeTagsListEl = document.getElementById('recipeTagsList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
+  var sharedWithMeSectionEl = document.getElementById('sharedWithMeSection');
+  var sharedWithMeListEl = document.getElementById('sharedWithMeList');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
   var recipeDropdownEl = document.getElementById('recipeDropdown');
   var recipeDropdownToggleBtn = document.getElementById('recipeDropdownToggle');
@@ -1902,7 +1966,11 @@
     supabase.from('recipes').select('*').order('updated_at', { ascending: false }).then(function(res){
       if (res.error){ alert('레시피 목록을 불러오지 못했어요: ' + res.error.message); return; }
       myRecipes = res.data || [];
-      libraryEmptyHintEl.style.display = myRecipes.length ? 'none' : 'block';
+      // 소유한 레시피 기준으로만 판단 — myRecipes에 공유받은 레시피가 섞여 있어서, 전체 길이로
+      // 판단하면 "내 레시피는 하나도 없지만 공유받은 것만 있는" 경우에 이 안내가 잘못 숨는다.
+      var ownedCount = myRecipes.filter(function(r){ return r.owner_id === currentUser.id; }).length;
+      libraryEmptyHintEl.style.display = ownedCount ? 'none' : 'block';
+      renderSharedWithMeList();
       // Keep the selected recipe's panel (share token, owner badge) in sync after a
       // save/delete/share round trip, instead of silently going stale.
       if (selectedRecipeId){
@@ -1911,6 +1979,45 @@
         else clearSelectedRecipe();
       }
     });
+  }
+
+  function loadMyRecipeShares(){
+    return supabase.from('recipe_shares').select('*').then(function(res){
+      if (res.error){ alert('레시피 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myRecipeShares = res.data || [];
+    });
+  }
+
+  function loadMyTagAccountShares(){
+    return supabase.from('tag_account_shares').select('*').then(function(res){
+      if (res.error){ alert('태그 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
+      myTagAccountShares = res.data || [];
+    });
+  }
+
+  // 레시피 소유자면 항상 저장 가능. 아니면 레시피 개별 공유(recipe_shares) 또는 이 레시피가 가진
+  // 태그 중 하나의 태그 공유(tag_account_shares) 중 하나라도 can_save=true면 저장 허용(OR) —
+  // 저장가능/불가능은 공유 대상 전체에 통일 적용되므로 사람별로 다른 규칙을 볼 일은 없다.
+  function canSaveThisRecipe(recipe){
+    if (!currentUser || !recipe) return false;
+    if (recipe.owner_id === currentUser.id) return true;
+    var viaDirectShare = myRecipeShares.some(function(s){
+      return s.recipe_id === recipe.id && s.shared_with_user_id === currentUser.id && s.can_save;
+    });
+    if (viaDirectShare) return true;
+    var tags = recipe.tags || [];
+    return myTagAccountShares.some(function(s){
+      return s.owner_id === recipe.owner_id && s.shared_with_user_id === currentUser.id &&
+        s.can_save && tags.indexOf(s.tag) !== -1;
+    });
+  }
+
+  // saveBtn/saveBtnBottom의 표시 여부를 한 곳에서 결정 — 로그인 상태 X 현재 로드된 레시피가
+  // 저장 가능한지(currentRecipeSaveAllowed, renderSelectedRecipe()/newRecipe()가 갱신) 둘 다 반영.
+  function updateSaveButtonVisibility(){
+    var show = !!currentUser && currentRecipeSaveAllowed;
+    saveBtn.style.display = show ? '' : 'none';
+    saveBtnBottom.style.display = show ? '' : 'none';
   }
 
   // 'ea' (개수) isn't weight-convertible, so its price-per-gram is left at 0 — the
@@ -3223,6 +3330,8 @@
     shareSelectedBtn.style.display = 'none';
     deleteSelectedBtn.style.display = 'none';
     selectedSharePanelEl.style.display = 'none';
+    currentRecipeSaveAllowed = true;
+    updateSaveButtonVisibility();
   }
 
   function renderSelectedRecipe(recipe){
@@ -3230,6 +3339,8 @@
     var isOwner = currentUser && recipe.owner_id === currentUser.id;
     shareSelectedBtn.style.display = isOwner ? '' : 'none';
     deleteSelectedBtn.style.display = isOwner ? '' : 'none';
+    currentRecipeSaveAllowed = isOwner || canSaveThisRecipe(recipe);
+    updateSaveButtonVisibility();
     if (!isOwner){
       selectedSharePanelEl.style.display = 'none';
       return;
@@ -3241,6 +3352,28 @@
     } else {
       linkRowEl.style.display = 'none';
     }
+  }
+
+  // 계정 기반 공유(레시피 개별 + 태그)로 나에게 공유된 레시피 — myRecipes 중 내가 owner가 아닌
+  // 행들. "내 레시피" 검색창은 이미 owner 구분 없이 myRecipes 전체를 이름으로 찾을 수 있어서
+  // 이 목록이 없어도 로드 자체는 되지만, 정확한 이름을 몰라도 눈에 띄게 하려는 목적.
+  function renderSharedWithMeList(){
+    var shared = myRecipes.filter(function(r){ return currentUser && r.owner_id !== currentUser.id; });
+    sharedWithMeSectionEl.style.display = shared.length ? 'block' : 'none';
+    sharedWithMeListEl.innerHTML = '';
+    shared.forEach(function(r){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tag-recipe-row';
+      btn.textContent = r.recipe_name || '이름 없는 레시피';
+      btn.addEventListener('click', function(){
+        applyRecipeRowToState(r);
+        renderSelectedRecipe(r);
+        recipeSearchInput.value = '';
+        showToast('레시피를 불러왔어요');
+      });
+      sharedWithMeListEl.appendChild(btn);
+    });
   }
 
   // Custom searchable dropdown (native <datalist> can't be restyled and can't be
@@ -3504,6 +3637,8 @@
     recipeNameInput.value = '새 레시피';
     recipeTagsInput.value = '';
     notesInput.value = '';
+    currentRecipeSaveAllowed = true;
+    updateSaveButtonVisibility();
     state.mode = 'A';
     state.baseFlour = 0;
     state.multiplier = 1;
@@ -3683,6 +3818,316 @@
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && costCalcPageEl.style.display !== 'none') closeCostCalcModal();
   });
+
+  // 공유 관리 — 계정 기반 공유(레시피 개별 + 태그) 부여/회수/공개-비공개, 원가 계산과 같은
+  // 레시피/태그 탭 전환 구조(switchCostTab 참고).
+  function switchShareTab(tab){
+    var isRecipe = tab === 'recipe';
+    shareTabRecipeBtn.classList.toggle('primary', isRecipe);
+    shareTabRecipeBtn.setAttribute('aria-selected', isRecipe ? 'true' : 'false');
+    shareTabTagBtn.classList.toggle('primary', !isRecipe);
+    shareTabTagBtn.setAttribute('aria-selected', !isRecipe ? 'true' : 'false');
+    shareRecipeTabPanelEl.style.display = isRecipe ? 'block' : 'none';
+    shareTagTabPanelEl.style.display = isRecipe ? 'none' : 'block';
+  }
+  shareTabRecipeBtn.addEventListener('click', function(){ switchShareTab('recipe'); });
+  shareTabTagBtn.addEventListener('click', function(){ switchShareTab('tag'); });
+
+  function openShareManagerModal(){
+    switchShareTab('recipe');
+    Promise.all([loadMyRecipeShares(), loadMyTagAccountShares()]).then(function(){
+      renderShareRecipesList();
+      renderShareTagsList();
+    });
+    showSubpage(shareManagerPageEl);
+    closeShareManagerBtn.focus();
+  }
+  function closeShareManagerModal(){
+    hideSubpage(shareManagerPageEl);
+  }
+  openShareManagerBtn.addEventListener('click', function(){
+    closeAccountMenu();
+    openShareManagerModal();
+  });
+  closeShareManagerBtn.addEventListener('click', closeShareManagerModal);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && shareManagerPageEl.style.display !== 'none') closeShareManagerModal();
+  });
+
+  // 공유 대상(이메일) 한 줄 + 회수 버튼 — 레시피 탭/태그 탭이 공통으로 쓰는 렌더러.
+  // grants: 그 대상(레시피 또는 태그)에 걸린 recipe_shares/tag_account_shares 행 배열.
+  // onRevoke(grant): 회수 버튼 클릭 시 실제 delete를 수행하는 콜백 — 테이블만 다르다.
+  function renderGranteeRows(containerEl, grants, onRevoke){
+    containerEl.innerHTML = '';
+    if (grants.length === 0){
+      var noneHint = document.createElement('p');
+      noneHint.className = 'hint';
+      noneHint.textContent = '아직 공유한 사람이 없어요.';
+      containerEl.appendChild(noneHint);
+      return;
+    }
+    grants.forEach(function(g){
+      var gRow = document.createElement('div');
+      gRow.className = 'link-row';
+      gRow.innerHTML = '<p class="hint link-url"></p><button type="button" class="io-btn danger">회수</button>';
+      gRow.querySelector('.link-url').textContent = g.shared_with_email || g.shared_with_user_id;
+      gRow.querySelector('button').addEventListener('click', function(){
+        if (!confirm('"' + (g.shared_with_email || '이 계정') + '"의 열람 권한을 회수할까요?')) return;
+        onRevoke(g);
+      });
+      containerEl.appendChild(gRow);
+    });
+  }
+
+  function renderShareRecipesList(){
+    shareRecipeListEl.innerHTML = '';
+    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    if (owned.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = '아직 등록된 레시피가 없어요.';
+      shareRecipeListEl.appendChild(empty);
+      return;
+    }
+    owned.forEach(function(r){
+      var row = document.createElement('div');
+      row.className = 'acc-row';
+      row.innerHTML =
+        '<div class="acc-row-header">' +
+          '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+            '<div class="acc-row-toggle-top">' +
+              '<span class="acc-row-name-label"></span>' +
+              '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="6 9 12 15 18 9"></polyline>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="acc-row-toggle-summary"></div>' +
+          '</button>' +
+        '</div>' +
+        '<div class="acc-row-detail" style="display:none;">' +
+          '<div class="field-row">' +
+            '<span class="field-label">저장 허용</span>' +
+            '<button type="button" class="io-btn share-allow-btn">공개</button>' +
+            '<button type="button" class="io-btn share-deny-btn">비공개</button>' +
+          '</div>' +
+          '<div class="share-grantee-list"></div>' +
+          '<div class="field-row" style="margin-top:10px;">' +
+            '<input type="email" class="text-input share-add-email-input" autocomplete="off" placeholder="이메일로 공유 추가">' +
+            '<button type="button" class="io-btn share-add-email-btn">추가</button>' +
+          '</div>' +
+        '</div>';
+      shareRecipeListEl.appendChild(row);
+
+      var toggleBtn = row.querySelector('.acc-row-toggle');
+      var nameLabelEl = row.querySelector('.acc-row-name-label');
+      var summaryEl = row.querySelector('.acc-row-toggle-summary');
+      var detailEl = row.querySelector('.acc-row-detail');
+      var allowBtn = row.querySelector('.share-allow-btn');
+      var denyBtn = row.querySelector('.share-deny-btn');
+      var granteeListEl = row.querySelector('.share-grantee-list');
+      var addEmailInput = row.querySelector('.share-add-email-input');
+      var addEmailBtn = row.querySelector('.share-add-email-btn');
+      var grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
+
+      nameLabelEl.textContent = r.recipe_name || '이름 없는 레시피';
+
+      function refreshSummary(){
+        summaryEl.textContent = grants.length ? (grants.length + '명과 공유중') : '';
+      }
+      function refreshToggleButtons(){
+        var canSave = grants.some(function(g){ return g.can_save; });
+        allowBtn.classList.toggle('primary', canSave);
+        denyBtn.classList.toggle('primary', !canSave);
+      }
+      function refreshGrantees(){
+        renderGranteeRows(granteeListEl, grants, function(g){
+          supabase.from('recipe_shares').delete().eq('recipe_id', r.id).eq('shared_with_user_id', g.shared_with_user_id).then(function(res){
+            if (res.error){ alert('회수 실패: ' + res.error.message); return; }
+            myRecipeShares = myRecipeShares.filter(function(s){ return !(s.recipe_id === r.id && s.shared_with_user_id === g.shared_with_user_id); });
+            grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
+            refreshSummary();
+            refreshToggleButtons();
+            refreshGrantees();
+            showToast('공유를 회수했어요');
+          });
+        });
+      }
+      refreshSummary();
+      refreshToggleButtons();
+      refreshGrantees();
+
+      function setCanSaveForAll(canSave){
+        if (grants.length === 0){ refreshToggleButtons(); return; } // 공유 대상이 아직 없으면 토글만 반영
+        supabase.from('recipe_shares').update({ can_save: canSave }).eq('recipe_id', r.id).then(function(res){
+          if (res.error){ alert('설정 변경 실패: ' + res.error.message); return; }
+          grants.forEach(function(g){ g.can_save = canSave; });
+          refreshToggleButtons();
+        });
+      }
+      allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
+      denyBtn.addEventListener('click', function(){ setCanSaveForAll(false); });
+
+      addEmailBtn.addEventListener('click', function(){
+        var email = addEmailInput.value.trim();
+        if (!email) return;
+        var canSave = grants.some(function(g){ return g.can_save; });
+        supabase.rpc('share_recipe_with_email', { p_recipe_id: r.id, p_email: email, p_can_save: canSave }).then(function(res){
+          if (res.error){ alert('공유 실패: ' + res.error.message); return; }
+          addEmailInput.value = '';
+          loadMyRecipeShares().then(function(){
+            grants = myRecipeShares.filter(function(s){ return s.recipe_id === r.id; });
+            refreshSummary();
+            refreshToggleButtons();
+            refreshGrantees();
+            showToast('공유했어요');
+          });
+        });
+      });
+
+      toggleBtn.addEventListener('click', function(){
+        var isThisOpen = row.hasAttribute('data-expanded');
+        shareRecipeListEl.querySelectorAll('.acc-row[data-expanded]').forEach(function(rr){
+          rr.removeAttribute('data-expanded');
+          rr.querySelector('.acc-row-detail').style.display = 'none';
+        });
+        shareRecipeListEl.querySelectorAll('.acc-row-toggle').forEach(function(t){ t.setAttribute('aria-expanded', 'false'); });
+        if (!isThisOpen){
+          row.setAttribute('data-expanded', 'true');
+          toggleBtn.setAttribute('aria-expanded', 'true');
+          detailEl.style.display = 'block';
+        }
+      });
+    });
+  }
+
+  // 소유한 레시피들의 tags를 평탄화·중복제거 — renderRecipeTagsList()의 그룹핑과 같은 소스.
+  function ownedTagList(){
+    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    var set = {};
+    owned.forEach(function(r){ (r.tags || []).forEach(function(t){ if (t) set[t] = true; }); });
+    return Object.keys(set).sort();
+  }
+
+  function renderShareTagsList(){
+    shareTagListEl.innerHTML = '';
+    var tags = ownedTagList();
+    if (tags.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = '아직 태그가 붙은 레시피가 없어요.';
+      shareTagListEl.appendChild(empty);
+      return;
+    }
+    tags.forEach(function(tag){
+      var row = document.createElement('div');
+      row.className = 'acc-row';
+      row.innerHTML =
+        '<div class="acc-row-header">' +
+          '<button type="button" class="acc-row-toggle" aria-expanded="false">' +
+            '<div class="acc-row-toggle-top">' +
+              '<span class="acc-row-name-label"></span>' +
+              '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="6 9 12 15 18 9"></polyline>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="acc-row-toggle-summary"></div>' +
+          '</button>' +
+        '</div>' +
+        '<div class="acc-row-detail" style="display:none;">' +
+          '<div class="field-row">' +
+            '<span class="field-label">저장 허용</span>' +
+            '<button type="button" class="io-btn share-allow-btn">공개</button>' +
+            '<button type="button" class="io-btn share-deny-btn">비공개</button>' +
+          '</div>' +
+          '<div class="share-grantee-list"></div>' +
+          '<div class="field-row" style="margin-top:10px;">' +
+            '<input type="email" class="text-input share-add-email-input" autocomplete="off" placeholder="이메일로 공유 추가">' +
+            '<button type="button" class="io-btn share-add-email-btn">추가</button>' +
+          '</div>' +
+        '</div>';
+      shareTagListEl.appendChild(row);
+
+      var toggleBtn = row.querySelector('.acc-row-toggle');
+      var nameLabelEl = row.querySelector('.acc-row-name-label');
+      var summaryEl = row.querySelector('.acc-row-toggle-summary');
+      var detailEl = row.querySelector('.acc-row-detail');
+      var allowBtn = row.querySelector('.share-allow-btn');
+      var denyBtn = row.querySelector('.share-deny-btn');
+      var granteeListEl = row.querySelector('.share-grantee-list');
+      var addEmailInput = row.querySelector('.share-add-email-input');
+      var addEmailBtn = row.querySelector('.share-add-email-btn');
+      var grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
+
+      nameLabelEl.textContent = tag;
+
+      function refreshSummary(){
+        summaryEl.textContent = grants.length ? (grants.length + '명과 공유중') : '';
+      }
+      function refreshToggleButtons(){
+        var canSave = grants.some(function(g){ return g.can_save; });
+        allowBtn.classList.toggle('primary', canSave);
+        denyBtn.classList.toggle('primary', !canSave);
+      }
+      function refreshGrantees(){
+        renderGranteeRows(granteeListEl, grants, function(g){
+          supabase.from('tag_account_shares').delete().eq('id', g.id).then(function(res){
+            if (res.error){ alert('회수 실패: ' + res.error.message); return; }
+            myTagAccountShares = myTagAccountShares.filter(function(s){ return s.id !== g.id; });
+            grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
+            refreshSummary();
+            refreshToggleButtons();
+            refreshGrantees();
+            showToast('공유를 회수했어요');
+          });
+        });
+      }
+      refreshSummary();
+      refreshToggleButtons();
+      refreshGrantees();
+
+      function setCanSaveForAll(canSave){
+        if (grants.length === 0){ refreshToggleButtons(); return; }
+        supabase.from('tag_account_shares').update({ can_save: canSave }).eq('owner_id', currentUser.id).eq('tag', tag).then(function(res){
+          if (res.error){ alert('설정 변경 실패: ' + res.error.message); return; }
+          grants.forEach(function(g){ g.can_save = canSave; });
+          refreshToggleButtons();
+        });
+      }
+      allowBtn.addEventListener('click', function(){ setCanSaveForAll(true); });
+      denyBtn.addEventListener('click', function(){ setCanSaveForAll(false); });
+
+      addEmailBtn.addEventListener('click', function(){
+        var email = addEmailInput.value.trim();
+        if (!email) return;
+        var canSave = grants.some(function(g){ return g.can_save; });
+        supabase.rpc('share_tag_with_email', { p_tag: tag, p_email: email, p_can_save: canSave }).then(function(res){
+          if (res.error){ alert('공유 실패: ' + res.error.message); return; }
+          addEmailInput.value = '';
+          loadMyTagAccountShares().then(function(){
+            grants = myTagAccountShares.filter(function(s){ return s.owner_id === currentUser.id && s.tag === tag; });
+            refreshSummary();
+            refreshToggleButtons();
+            refreshGrantees();
+            showToast('공유했어요');
+          });
+        });
+      });
+
+      toggleBtn.addEventListener('click', function(){
+        var isThisOpen = row.hasAttribute('data-expanded');
+        shareTagListEl.querySelectorAll('.acc-row[data-expanded]').forEach(function(rr){
+          rr.removeAttribute('data-expanded');
+          rr.querySelector('.acc-row-detail').style.display = 'none';
+        });
+        shareTagListEl.querySelectorAll('.acc-row-toggle').forEach(function(t){ t.setAttribute('aria-expanded', 'false'); });
+        if (!isThisOpen){
+          row.setAttribute('data-expanded', 'true');
+          toggleBtn.setAttribute('aria-expanded', 'true');
+          detailEl.style.display = 'block';
+        }
+      });
+    });
+  }
 
   // Recipe list for "레시피 원가 계산" — same list-first, click-to-expand accordion layout as
   // "조합 제품 원가 계산" (renderCompositeProductsList()): every owned recipe shows collapsed as
@@ -4059,12 +4504,13 @@
       logoutBtn.textContent = '로그아웃 (' + label + ')';
       authRowEl.style.display = 'none';
       loggedInRowEl.style.display = '';
-      saveBtn.style.display = '';
-      saveBtnBottom.style.display = '';
+      updateSaveButtonVisibility();
       updateDirtyUI(); // catches the edge case of edits made before logging in
       libraryCardEl.style.display = 'block';
       loadMyRecipes();
       loadMyIngredients();
+      loadMyRecipeShares();
+      loadMyTagAccountShares();
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
@@ -4077,10 +4523,13 @@
       closeIngredientManagerModal();
       closeCostCalcModal();
       closeRecipeTagsModal();
+      closeShareManagerModal();
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
       myTagShares = [];
+      myRecipeShares = [];
+      myTagAccountShares = [];
       recipeSearchInput.value = '';
       clearSelectedRecipe();
       markClean();
