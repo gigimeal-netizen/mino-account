@@ -251,8 +251,21 @@
   /* 조합 제품 (여러 레시피를 합친 제품): a composite row holds several component rows, each
      a recipe-picker + its own weight/loss rate — reuses .ing-link-combo (already
      position:relative, flex:1 1 auto) for the recipe search so it doesn't need its own CSS. */
-  .composite-row{ padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .composite-row{ border-bottom: 1px solid var(--border); }
   .composite-row:last-of-type{ border-bottom: none; }
+  /* Collapsed by default (renderCompositeProductsList() shows the list first, not every
+     composite product's full editor at once) — clicking the toggle reveals .composite-row-detail
+     for just that one row, accordion-style (opening one closes any other open row). */
+  .composite-row-toggle{
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; padding: 16px 0; background: transparent; border: none;
+    font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink);
+    text-align: left; cursor: pointer;
+  }
+  .composite-row-name-label{ flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+  .composite-row-chevron{ flex: 0 0 auto; color: var(--ink-soft); transition: transform .15s; }
+  .composite-row[data-expanded="true"] .composite-row-chevron{ transform: rotate(180deg); }
+  .composite-row-detail{ padding-bottom: 16px; }
   .composite-top{ display: flex; align-items: center; gap: 8px; }
   .composite-name{ flex: 1 1 auto; min-width: 0; }
   .composite-component-row{
@@ -577,8 +590,8 @@
             </div>
             <div id="loggedInRow" style="display:none;">
               <button class="menu-btn" id="manageIngredientsBtn">재료 관리</button>
-              <button class="menu-btn" id="openCostCalcBtn">원가 계산</button>
-              <button class="menu-btn" id="openCompositeProductsBtn">조합 제품</button>
+              <button class="menu-btn" id="openCostCalcBtn">레시피 원가 계산</button>
+              <button class="menu-btn" id="openCompositeProductsBtn">조합 제품 원가 계산</button>
               <button class="menu-btn" id="logoutBtn">로그아웃</button>
             </div>
             <p class="hint" id="authHint" style="display:none;"></p>
@@ -809,7 +822,7 @@
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
-      <h2>원가 계산</h2>
+      <h2>레시피 원가 계산</h2>
     </div>
   </div>
   <div class="subpage-body">
@@ -848,7 +861,7 @@
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
-      <h2>조합 제품</h2>
+      <h2>조합 제품 원가 계산</h2>
     </div>
   </div>
   <div class="subpage-body">
@@ -2278,28 +2291,39 @@
       var row = document.createElement('div');
       row.className = 'composite-row';
       row.innerHTML =
-        '<div class="composite-top">' +
-          '<input class="composite-name text-input">' +
-          '<button type="button" class="icon-btn danger composite-del" aria-label="조합 제품 삭제">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<polyline points="3 6 5 6 21 6"></polyline>' +
-              '<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>' +
-              '<line x1="10" y1="11" x2="10" y2="17"></line>' +
-              '<line x1="14" y1="11" x2="14" y2="17"></line>' +
-            '</svg>' +
-          '</button>' +
-        '</div>' +
-        '<div class="composite-components"></div>' +
-        '<button type="button" class="add-btn composite-add-component" style="margin-top:8px;">+ 구성요소 추가</button>' +
-        '<div class="composite-cost-inputs">' +
-          '<span class="field-label">판매가</span>' +
-          '<input class="composite-price" type="number" inputmode="decimal" placeholder="판매가">' +
-          '<span class="unit">원</span>' +
-        '</div>' +
-        '<div class="composite-cost-result"></div>' +
-        '<p class="hint warn-hint composite-issue-hint" style="display:none;"></p>';
+        '<button type="button" class="composite-row-toggle" aria-expanded="false">' +
+          '<span class="composite-row-name-label"></span>' +
+          '<svg class="composite-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+            '<polyline points="6 9 12 15 18 9"></polyline>' +
+          '</svg>' +
+        '</button>' +
+        '<div class="composite-row-detail" style="display:none;">' +
+          '<div class="composite-top">' +
+            '<input class="composite-name text-input">' +
+            '<button type="button" class="icon-btn danger composite-del" aria-label="조합 제품 삭제">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<polyline points="3 6 5 6 21 6"></polyline>' +
+                '<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>' +
+                '<line x1="10" y1="11" x2="10" y2="17"></line>' +
+                '<line x1="14" y1="11" x2="14" y2="17"></line>' +
+              '</svg>' +
+            '</button>' +
+          '</div>' +
+          '<div class="composite-components"></div>' +
+          '<button type="button" class="add-btn composite-add-component" style="margin-top:8px;">+ 구성요소 추가</button>' +
+          '<div class="composite-cost-inputs">' +
+            '<span class="field-label">판매가</span>' +
+            '<input class="composite-price" type="number" inputmode="decimal" placeholder="판매가">' +
+            '<span class="unit">원</span>' +
+          '</div>' +
+          '<div class="composite-cost-result"></div>' +
+          '<p class="hint warn-hint composite-issue-hint" style="display:none;"></p>' +
+        '</div>';
       compositeProductsListEl.appendChild(row);
 
+      var toggleBtn = row.querySelector('.composite-row-toggle');
+      var nameLabelEl = row.querySelector('.composite-row-name-label');
+      var detailEl = row.querySelector('.composite-row-detail');
       var nameEl = row.querySelector('.composite-name');
       var delBtn = row.querySelector('.composite-del');
       var componentsEl = row.querySelector('.composite-components');
@@ -2308,8 +2332,24 @@
       var resultEl = row.querySelector('.composite-cost-result');
       var issueHintEl = row.querySelector('.composite-issue-hint');
 
+      nameLabelEl.textContent = cp.name || '새 조합 제품';
       nameEl.value = cp.name || '';
       priceEl.value = cp.selling_price > 0 ? cp.selling_price : '';
+
+      // List-first, detail-on-click (accordion): opening one row's detail closes any other
+      // row's detail that was open, so the screen doesn't turn into every composite
+      // product's full editor stacked at once as the list grows.
+      toggleBtn.addEventListener('click', function(){
+        var willOpen = detailEl.style.display === 'none';
+        compositeProductsListEl.querySelectorAll('.composite-row-detail').forEach(function(d){ d.style.display = 'none'; });
+        compositeProductsListEl.querySelectorAll('.composite-row').forEach(function(r){ r.removeAttribute('data-expanded'); });
+        compositeProductsListEl.querySelectorAll('.composite-row-toggle').forEach(function(t){ t.setAttribute('aria-expanded', 'false'); });
+        if (willOpen){
+          detailEl.style.display = 'block';
+          row.setAttribute('data-expanded', 'true');
+          toggleBtn.setAttribute('aria-expanded', 'true');
+        }
+      });
 
       function saveCompositeFields(fields){
         supabase.from('composite_products').update(fields).eq('id', cp.id).then(function(res){
@@ -2320,6 +2360,7 @@
       nameEl.addEventListener('blur', function(){
         var typed = nameEl.value.trim() || cp.name;
         nameEl.value = typed;
+        nameLabelEl.textContent = typed;
         if (typed !== cp.name) saveCompositeFields({ name: typed });
       });
       priceEl.addEventListener('input', refreshCompositeCost);
@@ -2978,12 +3019,17 @@
         myCompositeProducts.push(res.data);
         compositeProductsSearchInput.value = ''; // clear any filter — otherwise the new row could render invisible if it doesn't match
         renderCompositeProductsList();
-        var rows = compositeProductsListEl.querySelectorAll('.composite-name');
-        var last = rows[rows.length - 1];
-        if (last){
-          last.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          last.focus();
-          last.select();
+        // New rows render collapsed like every other one — expand this one (via its own
+        // toggle, so the accordion-close-others logic runs the same as a real click) and
+        // focus its name field, rather than leaving the user to find and open it themselves.
+        var rows = compositeProductsListEl.querySelectorAll('.composite-row');
+        var lastRow = rows[rows.length - 1];
+        if (lastRow){
+          var toggle = lastRow.querySelector('.composite-row-toggle');
+          if (toggle) toggle.click();
+          var nameInput = lastRow.querySelector('.composite-name');
+          lastRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (nameInput){ nameInput.focus(); nameInput.select(); }
         }
       });
     });
