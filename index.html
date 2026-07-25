@@ -913,6 +913,11 @@
       <div class="field-row" id="publicNicknameRow" style="display:none;">
         <input type="text" id="publicNicknameInput" class="text-input" autocomplete="off" placeholder="작성자 닉네임 (선택, 비우면 익명)">
       </div>
+      <div class="toolbar-divider"></div>
+      <div class="field-row">
+        <span class="field-label">CSV</span>
+        <button class="io-btn" id="exportSingleRecipeCsvBtn">이 레시피만 CSV로</button>
+      </div>
     </div>
   </section>
 
@@ -2186,6 +2191,7 @@
   var togglePublicBtn = document.getElementById('togglePublicBtn');
   var publicNicknameRowEl = document.getElementById('publicNicknameRow');
   var publicNicknameInput = document.getElementById('publicNicknameInput');
+  var exportSingleRecipeCsvBtn = document.getElementById('exportSingleRecipeCsvBtn');
   var sharedBannerEl = document.getElementById('sharedBanner');
   var tagSharedBannerEl = document.getElementById('tagSharedBanner');
   var claimShareBannerEl = document.getElementById('claimShareBanner');
@@ -2489,38 +2495,55 @@
 
   // 재료 관리와 같은 철학: 레시피 하나가 여러 줄(재료 한 줄씩)을 차지 — 엑셀에서 보기/편집하기
   // 편하도록. 반죽 분할(portions)/메모/공개 게시 설정은 일부러 안 담는다(범위 밖 — 계획 참고).
-  function exportRecipesCsv(){
-    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+  // 레시피 하나를 CSV 행 배열로 — 전체 내보내기와 레시피 하나만 내보내기가 공유한다.
+  function buildRecipeCsvRows(r){
     var rows = [];
-    owned.forEach(function(r){
-      var base = [
-        r.recipe_name || '', recipeTypeLabels[r.recipe_type] || '제빵', (r.tags || []).join(';'),
-        r.mode === 'B' ? '총반죽량기준' : '배율조정', r.base_flour || 0, r.multiplier || 1, r.target_total || 0
-      ];
-      var flours = Array.isArray(r.flours) ? r.flours : [];
-      var ingredients = Array.isArray(r.ingredients) ? r.ingredients : [];
-      if (flours.length === 0 && ingredients.length === 0){
-        rows.push(base.concat(['', '', '', '']));
-        return;
-      }
-      flours.forEach(function(f){
-        rows.push(base.concat(['밀가루', f.name || '', f.pct != null ? f.pct : '', '']));
-      });
-      ingredients.forEach(function(ing){
-        if ('pct' in ing) rows.push(base.concat(['재료', ing.name || '', ing.pct != null ? ing.pct : '', '']));
-        else rows.push(base.concat(['재료', ing.name || '', '', ing.weight != null ? ing.weight : '']));
-      });
+    var base = [
+      r.recipe_name || '', recipeTypeLabels[r.recipe_type] || '제빵', (r.tags || []).join(';'),
+      r.mode === 'B' ? '총반죽량기준' : '배율조정', r.base_flour || 0, r.multiplier || 1, r.target_total || 0
+    ];
+    var flours = Array.isArray(r.flours) ? r.flours : [];
+    var ingredients = Array.isArray(r.ingredients) ? r.ingredients : [];
+    if (flours.length === 0 && ingredients.length === 0){
+      rows.push(base.concat(['', '', '', '']));
+      return rows;
+    }
+    flours.forEach(function(f){
+      rows.push(base.concat(['밀가루', f.name || '', f.pct != null ? f.pct : '', '']));
     });
+    ingredients.forEach(function(ing){
+      if ('pct' in ing) rows.push(base.concat(['재료', ing.name || '', ing.pct != null ? ing.pct : '', '']));
+      else rows.push(base.concat(['재료', ing.name || '', '', ing.weight != null ? ing.weight : '']));
+    });
+    return rows;
+  }
+
+  function downloadCsvRows(rows, filename){
     var csv = [recipeCsvHeader].concat(rows).map(function(r){ return r.map(csvField).join(','); }).join('\r\n');
     var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = '레시피목록_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  function exportRecipesCsv(){
+    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    var rows = [];
+    owned.forEach(function(r){ rows = rows.concat(buildRecipeCsvRows(r)); });
+    downloadCsvRows(rows, '레시피목록_' + new Date().toISOString().slice(0, 10) + '.csv');
+  }
+
+  // 2026-07-25: "전체 내보내기는 있는데 레시피 하나만 바꾸고 싶어도 전체를 다뤄야 한다"는
+  // 피드백으로 추가 — 레시피 상세의 공유 패널에서 지금 선택된 레시피 하나만 내보낸다.
+  // 파일명에 못 쓰는 문자(/ \ : * ? " < > |)는 밑줄로 바꿔서 다운로드가 실패하지 않게 한다.
+  function exportSingleRecipeCsv(recipe){
+    var safeName = (recipe.recipe_name || '이름 없는 레시피').replace(/[\/\\:*?"<>|]/g, '_');
+    downloadCsvRows(buildRecipeCsvRows(recipe), '레시피_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
   }
 
   // Minimal CSV parser handling quoted fields (so a category or name containing a comma,
@@ -4245,6 +4268,13 @@
       if (res.error){ alert('닉네임 저장 실패: ' + res.error.message); return; }
       recipe.author_display_name = publicNicknameInput.value;
     });
+  });
+
+  exportSingleRecipeCsvBtn.addEventListener('click', function(){
+    if (!selectedRecipeId) return;
+    var recipe = myRecipes.find(function(r){ return r.id === selectedRecipeId; });
+    if (!recipe) return;
+    exportSingleRecipeCsv(recipe);
   });
 
   function newRecipe(type){
