@@ -373,6 +373,12 @@
     background:none; border:none; padding:0; color: var(--accent);
     font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
   }
+  /* 2026-07-25: 첫 화면 정리 — 태그는 선택 항목이라 항상 보이는 입력칸 대신 작은 텍스트
+     링크로 접어둔다(기존 태그가 있으면 이 버튼 대신 입력칸이 바로 보임 — updateTagsInputVisibility()). */
+  .tag-toggle-btn{
+    display:block; background:none; border:none; padding:0; margin-top:8px;
+    color: var(--accent); font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
+  }
 
   /* Ingredient rows: name gets its own full-width line so it can never clip regardless of
      how long it is (this used to be a grid column sharing the row with the number fields,
@@ -741,7 +747,8 @@
         </svg>
       </button>
     </div>
-    <input type="text" id="recipeTags" class="text-input" autocomplete="off" placeholder="태그 (쉼표로 구분, 예: 제빵, OO제과) — 선택 사항" style="width:100%;margin-top:8px;">
+    <button type="button" class="tag-toggle-btn" id="showTagsBtn">+ 태그 추가 (선택)</button>
+    <input type="text" id="recipeTags" class="text-input" autocomplete="off" placeholder="태그 (쉼표로 구분, 예: 제빵, OO제과)" style="width:100%;margin-top:8px;display:none;">
 
     <div id="libraryCard" style="display:none;">
       <div class="toolbar-divider"></div>
@@ -1488,6 +1495,7 @@
   var toastEl = document.getElementById('toast');
   var recipeNameInput = document.getElementById('recipeName');
   var recipeTagsInput = document.getElementById('recipeTags');
+  var showTagsBtn = document.getElementById('showTagsBtn');
   var notesInput = document.getElementById('notesInput');
   var baseFlourRowEl = document.getElementById('baseFlourRow');
   var modeAHintEl = document.getElementById('modeAHint');
@@ -2248,6 +2256,15 @@
     return location.origin + location.pathname + '?share=' + token;
   }
 
+  // 2026-07-25: 첫 화면 정리 — 태그 입력칸은 선택 항목이라 값이 없을 땐 작은 "+ 태그 추가"
+  // 링크로 접어두고, 값이 있으면(기존 레시피를 불러왔거나 방금 입력했거나) 그대로 펼쳐 보여준다.
+  // applyRecipeRowToState()/newRecipe()/최초 페이지 로드, 이렇게 상태가 바뀌는 지점마다 호출.
+  function updateTagsInputVisibility(){
+    var hasTags = recipeTagsInput.value.trim().length > 0;
+    recipeTagsInput.style.display = hasTags ? 'block' : 'none';
+    showTagsBtn.style.display = hasTags ? 'none' : 'block';
+  }
+
   function serializeCurrentRecipe(){
     return {
       recipe_name: recipeNameInput.value || '이름 없는 레시피',
@@ -2277,6 +2294,7 @@
   function applyRecipeRowToState(row){
     recipeNameInput.value = row.recipe_name || '';
     recipeTagsInput.value = (Array.isArray(row.tags) ? row.tags : []).join(', ');
+    updateTagsInputVisibility();
     notesInput.value = row.notes || '';
     state.type = (row.recipe_type === 'confection' || row.recipe_type === 'other') ? row.recipe_type : 'bread';
     state.mode = row.mode === 'B' ? 'B' : 'A';
@@ -4318,6 +4336,7 @@
     state.type = type || 'bread';
     recipeNameInput.value = '새 레시피';
     recipeTagsInput.value = '';
+    updateTagsInputVisibility();
     notesInput.value = '';
     currentRecipeSaveAllowed = true;
     updateSaveButtonVisibility();
@@ -5995,6 +6014,11 @@
     recipeNameInput.addEventListener('input', markDirty);
     notesInput.addEventListener('input', markDirty);
     recipeTagsInput.addEventListener('input', markDirty);
+    showTagsBtn.addEventListener('click', function(){
+      recipeTagsInput.style.display = 'block';
+      showTagsBtn.style.display = 'none';
+      recipeTagsInput.focus();
+    });
 
     // Without an explicit redirectTo, Supabase falls back to its "Site URL" setting once
     // the OAuth round trip completes — which can land back on the site root instead of
@@ -6076,6 +6100,7 @@
   render();
   suppressDirtyTracking = false;
   markClean();
+  updateTagsInputVisibility();
 })();
 </script>
 </body>
