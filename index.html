@@ -3414,8 +3414,7 @@
 
   // Custom searchable dropdown (native <datalist> can't be restyled and can't be
   // opened/closed on demand — this replaces it with a plain styled list).
-  function loadRecipeByName(name){
-    var recipe = myRecipes.find(function(r){ return r.recipe_name === name; });
+  function applyLoadedRecipe(recipe){
     if (!recipe){ clearSelectedRecipe(); return; }
     applyRecipeRowToState(recipe);
     renderSelectedRecipe(recipe);
@@ -3425,6 +3424,19 @@
     // "selected recipe" row had, just moved into this box instead).
     recipeSearchInput.value = '';
     showToast('레시피를 불러왔어요');
+  }
+  // Typing an exact name is inherently name-based (there's no id to go on while typing) —
+  // this stays a name lookup, and picks whichever match comes first if names collide.
+  function loadRecipeByName(name){
+    applyLoadedRecipe(myRecipes.find(function(r){ return r.recipe_name === name; }));
+  }
+  // 2026-07-25: 드롭다운에서 특정 행을 "클릭"할 때는 반드시 그 행의 id로 정확히 로드한다 —
+  // 예전엔 이것도 이름으로 다시 찾았는데(loadRecipeByName), 이름이 같은 레시피가 둘 이상
+  // 있으면(예: 내 레시피 + 공유받은 동명 레시피, 또는 공유받은 것끼리) 목록에서 분명히 다른
+  // 행을 클릭해도 항상 "이름이 같은 것 중 맨 처음 것"이 로드되는 문제가 있었다. 공유 기능으로
+  // 남의 레시피 이름과 겹칠 일이 많아지면서 실제로 발생할 수 있는 문제가 됐다.
+  function loadRecipeById(id){
+    applyLoadedRecipe(myRecipes.find(function(r){ return r.id === id; }));
   }
 
   function tagShareUrl(token){
@@ -3596,10 +3608,13 @@
       var item = document.createElement('button');
       item.type = 'button';
       item.className = 'combo-dropdown-item';
-      item.textContent = r.recipe_name || '이름 없는 레시피';
+      // 공유받은 레시피도 이 검색창에 같이 뜨는데, 이름이 같은 내 레시피가 있으면 목록에서
+      // 시각적으로 구분이 안 됐다(둘 다 그냥 "바게트") — 소유자가 나 아니면 표시를 붙여준다.
+      item.textContent = (r.recipe_name || '이름 없는 레시피') +
+        (currentUser && r.owner_id !== currentUser.id ? ' · 공유받음' : '');
       item.addEventListener('click', function(){
         closeRecipeDropdown();
-        loadRecipeByName(r.recipe_name);
+        loadRecipeById(r.id);
       });
       recipeDropdownEl.appendChild(item);
     });
@@ -3725,9 +3740,18 @@
 
   function saveCurrentRecipe(){
     var payload = serializeCurrentRecipe();
-    var existing = myRecipes.find(function(r){
-      return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name;
+    // 2026-07-25: 지금 화면에 로드된 게 남이 공유한(내 소유가 아닌) 레시피일 때는, 그 이름이
+    // 내 기존 레시피와 우연히 같더라도 절대 그걸로 매칭하지 않는다 — 안 그러면 "공유받은
+    // 레시피 저장"이 새 사본을 만드는 대신 내 동명 레시피를 조용히 덮어써버린다(예: 내가 이미
+    // "바게트"를 갖고 있는데 남이 공유한 "바게트"를 저장 — 이름 매칭만으로는 내 것을 찾아버림).
+    // selectedRecipeId가 없거나(새 레시피) 내가 소유한 레시피를 가리킬 때만 이름으로 덮어쓸
+    // 후보를 찾는다 — 그 외엔 항상 새 레시피로 저장(진짜 독립된 사본).
+    var loadedRecipeIsMine = !selectedRecipeId || myRecipes.some(function(r){
+      return r.id === selectedRecipeId && r.owner_id === currentUser.id;
     });
+    var existing = loadedRecipeIsMine
+      ? myRecipes.find(function(r){ return r.owner_id === currentUser.id && r.recipe_name === payload.recipe_name; })
+      : null;
     var query = existing
       ? supabase.from('recipes').update(payload).eq('id', existing.id).select().single()
       : supabase.from('recipes').insert(Object.assign({ owner_id: currentUser.id }, payload)).select().single();
