@@ -263,7 +263,10 @@
     text-align: left; cursor: pointer;
   }
   .composite-row-name-label{ flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
-  .composite-row-chevron{ flex: 0 0 auto; color: var(--ink-soft); transition: transform .15s; }
+  .composite-row-chevron{
+    flex: 0 0 auto; width: 20px; height: 20px; display: block;
+    color: var(--ink-soft); transition: transform .15s;
+  }
   .composite-row[data-expanded="true"] .composite-row-chevron{ transform: rotate(180deg); }
   .composite-row-detail{ padding-bottom: 16px; }
   .composite-top{ display: flex; align-items: center; gap: 8px; }
