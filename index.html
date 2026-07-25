@@ -740,21 +740,14 @@
   </section>
 
   <!--
-    Ad slot placed after the last content card, at the natural end of the scroll — not
-    wedged between input rows or buttons, so a stray tap doesn't hit it by mistake.
-    data-ad-slot is still a placeholder — replace YOUR-AD-SLOT-ID once an ad unit exists
-    (Ads → By ad unit → create one, after the site itself is approved).
+    2026-07-25: manual ad unit removed after an AdSense policy-violation notice
+    ("게시자 콘텐츠가 없는 화면에 광고 게재") during site review — data-ad-slot was still the
+    YOUR-AD-SLOT-ID placeholder (no ad unit had been created yet), so this block was pushing
+    an invalid slot on every load. Auto ads (the <head> loader script) is left in place and
+    needs no slot ID; it can place ads itself once the site is approved. If a real ad unit
+    gets created later and a manual placement is wanted again here, re-add this block with
+    a real data-ad-slot value rather than restoring this comment's placeholder.
   -->
-  <div class="ad-slot">
-    <p class="ad-label">광고</p>
-    <ins class="adsbygoogle"
-         style="display:block"
-         data-ad-client="ca-pub-4940071095968122"
-         data-ad-slot="YOUR-AD-SLOT-ID"
-         data-ad-format="auto"
-         data-full-width-responsive="true"></ins>
-    <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-  </div>
 </div>
 
 <div class="footer">
