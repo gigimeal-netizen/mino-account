@@ -670,9 +670,12 @@
               <button class="menu-btn" id="openShareManagerBtn">공유 관리</button>
               <!-- 2026-07-25: 메인 화면(레시피 검색 카드)에서 여기로 옮김 — 자주 안 쓰는 도구라
                    계정 메뉴가 더 맞는 자리. 실제 파일 입력/미리보기는 레시피 검색 카드에 그대로
-                   있고, 여기 버튼은 그걸 트리거만 한다. -->
-              <button class="menu-btn" id="exportRecipesCsvBtn">레시피 CSV 내보내기</button>
-              <button class="menu-btn" id="importRecipesCsvBtn">레시피 CSV 가져오기</button>
+                   있고, 여기 버튼은 그걸 트리거만 한다. 처음엔 .menu-btn 두 줄로 넣었다가
+                   "메뉴가 너무 길다"는 피드백으로 바로 한 줄(작은 버튼 2개)로 합쳤다. -->
+              <div class="field-row" style="margin-top:4px;">
+                <button type="button" class="io-btn" id="exportRecipesCsvBtn">CSV 내보내기</button>
+                <button type="button" class="io-btn" id="importRecipesCsvBtn">CSV 가져오기</button>
+              </div>
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
               <button class="menu-btn" id="openReportsBtn" style="display:none;">신고 내역</button>
