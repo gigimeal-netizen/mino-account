@@ -61,6 +61,10 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
   body{ padding-bottom: 84px; /* room for the fixed bottom nav bar, added 2026-07-25 */ }
+  /* 2026-07-26: 모바일에서 위로 스크롤하다 실수로 pull-to-refresh 제스처를 건드려 페이지가
+     새로고침되면서 작성 중이던 내용/열려 있던 탭이 초기화된다는 지적 — 이 제스처 자체를
+     막는다(Chrome/최신 Safari 지원). beforeunload 확인창(아래 JS)과 함께 이중 방어. */
+  html, body{ overscroll-behavior-y: contain; }
   .wrap{ max-width: 580px; margin: 0 auto; padding: 28px 18px 24px; }
 
   header{ padding: 6px 2px 20px; }
@@ -404,7 +408,8 @@
   .ing-name[readonly]{ border-bottom: none; font-weight: 800; }
   /* Mirrors .weight-cell/.weight-unit below — a "%" suffix so the pct field reads as
      unambiguously a percentage at a glance, the same way "g" already does for weight. */
-  .pct-cell{ flex: 0 0 64px; display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
+  /* 2026-07-26: 64px에서 넓혔다 — "10.9"처럼 소수점 한 자리 + 두 자릿수 조합이 잘려 보인다는 지적. */
+  .pct-cell{ flex: 0 0 76px; display:flex; align-items:center; justify-content:flex-end; gap:3px; min-width:0; }
   .pct-input{
     width: 100%;
     font-family: var(--font-mono); font-size: 16px; font-weight:700; text-align:right;
@@ -629,6 +634,10 @@
   }
   .bottom-nav-btn svg{ width: 22px; height: 22px; }
   .bottom-nav-btn.active{ color: var(--accent); }
+  /* 2026-07-26: 로그인 전엔 재료/원가 탭을 완전히 숨기지 않고 흐리게만 — "비회원이 이
+     페이지들이 있다는 걸 식별할 수 없다"는 지적으로, 존재는 보이되 로그인이 필요하다는
+     걸 흐림으로 알린다. */
+  .bottom-nav-btn.locked{ opacity: 0.45; }
   .bottom-nav-btn:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
   /* 2026-07-25: 결과 복사 버튼이 예전 고정 푸터의 .copy-btn을 거쳐 지금은 .stamp-card 안의
      아이콘 버튼(.icon-btn)이다 — "복사됨" 성공 색상 표시는 그대로 유지. */
@@ -645,7 +654,7 @@
   .toast.show{ opacity: 1; }
 
   @media (max-width: 360px){
-    .pct-cell{ flex-basis: 52px; }
+    .pct-cell{ flex-basis: 62px; }
     .weight-cell{ flex-basis: 92px; }
     .reorder-btns{ flex-basis: 26px; }
     h1{ font-size: 26px; }
@@ -767,6 +776,21 @@
         <div class="field-row">
           <input type="text" id="recipeSearchInput" class="text-input" autocomplete="off" placeholder="레시피 검색해서 불러오기" aria-label="레시피 검색 및 불러오기">
           <button type="button" class="io-btn combo-toggle" id="recipeDropdownToggle" aria-label="레시피 목록 열기/닫기">▾</button>
+          <!--
+            2026-07-26: "내가 작성한 레시피를 한눈에 보고 한 손가락으로 눌러서 보고 싶은데
+            지금은 불편하다"는 지적 — 검색창의 작은 드롭다운 팝오버 말고, 화면 전체를 쓰는
+            전용 목록 페이지를 새로 추가했다(#myRecipesListPage). 태그별 보기 옆에 나란히.
+          -->
+          <button type="button" class="icon-btn" id="openMyRecipesListBtn" aria-label="내 레시피 목록">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </button>
           <!--
             2026-07-25: 계정 메뉴(설정성 항목들)에서 이쪽으로 옮김 — "이름으로 찾기"(검색창)와
             "태그로 찾기"가 같은 성격의 두 가지 방법인데, 하나는 메인 화면에 바로 보이고
@@ -984,7 +1008,7 @@
       </svg>
       <span>아카이브</span>
     </button>
-    <button type="button" class="bottom-nav-btn" id="navIngredientsBtn" aria-label="재료 관리" style="display:none;">
+    <button type="button" class="bottom-nav-btn locked" id="navIngredientsBtn" aria-label="재료 관리 (로그인 필요)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"></path>
         <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
@@ -992,7 +1016,7 @@
       </svg>
       <span>재료</span>
     </button>
-    <button type="button" class="bottom-nav-btn" id="navCostBtn" aria-label="원가 계산" style="display:none;">
+    <button type="button" class="bottom-nav-btn locked" id="navCostBtn" aria-label="원가 계산 (로그인 필요)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="12" y1="1" x2="12" y2="23"></line>
         <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"></path>
@@ -1436,6 +1460,31 @@
 </div>
 
 <!--
+  내 레시피 목록 (2026-07-26) — "내가 작성한 레시피를 한눈에 보고 싶다", "한 손가락으로
+  클릭클릭해서 보고 싶은데 검색 드롭다운이 불편하다"는 지적으로 추가. 검색 콤보의 작은
+  팝오버 대신 화면 전체를 쓰는 전용 목록 — 소유한 레시피 전부를 항상 펼쳐서 보여주고
+  (태그별 보기처럼 그룹핑하지 않음), 한 번 탭하면 바로 계산기에 로드된다.
+-->
+<div class="subpage" id="myRecipesListPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeMyRecipesListBtn" aria-label="계산기 메인 화면으로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </button>
+      <h2>내 레시피</h2>
+      <div class="header-actions subpage-header-actions"></div>
+    </div>
+  </div>
+  <div class="subpage-body">
+    <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:14px;">
+    <div id="myRecipesListEl"></div>
+  </div>
+</div>
+
+<!--
   신고 내역 (2026-07-25) — 사장님 계정(gigimeal@gmail.com) 전용. 다른 계정에는 계정 메뉴에
   항목 자체가 안 보이지만, 실제 보안은 recipe_reports의 RLS 정책이 담당한다(UI는 편의일 뿐).
 -->
@@ -1622,7 +1671,9 @@
   // % / weight boxes are a fixed width, but recipes can scale up to numbers with far
   // more digits than the box was sized for (e.g. a 26000g batch). Rather than clip the
   // text, shrink the font as the value gets longer so it always stays fully visible.
-  // Also used for name fields (baseSize 14.5) since long ingredient names clip the same way.
+  // 2026-07-26: no longer applied to .ing-name — that field got its own full-width line back
+  // in the 2026-07-24 layout rework, so shrinking its font for long names isn't needed anymore
+  // (per direct feedback: the field is wide enough now, shrinking just made it harder to read).
   function fitDigits(el, baseSize){
     var base = baseSize || 15;
     var len = (el.value || '').toString().length;
@@ -1735,10 +1786,8 @@
     });
 
     flourListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      fitDigits(el, 14.5);
       el.addEventListener('input', function(){
         state.flours[+el.dataset.idx].name = el.value;
-        fitDigits(el, 14.5);
       });
     });
     flourListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
@@ -1802,10 +1851,8 @@
     });
 
     ingListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      fitDigits(el, 14.5);
       el.addEventListener('input', function(){
         state.ingredients[+el.dataset.idx].name = el.value;
-        fitDigits(el, 14.5);
       });
     });
     if (isBread){
@@ -2255,6 +2302,11 @@
   var reportsPageEl = document.getElementById('reportsPage');
   var closeReportsBtn = document.getElementById('closeReportsBtn');
   var reportsListEl = document.getElementById('reportsList');
+  var openMyRecipesListBtn = document.getElementById('openMyRecipesListBtn');
+  var myRecipesListPageEl = document.getElementById('myRecipesListPage');
+  var closeMyRecipesListBtn = document.getElementById('closeMyRecipesListBtn');
+  var myRecipesListSearchInput = document.getElementById('myRecipesListSearchInput');
+  var myRecipesListEl = document.getElementById('myRecipesListEl');
   var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
   var recipeTagsPageEl = document.getElementById('recipeTagsPage');
   var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
@@ -2315,6 +2367,17 @@
     isDirty = false;
     updateDirtyUI();
   }
+
+  // 2026-07-26: 새로고침/탭 닫기로 작성 중이던 내용이 조용히 사라진다는 지적 — 실제 새로고침이
+  // 일어나기 직전에 브라우저 기본 확인창을 띄운다(대부분의 브라우저는 커스텀 메시지를 무시하고
+  // 자체 문구를 보여주지만, "정말 나가시겠습니까?" 확인 자체는 그대로 뜬다). 위 CSS의
+  // overscroll-behavior-y가 pull-to-refresh 제스처 자체를 막는 1차 방어이고, 이건 새로고침
+  // 버튼/주소창 엔터 등 다른 경로로 실제 새로고침이 시도될 때의 2차 방어.
+  window.addEventListener('beforeunload', function(e){
+    if (!isDirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
 
   // 2026-07-25: 수정 중인데 다른 레시피로 이동하면(검색/공유받은 목록/태그별 보기/새 레시피 등)
   // 저장 안 된 변경사항이 그냥 사라졌다 — 이동 직전에 한 번 확인한다. isDirty가 아니면 그냥 통과.
@@ -4264,6 +4327,43 @@
     });
   }
 
+  // 2026-07-26: "내 레시피" 전용 목록 — 태그별 보기와 달리 그룹핑하지 않고 소유한 레시피
+  // 전부를 한 화면에 flat하게 보여준다(myRecipes가 이미 updated_at 내림차순이라 최근 순).
+  // 검색은 이름/태그 매칭까지만(태그별 보기와 같은 필터 로직), 행 클릭 한 번으로 바로
+  // 계산기에 로드된다 — 한 손가락으로 눌러서 훑어보고 싶다는 요청에 맞춘 단순한 목록.
+  function renderMyRecipesList(query){
+    myRecipesListEl.innerHTML = '';
+    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
+    var q = (query || '').trim().toLowerCase();
+    var filtered = owned.filter(function(r){
+      if (!q) return true;
+      if ((r.recipe_name || '').toLowerCase().indexOf(q) !== -1) return true;
+      return (Array.isArray(r.tags) ? r.tags : []).some(function(t){ return t.toLowerCase().indexOf(q) !== -1; });
+    });
+    if (filtered.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = owned.length === 0 ? '아직 등록된 레시피가 없어요.' : '검색 결과가 없어요';
+      myRecipesListEl.appendChild(empty);
+      return;
+    }
+    filtered.forEach(function(r){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tag-recipe-row';
+      var tagsText = (Array.isArray(r.tags) && r.tags.length) ? ' · ' + r.tags.join(', ') : '';
+      btn.textContent = (r.recipe_name || '이름 없는 레시피') + tagsText;
+      btn.addEventListener('click', function(){
+        if (!confirmDiscardIfDirty()) return;
+        applyRecipeRowToState(r);
+        renderSelectedRecipe(r);
+        closeMyRecipesListModal();
+        showToast('레시피를 불러왔어요');
+      });
+      myRecipesListEl.appendChild(btn);
+    });
+  }
+
   // "Opening" the dropdown (via the toggle button, or by focusing the search box) always
   // starts from the FULL recipe list, regardless of whatever name is currently sitting in
   // the box (e.g. right after loading a recipe) — only actually typing new characters
@@ -4683,6 +4783,20 @@
   closeRecipeTagsBtn.addEventListener('click', closeRecipeTagsModal);
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && recipeTagsPageEl.style.display !== 'none') closeRecipeTagsModal();
+  });
+
+  function openMyRecipesListModal(){
+    myRecipesListSearchInput.value = ''; // don't carry over a filter from the last time this was open
+    renderMyRecipesList();
+    showSubpage(myRecipesListPageEl);
+    closeMyRecipesListBtn.focus();
+  }
+  function closeMyRecipesListModal(){
+    hideSubpage(myRecipesListPageEl);
+  }
+  closeMyRecipesListBtn.addEventListener('click', closeMyRecipesListModal);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && myRecipesListPageEl.style.display !== 'none') closeMyRecipesListModal();
   });
 
   // Switches between the two tabs sharing one "원가 계산" subpage. Neither tab's own list/
@@ -5710,10 +5824,13 @@
       // 신고 내역 메뉴는 사장님 계정에서만 보인다 — UI 편의일 뿐, 실제 접근 통제는
       // recipe_reports의 RLS(auth.uid()가 이 이메일과 일치하는지)가 담당.
       openReportsBtn.style.display = (currentUser.email === 'gigimeal@gmail.com') ? '' : 'none';
-      // 재료 관리/원가 계산 탭은 로그인 후에만 의미가 있는 기능(Supabase 데이터)이라
-      // 로그인 전엔 하단 네비게이션에서 숨긴다 — 다른 로그인 전용 UI와 같은 처리.
-      navIngredientsBtn.style.display = '';
-      navCostBtn.style.display = '';
+      // 2026-07-26: 예전엔 로그인 전엔 완전히 숨겼는데, "비회원이 재료/원가 페이지가
+      // 있다는 걸 식별할 수 없다"는 지적으로 항상 보이게 바꿨다 — 대신 로그인 전에는
+      // 흐리게(.locked) 표시해서 "있지만 로그인해야 쓸 수 있다"는 걸 알 수 있게 한다.
+      navIngredientsBtn.classList.remove('locked');
+      navIngredientsBtn.setAttribute('aria-label', '재료 관리');
+      navCostBtn.classList.remove('locked');
+      navCostBtn.setAttribute('aria-label', '원가 계산');
     } else {
       accountChipBtn.setAttribute('aria-label', '로그인');
       accountChipBtn.title = '';
@@ -5724,12 +5841,15 @@
       saveBtn.style.display = 'none';
       saveBtnBottom.style.display = 'none';
       libraryCardEl.style.display = 'none';
-      navIngredientsBtn.style.display = 'none';
-      navCostBtn.style.display = 'none';
+      navIngredientsBtn.classList.add('locked');
+      navIngredientsBtn.setAttribute('aria-label', '재료 관리 (로그인 필요)');
+      navCostBtn.classList.add('locked');
+      navCostBtn.setAttribute('aria-label', '원가 계산 (로그인 필요)');
       closeIngredientManagerModal();
       closeCostCalcModal();
       closeRecipeTagsModal();
       closeShareManagerModal();
+      closeMyRecipesListModal();
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
@@ -5847,14 +5967,27 @@
       accountMenuEl.style.display = accountMenuEl.style.display === 'none' ? 'block' : 'none';
     });
 
-    navIngredientsBtn.addEventListener('click', openIngredientManagerModal);
-    navCostBtn.addEventListener('click', openCostCalcModal);
+    // 2026-07-26: 로그인 전엔 흐리게 보이지만(.locked) 눌러볼 수는 있다 — 그냥 숨기는 것보다
+    // "여기 기능이 있다"는 걸 알려주는 편이 낫다는 판단. 눌렀을 때 조용히 아무 일도 없는 것보다
+    // 로그인이 필요하다는 걸 토스트로 짚어준다.
+    navIngredientsBtn.addEventListener('click', function(){
+      if (!currentUser){ showToast('로그인 후 이용할 수 있어요'); return; }
+      openIngredientManagerModal();
+    });
+    navCostBtn.addEventListener('click', function(){
+      if (!currentUser){ showToast('로그인 후 이용할 수 있어요'); return; }
+      openCostCalcModal();
+    });
     openRecipeTagsBtn.addEventListener('click', function(){
       closeAccountMenu();
       openRecipeTagsModal();
     });
     recipeTagSearchInput.addEventListener('input', function(){
       renderRecipeTagsList(recipeTagSearchInput.value);
+    });
+    openMyRecipesListBtn.addEventListener('click', openMyRecipesListModal);
+    myRecipesListSearchInput.addEventListener('input', function(){
+      renderMyRecipesList(myRecipesListSearchInput.value);
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
       if (!currentUser) return;
