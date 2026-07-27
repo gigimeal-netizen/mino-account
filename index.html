@@ -463,6 +463,14 @@
   }
   .my-recipes-order-row:last-of-type{ border-bottom:none; }
   .my-recipes-order-name{ flex:1 1 auto; min-width:0; font-size:14px; color: var(--ink); overflow-wrap:break-word; }
+  /* 레시피 행의 이름 부분 — .tag-recipe-row와 같은 시각 언어(탭하면 로드)지만, ▲▼/삭제와
+     한 줄에 나란히 있어야 해서 width:100% 대신 flex:1 1 auto로 남는 폭을 차지한다. */
+  .my-recipes-row-name-btn{
+    flex:1 1 auto; min-width:0; text-align:left; background:transparent; border:none;
+    font-family: var(--font-body); font-size:14px; color: var(--ink); cursor:pointer;
+    padding: 10px 4px; border-radius:8px; overflow-wrap:break-word;
+  }
+  .my-recipes-row-name-btn:hover{ background: var(--bg-elevated); }
 
   .add-btn{
     width:100%; margin-top: 12px; padding: 12px; border-radius: 10px;
@@ -1301,6 +1309,24 @@
         </label>
         <button type="button" class="io-btn" id="exportSelectedRecipesCsvBtn" style="display:none;flex:0 0 auto;">선택 항목 CSV로 내보내기</button>
       </div>
+      <!--
+        2026-07-27: 체크박스로 여러 레시피를 선택해놓고 이메일 공유를 걸려는데, 어느 레시피를
+        펼쳐서 눌러야 "전부"에 적용되는지 헷갈린다는 지적으로 추가 — 체크된 레시피 전부에 같은
+        이메일을 한 번에 공유하는 일괄 패널. 초대 링크 만들기는 여기 없다(레시피 1개당 링크
+        1개라 여러 개를 한 번에 만들면 오히려 복잡해짐 — 기존처럼 레시피를 펼쳐서 개별로만).
+      -->
+      <div class="field-row" id="shareRecipeBulkSharePanel" style="display:none;flex-direction:column;align-items:stretch;margin-bottom:14px;padding:14px;border:1.5px solid var(--border-strong);border-radius:10px;">
+        <p class="field-label" id="shareRecipeBulkPanelTitle" style="margin-bottom:8px;"></p>
+        <div class="field-row">
+          <span class="field-label">저장 허용</span>
+          <button type="button" class="io-btn" id="shareRecipeBulkAllowBtn">공개</button>
+          <button type="button" class="io-btn" id="shareRecipeBulkDenyBtn">비공개</button>
+        </div>
+        <div class="field-row" style="margin-top:10px;">
+          <input type="email" class="text-input" id="shareRecipeBulkEmailInput" autocomplete="off" placeholder="이메일로 공유 추가">
+          <button type="button" class="io-btn" id="shareRecipeBulkEmailBtn">추가</button>
+        </div>
+      </div>
       <div id="shareRecipeList"></div>
     </div>
     <div id="shareTagTabPanel" style="display:none;">
@@ -1505,7 +1531,7 @@
   <div class="subpage-body">
     <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:10px;">
     <div class="field-row" id="myRecipesOrderBarRow" style="justify-content:flex-end;margin-bottom:6px;">
-      <button type="button" class="io-btn" id="myRecipesOrderEditBtn" style="flex:0 0 auto;">순서 편집</button>
+      <button type="button" class="io-btn" id="myRecipesOrderEditBtn" style="flex:0 0 auto;">태그 순서 편집</button>
     </div>
     <div id="myRecipesTagBarEl" style="display:none;"></div>
     <div id="myRecipesListEl"></div>
@@ -2421,6 +2447,13 @@
   var exportSelectedRecipesCsvBtn = document.getElementById('exportSelectedRecipesCsvBtn');
   var selectedShareRecipeIds = {}; // id -> true, only for currently-checked rows in the 레시피별 공유 tab's list
   var lastVisibleShareRecipes = []; // the owned recipe list from the most recent renderShareRecipesList() call
+  var shareRecipeBulkSharePanelEl = document.getElementById('shareRecipeBulkSharePanel');
+  var shareRecipeBulkPanelTitleEl = document.getElementById('shareRecipeBulkPanelTitle');
+  var shareRecipeBulkAllowBtn = document.getElementById('shareRecipeBulkAllowBtn');
+  var shareRecipeBulkDenyBtn = document.getElementById('shareRecipeBulkDenyBtn');
+  var shareRecipeBulkEmailInput = document.getElementById('shareRecipeBulkEmailInput');
+  var shareRecipeBulkEmailBtn = document.getElementById('shareRecipeBulkEmailBtn');
+  var shareRecipeBulkCanSave = false; // 새로 추가되는 일괄 공유에만 적용 — 이미 있는 개별 공유 대상엔 영향 없음
   var openHelpBtn = document.getElementById('openHelpBtn');
   var helpPageEl = document.getElementById('helpPage');
   var closeHelpBtn = document.getElementById('closeHelpBtn');
@@ -3471,6 +3504,18 @@
   }
   function refreshShareRecipeBulkToolbar(){
     refreshBulkToolbar(shareRecipeSelectAllCheckbox, exportSelectedRecipesCsvBtn, selectedShareRecipeIds, lastVisibleShareRecipes, '선택 항목 CSV로 내보내기');
+    refreshShareRecipeBulkSharePanel();
+  }
+  // 2026-07-27: 체크된 레시피가 1개 이상이면 이메일 하나로 그 전부에 한 번에 공유를 거는
+  // 패널을 보여준다 — "체크는 여러 개 했는데 어느 레시피를 펼쳐서 눌러야 전부에 적용되는지
+  // 헷갈린다"는 지적으로 추가. 초대 링크는 여기 없음(레시피 1개당 링크 1개라 일괄 생성하면
+  // 오히려 복잡해짐 — 기존처럼 레시피를 펼쳐서 개별로만 만든다).
+  function refreshShareRecipeBulkSharePanel(){
+    var ids = Object.keys(selectedShareRecipeIds);
+    shareRecipeBulkSharePanelEl.style.display = ids.length ? 'flex' : 'none';
+    shareRecipeBulkPanelTitleEl.textContent = '선택한 ' + ids.length + '개 레시피와 공유';
+    shareRecipeBulkAllowBtn.classList.toggle('primary', shareRecipeBulkCanSave);
+    shareRecipeBulkDenyBtn.classList.toggle('primary', !shareRecipeBulkCanSave);
   }
 
   // 원가 계산 레시피 탭을 열 때 한 번 전부 불러온다 — RLS가 owner 소유 제품으로만 스코프해주니
@@ -4528,11 +4573,13 @@
       renderMyRecipesList(myRecipesListSearchInput.value);
     });
   }
-  // 태그가 하나도 없으면 필터 칩 자체를 숨긴다(필터할 게 없으므로) — 순서 편집 모드
-  // 여부와 무관하게 레시피 목록은 항상 아래에서 따로 렌더링된다.
+  // 태그가 하나도 없으면 필터 칩 자체와 "순서 편집" 버튼도 함께 숨긴다(둘 다 태그 전용 —
+  // 2026-07-27: 레시피 순서 이동은 재료 순서 이동처럼 항상 ▲▼가 보이는 방식으로 단순화되면서
+  // 이 토글은 이제 태그 순서 편집에만 쓰인다).
   function renderMyRecipesTagBar(){
     var tags = collectMyRecipeTags();
     myRecipesTagBarEl.innerHTML = '';
+    myRecipesOrderBarRowEl.style.display = tags.length ? '' : 'none';
     if (tags.length === 0){
       myRecipesTagBarEl.style.display = 'none';
       return;
@@ -4584,8 +4631,25 @@
       myRecipesTagBarEl.appendChild(chip);
     });
   }
+  function deleteMyRecipeFromList(r){
+    if (!confirm('"' + (r.recipe_name || '이름 없는 레시피') + '" 레시피를 삭제할까요?')) return;
+    supabase.from('recipes').delete().eq('id', r.id).then(function(res){
+      if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+      myRecipes = myRecipes.filter(function(x){ return x.id !== r.id; });
+      if (selectedRecipeId === r.id){
+        recipeSearchInput.value = '';
+        clearSelectedRecipe();
+      }
+      renderMyRecipesList(myRecipesListSearchInput.value);
+      showToast('레시피를 삭제했어요');
+    });
+  }
+  // 2026-07-27: "순서 편집" 버튼을 눌러야만 ▲▼가 보이던 방식이 불편하다는 지적 — 레시피
+  // 생성 화면의 재료 순서 이동(항상 ▲▼가 보임)처럼 단순화했다. 이제 모든 레시피 행이 항상
+  // ▲▼ + 이름(클릭하면 로드) + 삭제(내 소유일 때만)를 같이 보여준다 — 별도 모드 전환 없음.
+  // (태그 필터 칩은 여전히 별도 "태그 순서 편집" 토글을 쓴다 — 칩 목록은 가로 배치라 세로
+  // ▲▼ 목록으로 바뀌는 모드 전환이 그대로 필요하다.)
   function renderMyRecipesList(query){
-    myRecipesOrderBarRowEl.style.display = myRecipes.length ? '' : 'none';
     renderMyRecipesTagBar();
     myRecipesListEl.innerHTML = '';
     var q = (query || '').trim().toLowerCase();
@@ -4607,39 +4671,46 @@
       var tagsText = (Array.isArray(r.tags) && r.tags.length) ? ' · ' + r.tags.join(', ') : '';
       var sharedText = (currentUser && r.owner_id !== currentUser.id) ? ' · 공유받음' : '';
       var label = (r.recipe_name || '이름 없는 레시피') + tagsText + sharedText;
-      if (myRecipesOrderEditMode){
-        var row = document.createElement('div');
-        row.className = 'my-recipes-order-row';
-        var nameSpan = document.createElement('span');
-        nameSpan.className = 'my-recipes-order-name';
-        nameSpan.textContent = label;
-        var btnWrap = document.createElement('div');
-        btnWrap.className = 'reorder-btns';
-        var upBtn = document.createElement('button');
-        upBtn.type = 'button'; upBtn.textContent = '▲'; upBtn.setAttribute('aria-label', '위로 이동');
-        if (idx === 0) upBtn.disabled = true;
-        upBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, -1); });
-        var downBtn = document.createElement('button');
-        downBtn.type = 'button'; downBtn.textContent = '▼'; downBtn.setAttribute('aria-label', '아래로 이동');
-        if (idx === ordered.length - 1) downBtn.disabled = true;
-        downBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, 1); });
-        btnWrap.appendChild(upBtn); btnWrap.appendChild(downBtn);
-        row.appendChild(nameSpan); row.appendChild(btnWrap);
-        myRecipesListEl.appendChild(row);
-      } else {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tag-recipe-row';
-        btn.textContent = label;
-        btn.addEventListener('click', function(){
-          if (!confirmDiscardIfDirty()) return;
-          applyRecipeRowToState(r);
-          renderSelectedRecipe(r);
-          closeMyRecipesListModal();
-          showToast('레시피를 불러왔어요');
-        });
-        myRecipesListEl.appendChild(btn);
+      var row = document.createElement('div');
+      row.className = 'my-recipes-order-row';
+      var btnWrap = document.createElement('div');
+      btnWrap.className = 'reorder-btns';
+      var upBtn = document.createElement('button');
+      upBtn.type = 'button'; upBtn.textContent = '▲'; upBtn.setAttribute('aria-label', '위로 이동');
+      if (idx === 0) upBtn.disabled = true;
+      upBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, -1); });
+      var downBtn = document.createElement('button');
+      downBtn.type = 'button'; downBtn.textContent = '▼'; downBtn.setAttribute('aria-label', '아래로 이동');
+      if (idx === ordered.length - 1) downBtn.disabled = true;
+      downBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, 1); });
+      btnWrap.appendChild(upBtn); btnWrap.appendChild(downBtn);
+      var nameBtn = document.createElement('button');
+      nameBtn.type = 'button';
+      nameBtn.className = 'my-recipes-row-name-btn';
+      nameBtn.textContent = label;
+      nameBtn.addEventListener('click', function(){
+        if (!confirmDiscardIfDirty()) return;
+        applyRecipeRowToState(r);
+        renderSelectedRecipe(r);
+        closeMyRecipesListModal();
+        showToast('레시피를 불러왔어요');
+      });
+      row.appendChild(btnWrap);
+      row.appendChild(nameBtn);
+      // 공유받은(내 소유가 아닌) 레시피는 삭제 버튼을 아예 안 보여준다 — RLS상 owner만 delete가
+      // 통과되고, 아닌 경우 postgrest가 "0행 삭제 성공"으로 조용히 응답해 실제로는 아무 일도
+      // 안 일어났는데 성공 토스트가 뜨는 혼동을 만들 수 있어서(다른 owner-only 쓰기 작업들과
+      // 같은 이유로 미리 막아둔다).
+      if (currentUser && r.owner_id === currentUser.id){
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'del-btn';
+        delBtn.textContent = '×';
+        delBtn.setAttribute('aria-label', '레시피 삭제');
+        delBtn.addEventListener('click', function(){ deleteMyRecipeFromList(r); });
+        row.appendChild(delBtn);
       }
+      myRecipesListEl.appendChild(row);
     });
   }
 
@@ -5069,7 +5140,7 @@
     myRecipesListSearchInput.value = ''; // don't carry over a filter from the last time this was open
     myRecipesActiveTagFilter = null;
     myRecipesOrderEditMode = false;
-    myRecipesOrderEditBtn.textContent = '순서 편집';
+    myRecipesOrderEditBtn.textContent = '태그 순서 편집';
     Promise.all([loadRecipeListOrder(), loadTagListOrder()]).then(function(){
       renderMyRecipesList();
     });
@@ -5593,6 +5664,8 @@
           '</button>' +
         '</div>' +
         '<div class="acc-row-detail" style="display:none;">' +
+          '<p class="field-label" style="margin-bottom:4px;">이 태그가 붙은 레시피</p>' +
+          '<p class="hint share-tag-recipe-list" style="margin:0 0 14px;"></p>' +
           '<div class="field-row">' +
             '<span class="field-label">저장 허용</span>' +
             '<button type="button" class="io-btn share-allow-btn">공개</button>' +
@@ -5614,6 +5687,7 @@
       var nameLabelEl = row.querySelector('.acc-row-name-label');
       var summaryEl = row.querySelector('.acc-row-toggle-summary');
       var detailEl = row.querySelector('.acc-row-detail');
+      var tagRecipeListEl = row.querySelector('.share-tag-recipe-list');
       var allowBtn = row.querySelector('.share-allow-btn');
       var denyBtn = row.querySelector('.share-deny-btn');
       var granteeListEl = row.querySelector('.share-grantee-list');
@@ -5627,6 +5701,15 @@
       var pendingCanSave = grants.some(function(g){ return g.can_save; });
 
       nameLabelEl.textContent = tag;
+      // 2026-07-27: 태그를 펼쳐도 정작 그 태그가 어떤 레시피들에 붙어있는지 알 길이 없다는
+      // 지적으로 추가 — 공유 설정을 만지기 전에 "내가 지금 무엇을 공유하려는지" 확인용, 클릭
+      // 동작은 없음(레시피를 불러오려면 "태그별 보기" 또는 "내 레시피"를 쓰면 됨).
+      var tagRecipes = myRecipes.filter(function(r){
+        return currentUser && r.owner_id === currentUser.id && Array.isArray(r.tags) && r.tags.indexOf(tag) !== -1;
+      });
+      tagRecipeListEl.textContent = tagRecipes.length
+        ? tagRecipes.map(function(r){ return r.recipe_name || '이름 없는 레시피'; }).join(', ')
+        : '이 태그가 붙은 레시피가 없어요.';
 
       function refreshSummary(){
         summaryEl.textContent = grants.length ? (grants.length + '명과 공유중') : '';
@@ -6278,7 +6361,7 @@
     });
     myRecipesOrderEditBtn.addEventListener('click', function(){
       myRecipesOrderEditMode = !myRecipesOrderEditMode;
-      myRecipesOrderEditBtn.textContent = myRecipesOrderEditMode ? '완료' : '순서 편집';
+      myRecipesOrderEditBtn.textContent = myRecipesOrderEditMode ? '완료' : '태그 순서 편집';
       renderMyRecipesList(myRecipesListSearchInput.value);
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
@@ -6425,6 +6508,30 @@
     });
     exportSelectedRecipesCsvBtn.addEventListener('click', function(){
       exportSelectedRecipesCsv(Object.keys(selectedShareRecipeIds));
+    });
+    shareRecipeBulkAllowBtn.addEventListener('click', function(){
+      shareRecipeBulkCanSave = true;
+      refreshShareRecipeBulkSharePanel();
+    });
+    shareRecipeBulkDenyBtn.addEventListener('click', function(){
+      shareRecipeBulkCanSave = false;
+      refreshShareRecipeBulkSharePanel();
+    });
+    shareRecipeBulkEmailBtn.addEventListener('click', function(){
+      var email = shareRecipeBulkEmailInput.value.trim();
+      var ids = Object.keys(selectedShareRecipeIds);
+      if (!email || ids.length === 0) return;
+      Promise.all(ids.map(function(id){
+        return supabase.rpc('share_recipe_with_email', { p_recipe_id: id, p_email: email, p_can_save: shareRecipeBulkCanSave });
+      })).then(function(results){
+        var failed = results.filter(function(res){ return res.error; }).length;
+        shareRecipeBulkEmailInput.value = '';
+        loadMyRecipeShares().then(function(){
+          renderShareRecipesList();
+          if (failed) alert(ids.length + '개 중 ' + failed + '개는 공유에 실패했어요.');
+          else showToast(ids.length + '개 레시피에 공유했어요');
+        });
+      });
     });
     importRecipesCsvBtn.addEventListener('click', function(){
       importRecipesCsvInput.value = ''; // clear so picking the same file twice still fires 'change'
