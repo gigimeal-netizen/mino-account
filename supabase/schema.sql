@@ -192,11 +192,34 @@ returns boolean language sql security definer stable as $$
   );
 $$;
 
+-- 2026-07-28: 공유 스팸 방지 — 지금까지 recipe_shares/tag_account_shares는 owner만 행을 지울 수
+-- 있어서, 받는 쪽이 원치 않는 공유를 스스로 정리할 방법이 전혀 없었다. 아무나 자기 소유 레시피를
+-- 계속 만들어 이미 가입된 걸 아는 특정 이메일(예: 이 앱의 운영자 계정)에 계속 공유를 걸어 그
+-- 사람의 "내 레시피" 목록을 스팸으로 도배할 수 있는 실제 취약점이었다. 받는 쪽(blocker)이 특정
+-- 소유자(blocked_owner)를 차단하면, 이후 그 소유자가 걸려는 모든 신규 공유(개별/태그/초대 클레임
+-- 전부, 아래 각 함수에서 검사)가 막히고, 이미 걸려있던 공유도 아래 "shared read access" 정책이
+-- 즉시 걸러서 안 보이게 된다.
+create table share_blocks (
+  blocker_id uuid not null references auth.users(id) on delete cascade,
+  blocked_owner_id uuid not null references auth.users(id) on delete cascade,
+  note text not null default '', -- 차단 당시 정황(예: 공유돼있던 레시피 이름) — 소유자 쪽 프로필이 따로 없어 참고용
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_owner_id)
+);
+alter table share_blocks enable row level security;
+create policy "blocker manages own blocks" on share_blocks for all
+  using (blocker_id = auth.uid()) with check (blocker_id = auth.uid());
+
+create or replace function is_blocked_by_recipient(p_owner_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (select 1 from share_blocks where blocker_id = auth.uid() and blocked_owner_id = p_owner_id);
+$$;
+
 -- Owner: full CRUD. Recipient of an account-share (레시피 개별 공유 또는 태그 공유): read only.
 create policy "owner full access" on recipes for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "shared read access" on recipes for select
-  using (is_recipe_shared_with_me(id) or is_recipe_tag_shared_with_me(owner_id, tags));
+  using ((is_recipe_shared_with_me(id) or is_recipe_tag_shared_with_me(owner_id, tags)) and not is_blocked_by_recipient(owner_id));
 -- 레시피 아카이브: 이건 의도적으로 "누구나"(anon 포함) 읽을 수 있는 단순 컬럼 조건 정책이다 —
 -- 파일 맨 위의 "share_token is not null 정책 안 씀" 원칙은 링크 공유(원치 않는 사람에게 발견되면
 -- 안 되는 것)에 관한 거고, 공개 게시판은 정반대로 발견/브라우징이 목적이라 이 방식이 맞다.
@@ -222,6 +245,9 @@ begin
   end if;
   if not exists (select 1 from recipes where id = p_recipe_id and owner_id = auth.uid()) then
     raise exception '본인 소유 레시피만 공유할 수 있어요';
+  end if;
+  if exists (select 1 from share_blocks where blocker_id = target_id and blocked_owner_id = auth.uid()) then
+    raise exception '상대방이 회원님의 공유를 차단했어요';
   end if;
   insert into recipe_shares (recipe_id, shared_with_user_id, shared_with_email, can_save)
     values (p_recipe_id, target_id, p_email, p_can_save)
@@ -306,6 +332,9 @@ begin
   if target_id is null then
     raise exception '해당 이메일의 계정을 찾을 수 없어요';
   end if;
+  if exists (select 1 from share_blocks where blocker_id = target_id and blocked_owner_id = auth.uid()) then
+    raise exception '상대방이 회원님의 공유를 차단했어요';
+  end if;
   insert into tag_account_shares (owner_id, tag, shared_with_user_id, shared_with_email, can_save)
     values (auth.uid(), p_tag, target_id, p_email, p_can_save)
     on conflict (owner_id, tag, shared_with_user_id) do update
@@ -347,8 +376,9 @@ begin
 end; $$;
 
 -- 반환값: 'ok'(방금 적용됨) | 'already_yours'(같은 계정으로 재방문, 무해) |
--- 'already_claimed'(다른 계정이 먼저 가져감) | 'is_owner'(본인 링크, 조용히 무시) | 'not_found'.
--- "select ... for update"로 동시 클레임 레이스(두 사람이 같은 순간에 같은 링크를 열었을 때) 방지.
+-- 'already_claimed'(다른 계정이 먼저 가져감) | 'is_owner'(본인 링크, 조용히 무시) | 'not_found' |
+-- 'blocked'(2026-07-28: 클레임하는 사람이 이 링크의 소유자를 차단해둔 상태 — 초대 링크로 차단을
+-- 우회해 공유를 강제로 걸 수 없도록, 이메일 공유와 같은 차단 검사를 여기도 적용).
 create or replace function claim_recipe_share_invite(p_token uuid)
 returns text language plpgsql security definer as $$
 declare inv recipe_share_invites%rowtype;
@@ -359,6 +389,9 @@ begin
   if inv.owner_id = auth.uid() then return 'is_owner'; end if;
   if inv.claimed_by is not null then
     return case when inv.claimed_by = auth.uid() then 'already_yours' else 'already_claimed' end;
+  end if;
+  if exists (select 1 from share_blocks where blocker_id = auth.uid() and blocked_owner_id = inv.owner_id) then
+    return 'blocked';
   end if;
   select email into my_email from auth.users where id = auth.uid();
   insert into recipe_shares (recipe_id, shared_with_user_id, shared_with_email, can_save)
@@ -394,6 +427,7 @@ begin
   return new_token;
 end; $$;
 
+-- 반환값 목록은 claim_recipe_share_invite()와 동일('blocked' 포함, 2026-07-28).
 create or replace function claim_tag_share_invite(p_token uuid)
 returns text language plpgsql security definer as $$
 declare inv tag_share_invites%rowtype;
@@ -404,6 +438,9 @@ begin
   if inv.owner_id = auth.uid() then return 'is_owner'; end if;
   if inv.claimed_by is not null then
     return case when inv.claimed_by = auth.uid() then 'already_yours' else 'already_claimed' end;
+  end if;
+  if exists (select 1 from share_blocks where blocker_id = auth.uid() and blocked_owner_id = inv.owner_id) then
+    return 'blocked';
   end if;
   select email into my_email from auth.users where id = auth.uid();
   insert into tag_account_shares (owner_id, tag, shared_with_user_id, shared_with_email, can_save)

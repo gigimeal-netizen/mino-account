@@ -1309,6 +1309,7 @@
     <div class="field-row cost-tabs">
       <button type="button" class="io-btn primary" id="shareTabRecipeBtn" aria-selected="true">레시피별 공유</button>
       <button type="button" class="io-btn" id="shareTabTagBtn" aria-selected="false">태그별 공유</button>
+      <button type="button" class="io-btn" id="shareTabBlockedBtn" aria-selected="false">차단 관리</button>
     </div>
     <div id="shareRecipeTabPanel">
       <p class="hint">레시피를 계정(이메일)으로 공유해요. 공개는 상대가 저장(자기 계정에 사본 생성)까지 가능, 비공개는 열람만 가능해요. 회수하면 즉시 접근이 끊겨요.</p>
@@ -1362,6 +1363,12 @@
     <div id="shareTagTabPanel" style="display:none;">
       <p class="hint">태그 하나에 붙은 레시피 전체를 계정별로 한 번에 공유해요. 나중에 이 태그가 붙는 레시피도 자동으로 포함돼요. 공개/비공개, 회수는 레시피별 공유와 같아요.</p>
       <div id="shareTagList"></div>
+    </div>
+    <!-- 2026-07-28: 공유 스팸 방지 — 원치 않는 계정 공유를 "받는 쪽"이 특정 소유자를 차단해 정리하는
+         화면. 내 레시피 목록의 ⦸ 버튼으로 차단을 걸고, 여기서 목록 확인 + 해제만 한다. -->
+    <div id="shareBlockedTabPanel" style="display:none;">
+      <p class="hint">공유를 차단한 사용자 목록이에요. 차단하면 그 사람이 공유한 레시피/태그가 모두 안 보이게 되고, 앞으로 그 사람은 회원님께 새 공유를 걸 수 없어요. 해제하면 다시 공유를 받을 수 있게 됩니다.</p>
+      <div id="shareBlockedList"></div>
     </div>
   </div>
 </div>
@@ -2697,10 +2704,14 @@
   var closeShareManagerBtn = document.getElementById('closeShareManagerBtn');
   var shareTabRecipeBtn = document.getElementById('shareTabRecipeBtn');
   var shareTabTagBtn = document.getElementById('shareTabTagBtn');
+  var shareTabBlockedBtn = document.getElementById('shareTabBlockedBtn');
   var shareRecipeTabPanelEl = document.getElementById('shareRecipeTabPanel');
   var shareTagTabPanelEl = document.getElementById('shareTagTabPanel');
+  var shareBlockedTabPanelEl = document.getElementById('shareBlockedTabPanel');
   var shareRecipeListEl = document.getElementById('shareRecipeList');
   var shareTagListEl = document.getElementById('shareTagList');
+  var shareBlockedListEl = document.getElementById('shareBlockedList');
+  var myShareBlocks = []; // share_blocks rows this user (as blocker) owns — { blocked_owner_id, note, created_at }
   var shareRecipeSelectAllCheckbox = document.getElementById('shareRecipeSelectAllCheckbox');
   var exportSelectedRecipesCsvBtn = document.getElementById('exportSelectedRecipesCsvBtn');
   var selectedShareRecipeIds = {}; // id -> true, only for currently-checked rows in the 레시피별 공유 tab's list
@@ -2921,6 +2932,53 @@
     return supabase.from('tag_account_shares').select('*').then(function(res){
       if (res.error){ alert('태그 공유 정보를 불러오지 못했어요: ' + res.error.message); return; }
       myTagAccountShares = res.data || [];
+    });
+  }
+
+  // 2026-07-28: 공유 스팸 방지 — 이 사용자가 차단해둔 소유자 목록. RLS가 blocker_id=auth.uid()로
+  // 알아서 걸러주므로 select('*')로 충분하다(다른 owner-only 테이블들과 같은 패턴).
+  function loadShareBlocks(){
+    return supabase.from('share_blocks').select('*').then(function(res){
+      if (res.error){ alert('차단 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myShareBlocks = res.data || [];
+    });
+  }
+
+  // 소유자 프로필이 따로 없어서(auth.users는 클라이언트가 직접 조회 불가) 차단 당시 저장해둔
+  // note(레시피 이름)만 보여준다 — 완벽한 신원 표시는 아니지만 "누굴 차단했는지" 참고엔 충분.
+  function renderShareBlockedList(){
+    shareBlockedListEl.innerHTML = '';
+    if (myShareBlocks.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = '차단한 사용자가 없어요.';
+      shareBlockedListEl.appendChild(empty);
+      return;
+    }
+    myShareBlocks.forEach(function(b){
+      var row = document.createElement('div');
+      row.className = 'my-recipes-order-row';
+      var label = document.createElement('span');
+      label.className = 'my-recipes-order-name';
+      label.textContent = b.note ? ('"' + b.note + '"을(를) 공유했던 사용자') : '차단된 사용자';
+      var unblockBtn = document.createElement('button');
+      unblockBtn.type = 'button';
+      unblockBtn.className = 'io-btn';
+      unblockBtn.textContent = '차단 해제';
+      unblockBtn.addEventListener('click', function(){ unblockShareOwner(b); });
+      row.appendChild(label);
+      row.appendChild(unblockBtn);
+      shareBlockedListEl.appendChild(row);
+    });
+  }
+
+  function unblockShareOwner(b){
+    if (!confirm('차단을 해제할까요? 이 사람이 예전에 걸어뒀던 공유가 있었다면 다시 보이게 되고, 새 공유도 다시 걸 수 있게 돼요.')) return;
+    supabase.from('share_blocks').delete().eq('blocker_id', currentUser.id).eq('blocked_owner_id', b.blocked_owner_id).then(function(res){
+      if (res.error){ alert('차단 해제 실패: ' + res.error.message); return; }
+      myShareBlocks = myShareBlocks.filter(function(x){ return x.blocked_owner_id !== b.blocked_owner_id; });
+      renderShareBlockedList();
+      showToast('차단을 해제했어요');
     });
   }
 
@@ -4944,6 +5002,24 @@
       myRecipesTagBarEl.appendChild(chip);
     });
   }
+  // 2026-07-28: 공유 스팸 방지 — 원치 않는 계정 공유를 계속 받을 때, 받는 쪽(나)이 그 소유자를
+  // 통째로 차단한다. 레시피 하나만 숨기는 게 아니라 "이 사람이 앞으로 걸 공유도 전부 막기"인
+  // 이유: 공격자가 레시피를 계속 새로 만들어 하나씩 다시 공유하면 레시피 단위 차단은 매번
+  // 뚫리기 때문 — 소유자 단위로 막아야 실제로 막힌다. share_blocks insert는 서버(RLS)가 어차피
+  // blocker_id=auth.uid()만 허용하지만, 클라이언트에서도 명시적으로 채워 보낸다(이 앱의 다른
+  // insert들과 같은 패턴 — owner_id도 항상 이렇게 명시적으로 넘긴다).
+  function blockShareOwner(r){
+    var name = r.recipe_name || '이름 없는 레시피';
+    if (!confirm('"' + name + '"을(를) 공유한 사람을 차단할까요?\n\n이 사람이 공유한 다른 레시피/태그도 모두 안 보이게 되고, 앞으로 이 사람은 회원님께 공유를 걸 수 없게 됩니다.')) return;
+    supabase.from('share_blocks').insert({ blocker_id: currentUser.id, blocked_owner_id: r.owner_id, note: name }).then(function(res){
+      if (res.error){ alert('차단 실패: ' + res.error.message); return; }
+      myRecipes = myRecipes.filter(function(x){ return x.owner_id !== r.owner_id; });
+      if (selectedRecipeId === r.id) clearSelectedRecipe();
+      renderMyRecipesList(myRecipesListSearchInput.value);
+      showToast('공유를 차단했어요 — 공유 관리에서 언제든 해제할 수 있어요');
+    });
+  }
+
   function deleteMyRecipeFromList(r){
     if (!confirm('"' + (r.recipe_name || '이름 없는 레시피') + '" 레시피를 삭제할까요?')) return;
     supabase.from('recipes').delete().eq('id', r.id).then(function(res){
@@ -5058,6 +5134,17 @@
         delBtn.setAttribute('aria-label', '레시피 삭제');
         delBtn.addEventListener('click', function(){ deleteMyRecipeFromList(r); });
         row.appendChild(delBtn);
+      } else if (isShared){
+        // 2026-07-28: 공유받은 레시피는 삭제 대신 "이 사람 차단" — 소유자만 그 공유 자체를
+        // 지울 수 있어서(RLS), 받는 쪽이 할 수 있는 건 "더 이상 이 사람 공유를 안 받겠다"뿐이다.
+        var blockBtn = document.createElement('button');
+        blockBtn.type = 'button';
+        blockBtn.className = 'del-btn';
+        blockBtn.textContent = '⦸';
+        blockBtn.setAttribute('aria-label', '이 사람의 공유 차단');
+        blockBtn.title = '이 사람의 공유 차단';
+        blockBtn.addEventListener('click', function(){ blockShareOwner(r); });
+        row.appendChild(blockBtn);
       }
       myRecipesListEl.appendChild(row);
     });
@@ -5547,18 +5634,23 @@
   });
 
   // 공유 관리 — 계정 기반 공유(레시피 개별 + 태그) 부여/회수/공개-비공개, 원가 계산과 같은
-  // 레시피/태그 탭 전환 구조(switchCostTab 참고).
+  // 레시피/태그 탭 전환 구조(switchCostTab 참고). 2026-07-28: "차단 관리" 탭 추가(공유 스팸
+  // 방지 — 받는 쪽이 특정 소유자를 차단/해제).
   function switchShareTab(tab){
-    var isRecipe = tab === 'recipe';
-    shareTabRecipeBtn.classList.toggle('primary', isRecipe);
-    shareTabRecipeBtn.setAttribute('aria-selected', isRecipe ? 'true' : 'false');
-    shareTabTagBtn.classList.toggle('primary', !isRecipe);
-    shareTabTagBtn.setAttribute('aria-selected', !isRecipe ? 'true' : 'false');
-    shareRecipeTabPanelEl.style.display = isRecipe ? 'block' : 'none';
-    shareTagTabPanelEl.style.display = isRecipe ? 'none' : 'block';
+    shareTabRecipeBtn.classList.toggle('primary', tab === 'recipe');
+    shareTabRecipeBtn.setAttribute('aria-selected', tab === 'recipe' ? 'true' : 'false');
+    shareTabTagBtn.classList.toggle('primary', tab === 'tag');
+    shareTabTagBtn.setAttribute('aria-selected', tab === 'tag' ? 'true' : 'false');
+    shareTabBlockedBtn.classList.toggle('primary', tab === 'blocked');
+    shareTabBlockedBtn.setAttribute('aria-selected', tab === 'blocked' ? 'true' : 'false');
+    shareRecipeTabPanelEl.style.display = tab === 'recipe' ? 'block' : 'none';
+    shareTagTabPanelEl.style.display = tab === 'tag' ? 'block' : 'none';
+    shareBlockedTabPanelEl.style.display = tab === 'blocked' ? 'block' : 'none';
+    if (tab === 'blocked') loadShareBlocks().then(renderShareBlockedList);
   }
   shareTabRecipeBtn.addEventListener('click', function(){ switchShareTab('recipe'); });
   shareTabTagBtn.addEventListener('click', function(){ switchShareTab('tag'); });
+  shareTabBlockedBtn.addEventListener('click', function(){ switchShareTab('blocked'); });
 
   function openShareManagerModal(){
     switchShareTab('recipe');
@@ -6676,6 +6768,10 @@
         alert('이 초대 링크는 이미 다른 계정에서 사용됐어요.');
       } else if (res.data === 'not_found'){
         alert('유효하지 않은 초대 링크예요.');
+      } else if (res.data === 'blocked'){
+        // 2026-07-28: 이 계정이 링크를 보낸 사람을 차단해둔 상태 — 차단은 "이 사람의 공유를 더
+        // 이상 안 받겠다"는 의도라, 초대 링크로 그걸 우회해 공유가 강제로 걸리면 안 된다.
+        alert('차단한 사용자의 초대 링크라 적용되지 않았어요.');
       }
       // 'is_owner'는 본인 소유라 조용히 무시 — 이미 접근 권한이 있으니 알릴 게 없다.
     });
