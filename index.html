@@ -464,13 +464,24 @@
   .my-recipes-order-row:last-of-type{ border-bottom:none; }
   .my-recipes-order-name{ flex:1 1 auto; min-width:0; font-size:14px; color: var(--ink); overflow-wrap:break-word; }
   /* 레시피 행의 이름 부분 — .tag-recipe-row와 같은 시각 언어(탭하면 로드)지만, ▲▼/삭제와
-     한 줄에 나란히 있어야 해서 width:100% 대신 flex:1 1 auto로 남는 폭을 차지한다. */
+     한 줄에 나란히 있어야 해서 width:100% 대신 flex:1 1 auto로 남는 폭을 차지한다. 이름 +
+     태그/공유표시 배지를 세로로 쌓는다(2026-07-27 — 전엔 한 줄 텍스트로 이어붙여서 태그가
+     여럿이면 스캔하기 어려웠다). */
   .my-recipes-row-name-btn{
+    display:flex; flex-direction:column; align-items:flex-start; gap:5px;
     flex:1 1 auto; min-width:0; text-align:left; background:transparent; border:none;
-    font-family: var(--font-body); font-size:14px; color: var(--ink); cursor:pointer;
-    padding: 10px 4px; border-radius:8px; overflow-wrap:break-word;
+    font-family: var(--font-body); cursor:pointer;
+    padding: 10px 4px; border-radius:8px;
   }
   .my-recipes-row-name-btn:hover{ background: var(--bg-elevated); }
+  .my-recipes-row-name{ font-size:14px; font-weight:700; color: var(--ink); overflow-wrap:break-word; }
+  .my-recipes-row-badges{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+  .my-recipes-row-badge{
+    font-family: var(--font-body); font-size:11px; font-weight:600; line-height:1;
+    padding: 4px 8px; border-radius:999px; background: var(--bg-elevated);
+    border: 1px solid var(--border); color: var(--ink-soft);
+  }
+  .my-recipes-row-shared-icon{ width:15px; height:15px; flex:0 0 auto; color: var(--ink-soft); }
 
   .add-btn{
     width:100%; margin-top: 12px; padding: 12px; border-radius: 10px;
@@ -1530,7 +1541,8 @@
   </div>
   <div class="subpage-body">
     <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:10px;">
-    <div class="field-row" id="myRecipesOrderBarRow" style="justify-content:flex-end;margin-bottom:6px;">
+    <button type="button" class="tag-toggle-btn" id="showMyRecipesTagBarBtn" style="display:none;">+ 태그로 필터링</button>
+    <div class="field-row" id="myRecipesOrderBarRow" style="display:none;justify-content:flex-end;margin-bottom:6px;">
       <button type="button" class="io-btn" id="myRecipesOrderEditBtn" style="flex:0 0 auto;">태그 순서 편집</button>
     </div>
     <div id="myRecipesTagBarEl" style="display:none;"></div>
@@ -2338,6 +2350,10 @@
   var tagOrderMap = {};
   var myRecipesActiveTagFilter = null; // null = 전체(필터 없음)
   var myRecipesOrderEditMode = false;
+  // 2026-07-27: 태그 칩 바가 매번 2~3줄을 차지해 목록 도달 전에 화면을 많이 잡아먹는다는
+  // 지적으로 기본은 접어두고("+ 태그로 필터링" 링크만), 링크를 누르거나 필터가 이미 걸려있으면
+  // (아래 renderMyRecipesTagBar) 펼쳐진 채로 유지 — 태그 입력칸 접어두기와 같은 패턴.
+  var myRecipesTagBarExpanded = false;
   var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
   // 2026-07-25: 계정 기반 공유(레시피 개별 + 태그) — RLS가 "내가 owner인 레시피/태그의 공유 행" +
   // "나에게 공유된 행"을 합쳐서 돌려주므로, select('*') 한 번으로 소유자 쪽(공유 관리 화면)과
@@ -2489,6 +2505,7 @@
   var myRecipesOrderEditBtn = document.getElementById('myRecipesOrderEditBtn');
   var myRecipesOrderBarRowEl = document.getElementById('myRecipesOrderBarRow');
   var myRecipesTagBarEl = document.getElementById('myRecipesTagBarEl');
+  var showMyRecipesTagBarBtn = document.getElementById('showMyRecipesTagBarBtn');
   var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
   var recipeTagsPageEl = document.getElementById('recipeTagsPage');
   var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
@@ -4591,14 +4608,27 @@
   // 태그가 하나도 없으면 필터 칩 자체와 "순서 편집" 버튼도 함께 숨긴다(둘 다 태그 전용 —
   // 2026-07-27: 레시피 순서 이동은 재료 순서 이동처럼 항상 ▲▼가 보이는 방식으로 단순화되면서
   // 이 토글은 이제 태그 순서 편집에만 쓰인다).
+  // 2026-07-27: 태그가 여러 개면 칩 바가 2~3줄을 차지해 목록 도달 전에 화면을 많이 잡아먹길래
+  // 기본은 "+ 태그로 필터링" 링크 하나로 접어두고, 눌러서 펼치거나(myRecipesTagBarExpanded)
+  // 이미 필터가 걸려있으면(사용 중인 상태를 접어버리면 안 되므로) 펼쳐서 보여준다.
   function renderMyRecipesTagBar(){
     var tags = collectMyRecipeTags();
     myRecipesTagBarEl.innerHTML = '';
-    myRecipesOrderBarRowEl.style.display = tags.length ? '' : 'none';
     if (tags.length === 0){
       myRecipesTagBarEl.style.display = 'none';
+      myRecipesOrderBarRowEl.style.display = 'none';
+      showMyRecipesTagBarBtn.style.display = 'none';
       return;
     }
+    var expanded = myRecipesTagBarExpanded || myRecipesActiveTagFilter !== null;
+    if (!expanded){
+      myRecipesTagBarEl.style.display = 'none';
+      myRecipesOrderBarRowEl.style.display = 'none';
+      showMyRecipesTagBarBtn.style.display = '';
+      return;
+    }
+    showMyRecipesTagBarBtn.style.display = 'none';
+    myRecipesOrderBarRowEl.style.display = '';
     myRecipesTagBarEl.style.display = '';
     if (myRecipesOrderEditMode){
       myRecipesTagBarEl.className = 'my-recipes-order-list';
@@ -4683,9 +4713,6 @@
       return;
     }
     ordered.forEach(function(r, idx){
-      var tagsText = (Array.isArray(r.tags) && r.tags.length) ? ' · ' + r.tags.join(', ') : '';
-      var sharedText = (currentUser && r.owner_id !== currentUser.id) ? ' · 공유받음' : '';
-      var label = (r.recipe_name || '이름 없는 레시피') + tagsText + sharedText;
       var row = document.createElement('div');
       row.className = 'my-recipes-order-row';
       var btnWrap = document.createElement('div');
@@ -4699,10 +4726,49 @@
       if (idx === ordered.length - 1) downBtn.disabled = true;
       downBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, 1); });
       btnWrap.appendChild(upBtn); btnWrap.appendChild(downBtn);
+      // 2026-07-27: 이름+태그+"공유받음"을 한 줄 텍스트로 이어붙이던 걸 분리 — 태그가 여럿이면
+      // 한 줄이 너무 길어져서 스캔하기 어려웠다. 이름은 굵게 한 줄, 태그/공유표시는 그 아래
+      // 작은 배지로 따로 둔다(.my-recipes-row-badges). "공유받음"도 텍스트 대신 아이콘 하나로.
       var nameBtn = document.createElement('button');
       nameBtn.type = 'button';
       nameBtn.className = 'my-recipes-row-name-btn';
-      nameBtn.textContent = label;
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'my-recipes-row-name';
+      nameSpan.textContent = r.recipe_name || '이름 없는 레시피';
+      nameBtn.appendChild(nameSpan);
+      var tags = Array.isArray(r.tags) ? r.tags : [];
+      var isShared = currentUser && r.owner_id !== currentUser.id;
+      if (tags.length || isShared){
+        var badgesEl = document.createElement('span');
+        badgesEl.className = 'my-recipes-row-badges';
+        tags.forEach(function(tag){
+          var badge = document.createElement('span');
+          badge.className = 'my-recipes-row-badge';
+          badge.textContent = tag;
+          badgesEl.appendChild(badge);
+        });
+        if (isShared){
+          var sharedIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          sharedIcon.setAttribute('viewBox', '0 0 24 24');
+          sharedIcon.setAttribute('fill', 'none');
+          sharedIcon.setAttribute('stroke', 'currentColor');
+          sharedIcon.setAttribute('stroke-width', '2');
+          sharedIcon.setAttribute('stroke-linecap', 'round');
+          sharedIcon.setAttribute('stroke-linejoin', 'round');
+          sharedIcon.setAttribute('class', 'my-recipes-row-shared-icon');
+          sharedIcon.innerHTML =
+            '<circle cx="18" cy="5" r="3"></circle>' +
+            '<circle cx="6" cy="12" r="3"></circle>' +
+            '<circle cx="18" cy="19" r="3"></circle>' +
+            '<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>' +
+            '<line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>';
+          var srLabel = document.createElement('title');
+          srLabel.textContent = '공유받음';
+          sharedIcon.insertBefore(srLabel, sharedIcon.firstChild);
+          badgesEl.appendChild(sharedIcon);
+        }
+        nameBtn.appendChild(badgesEl);
+      }
       nameBtn.addEventListener('click', function(){
         if (!confirmDiscardIfDirty()) return;
         applyRecipeRowToState(r);
@@ -5155,6 +5221,7 @@
     myRecipesListSearchInput.value = ''; // don't carry over a filter from the last time this was open
     myRecipesActiveTagFilter = null;
     myRecipesOrderEditMode = false;
+    myRecipesTagBarExpanded = false;
     myRecipesOrderEditBtn.textContent = '태그 순서 편집';
     Promise.all([loadRecipeListOrder(), loadTagListOrder()]).then(function(){
       renderMyRecipesList();
@@ -6372,6 +6439,10 @@
     });
     openMyRecipesListBtn.addEventListener('click', openMyRecipesListModal);
     myRecipesListSearchInput.addEventListener('input', function(){
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+    showMyRecipesTagBarBtn.addEventListener('click', function(){
+      myRecipesTagBarExpanded = true;
       renderMyRecipesList(myRecipesListSearchInput.value);
     });
     myRecipesOrderEditBtn.addEventListener('click', function(){
