@@ -894,7 +894,10 @@
   </section>
 
   <section class="card" id="poolishCard" style="display:none;">
-    <h2>사전발효반죽 (풀리시)</h2>
+    <div class="field-row" style="justify-content:space-between;">
+      <h2 style="margin:0;">사전발효반죽</h2>
+      <button type="button" class="del-btn" id="closePoolishBtn" aria-label="사전발효반죽 접기">×</button>
+    </div>
     <p class="hint">반죽 일부를 미리 섞어 발효시켜 넣을 때 사용해요. 비율/무게는 전체 반죽(밀가루 100%) 기준 그대로이고, 여기선 그중 풀리시에 들어갈 항목만 따로 모아 보여줘요.</p>
     <p class="hint" style="font-weight:600;margin:12px 0 4px;">밀가루</p>
     <div id="poolishFlourList"></div>
@@ -904,7 +907,7 @@
     <button class="add-btn" id="addPoolishIngBtn">+ 풀리시 재료 추가</button>
     <p class="hint" style="margin-top:12px;">풀리시 총 무게 <strong id="poolishSubtotal">0g</strong></p>
   </section>
-  <button type="button" class="tag-toggle-btn" id="showPoolishBtn" style="display:none;">+ 사전발효반죽(풀리시) 추가</button>
+  <button type="button" class="tag-toggle-btn" id="showPoolishBtn" style="display:none;">+ 사전발효반죽 추가</button>
 
   <section class="card" id="flourCard">
     <h2>밀가루 (합계 100%)</h2>
@@ -1382,7 +1385,7 @@
           <circle cx="12" cy="7" r="4"></circle>
         </svg>
       </span>
-      <div><strong>계정</strong><p class="hint" style="margin:2px 0 0;">로그인 상태를 보여주고, 누르면 로그인/로그아웃과 계정 메뉴(재료 관리, 원가 계산 등)를 열어요. (헤더 오른쪽)</p></div>
+      <div><strong>계정</strong><p class="hint" style="margin:2px 0 0;">로그인 상태를 보여주고, 누르면 로그인/로그아웃과 계정 메뉴(공유 관리, 도움말, 회원 탈퇴 등)를 열어요. 재료 관리·원가 계산은 이 메뉴가 아니라 화면 하단 탭에 있어요. (헤더 오른쪽)</p></div>
     </div>
     <div class="help-icon-row">
       <span class="icon-btn" aria-hidden="true">
@@ -1406,12 +1409,15 @@
     <div class="help-icon-row">
       <span class="icon-btn" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          <line x1="8" y1="6" x2="21" y2="6"></line>
+          <line x1="8" y1="12" x2="21" y2="12"></line>
+          <line x1="8" y1="18" x2="21" y2="18"></line>
+          <line x1="3" y1="6" x2="3.01" y2="6"></line>
+          <line x1="3" y1="12" x2="3.01" y2="12"></line>
+          <line x1="3" y1="18" x2="3.01" y2="18"></line>
         </svg>
       </span>
-      <div><strong>레시피 아카이브</strong><p class="hint" style="margin:2px 0 0;">누구나 볼 수 있는 공개 게시판을 둘러봐요. (레시피 이름 옆)</p></div>
+      <div><strong>내 레시피</strong><p class="hint" style="margin:2px 0 0;">내가 작성했거나 공유받은 레시피를 전부 한 화면에서 훑어봐요. 여기서 태그로 좁혀보거나(+ 태그로 필터링) 순서를 바꿀 수 있어요(▲▼). (로그인 후, 레시피 검색창 옆)</p></div>
     </div>
     <div class="help-icon-row">
       <span class="icon-btn" aria-hidden="true">
@@ -1422,7 +1428,7 @@
           <rect x="3" y="14" width="7" height="7"></rect>
         </svg>
       </span>
-      <div><strong>태그별 보기</strong><p class="hint" style="margin:2px 0 0;">내 레시피를 태그로 묶어서 봐요. (로그인 후, 레시피 검색창 옆)</p></div>
+      <div><strong>태그별 보기</strong><p class="hint" style="margin:2px 0 0;">내 레시피를 태그로 묶어서(그룹으로) 보고, 태그 단위로 공유도 할 수 있어요. "내 레시피"의 태그 필터와는 달리 여기는 브라우징+공유가 목적이에요. (로그인 후, 레시피 검색창 옆)</p></div>
     </div>
     <div class="help-icon-row">
       <span class="icon-btn" aria-hidden="true">
@@ -1454,7 +1460,7 @@
           <polyline points="9 22 9 12 15 12 15 22"></polyline>
         </svg>
       </span>
-      <div><strong>계산기로 돌아가기</strong><p class="hint" style="margin:2px 0 0;">재료 관리/원가 계산/공유 관리/신고 내역/태그별 보기 같은 화면에서 계산기 메인 화면으로 돌아가요. (각 화면 왼쪽 위)</p></div>
+      <div><strong>계산기로 돌아가기</strong><p class="hint" style="margin:2px 0 0;">재료 관리/원가 계산/공유 관리/신고 내역/태그별 보기/내 레시피/도움말 같은 화면에서 계산기 메인 화면으로 돌아가요(하단 탭으로 연 화면은 하단 탭에서 다시 눌러도 돼요). (각 화면 왼쪽 위)</p></div>
     </div>
     <div class="help-icon-row">
       <span class="icon-btn" aria-hidden="true">
@@ -1466,28 +1472,77 @@
       <div><strong>신고</strong><p class="hint" style="margin:2px 0 0;">레시피 아카이브에서 부적절한 게시물을 알려요. (아카이브 목록 각 행)</p></div>
     </div>
 
+    <p class="hint" style="margin-top:16px;font-weight:600;">화면 하단 탭 (스크롤 중에도 항상 떠 있어요)</p>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </span>
+      <div><strong>레시피</strong><p class="hint" style="margin:2px 0 0;">계산기 화면이에요 — 다른 탭/화면에 있다가 눌러도 바로 계산기로 돌아와요. 로그인 여부와 무관하게 항상 보여요.</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </span>
+      <div><strong>아카이브</strong><p class="hint" style="margin:2px 0 0;">누구나 볼 수 있는 공개 게시판이에요. 로그인 여부와 무관하게 항상 보여요.</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+      </span>
+      <div><strong>재료</strong><p class="hint" style="margin:2px 0 0;">재료 관리 화면이에요 — 구매량/가격을 입력해서 g당 단가를 계산해요. 로그인 전엔 흐리게 보이고, 눌러도 안내만 떠요.</p></div>
+    </div>
+    <div class="help-icon-row">
+      <span class="icon-btn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23"></line>
+          <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"></path>
+        </svg>
+      </span>
+      <div><strong>원가</strong><p class="hint" style="margin:2px 0 0;">원가 계산 화면이에요 — 레시피/조합 제품의 g당 원가와 마진을 계산해요. 로그인 전엔 흐리게 보이고, 눌러도 안내만 떠요.</p></div>
+    </div>
+
     <h3>계산기 기초</h3>
     <p>이 계산기는 베이커스 퍼센트(밀가루 전체를 100%로 두고, 나머지 재료를 그 비율로 표시하는 방식)를 기본으로 해요. 제빵 레시피는 밀가루가 여러 종류여도 전부 합쳐서 100%가 되고, 물·소금·이스트 같은 재료는 그 밀가루 총량 대비 비율(%)로 입력합니다.</p>
     <p><strong>배율 조정</strong> 모드는 "기준 밀가루량 × 배율"로 전체 반죽을 스케일해요. <strong>총 반죽량 기준</strong> 모드는 반대로 "원하는 완성 반죽 무게"를 입력하면 거기서 밀가루량을 거꾸로 계산해줘요 — 반죽을 여러 크기로 나눠 만들 때는 "반죽 분할"(무게 × 개수)을 여러 개 추가해서 합산할 수도 있어요.</p>
     <p>제과·기타 레시피는 베이커스 퍼센트 대신 재료마다 절대 무게(g)를 그대로 입력하는 방식이에요 — 밀가루 기준 비율 자체가 없는 레시피(크림, 소스 등)에 맞아요.</p>
+    <p>반죽 일부를 미리 섞어 발효시키는 <strong>사전발효반죽</strong>(폴리시, 르방 등)을 쓰는 레시피라면, 재료 카드 아래 "+ 사전발효반죽 추가"로 별도 카드를 열어 거기서 밀가루/재료를 따로 넣으세요(제빵 레시피에서만 보여요). 비율/무게 계산은 전체 반죽 기준 그대로 이어지고, 다 쓰고 나면 카드 오른쪽 위 ×로 접을 수 있어요(내용이 남아있으면 확인 후 지워지고 접혀요).</p>
 
     <h3>레시피 종류</h3>
     <p>"+ 새 레시피"를 누르면 제빵(베이커스 %) / 제과(절대 중량) / 기타(절대 중량) 중 하나를 고르는데, 이 선택은 나중에 바꿀 수 없어요 — 종류를 잘못 골랐다면 새로 만드는 게 맞아요.</p>
 
     <h3>태그</h3>
-    <p>레시피 이름 옆 태그 칸에 "제빵, OO제과"처럼 쉼표로 구분해서 여러 개를 동시에 붙일 수 있어요(게시판 태그와 같은 개념). 레시피 검색창 옆 아이콘으로 "태그별 보기"를 열면, 태그마다 그룹으로 묶어서 볼 수 있어요 — 태그가 여러 개인 레시피는 해당하는 모든 그룹에 나타나요.</p>
+    <p>레시피 이름 옆 태그 칸에 "제빵, OO제과"처럼 쉼표로 구분해서 여러 개를 동시에 붙일 수 있어요(게시판 태그와 같은 개념). 태그를 쓰는 화면은 두 곳이에요 — <strong>태그별 보기</strong>는 태그마다 그룹으로 묶어서 브라우징하고 태그 단위로 공유까지 하는 화면이고, <strong>내 레시피</strong>의 "+ 태그로 필터링"은 지금 보고 있는 목록을 태그로 좁혀보기만 하는 가벼운 필터예요. 둘 다에서 태그(또는 레시피)의 순서를 ▲▼로 바꿀 수 있고, 이 순서는 서버에 저장돼서 다른 기기에서 봐도 그대로 유지돼요.</p>
 
     <h3>저장하고 불러오기</h3>
-    <p>구글 계정으로 로그인하면 레시피를 저장하고, 검색창이나 "내 레시피" 목록으로 다시 찾아서 불러올 수 있어요. 다른 사람이 공유해준 레시피도 같은 목록에 "· 공유받음" 표시와 함께 함께 나타나요.</p>
+    <p>구글 계정으로 로그인하면 레시피를 저장하고, 검색창이나 "내 레시피" 목록으로 다시 찾아서 불러올 수 있어요. 다른 사람이 공유해준 레시피도 같은 목록에 함께 나타나고, 이름 아래 작은 공유 아이콘으로 구분돼요. "내 레시피"의 각 행에서 ▲▼로 순서를 바꾸거나 ×로 삭제할 수 있어요(공유받은 레시피는 삭제 버튼이 안 보여요 — 내 소유가 아니라서 지울 수 없어요).</p>
 
     <h3>공유</h3>
-    <p>공유하는 방법은 두 가지예요.</p>
+    <p>공유하는 방법은 세 가지예요.</p>
     <p><strong>링크 공유</strong>(레시피 상세의 "링크 켜기", 태그별 보기의 태그 공유)는 그 URL을 아는 사람은 누구나 열람할 수 있는 방식이에요. 로그인해서 저장하면 그 사람 계정에 독립된 사본이 생겨요 — 링크를 나중에 꺼도 이미 저장된 사본까지는 회수가 안 돼요.</p>
-    <p><strong>공유 관리</strong>(계정 메뉴)는 특정 계정(이메일)을 지정해서 공유하는 방식이에요. 공유마다 "공개"(상대가 저장 가능)와 "비공개"(열람만 가능)를 정할 수 있고, 회수하면 그 즉시 확실하게 접근이 끊겨요. 상대가 아직 가입 전이라면 "초대 링크"를 만들어서 직접 전달할 수도 있어요 — 그 링크를 열고 로그인하는 순간 자동으로 공유가 적용되고, 1회용이라 다른 사람은 못 써요.</p>
-    <p><strong>레시피 아카이브</strong>(레시피 이름 옆 지구본 아이콘)는 이 셋과 다르게, 특정 상대 없이 로그인 여부와 무관하게 누구나 볼 수 있는 공개 게시판이에요. 레시피의 "링크 공유" 패널에서 "공개 게시판에 올리기"를 누르면 등록되고, 원하면 닉네임을 붙일 수 있어요(비우면 "익명"). 부적절한 게시물은 아카이브에서 "신고" 버튼으로 알릴 수 있어요.</p>
+    <p><strong>공유 관리</strong>(계정 메뉴)는 특정 계정(이메일)을 지정해서 공유하는 방식이에요. 공유마다 "공개"(상대가 저장 가능)와 "비공개"(열람만 가능)를 정할 수 있고, 회수하면 그 즉시 확실하게 접근이 끊겨요. 상대가 아직 가입 전이라면 "초대 링크"를 만들어서 직접 전달할 수도 있어요 — 그 링크를 열고 로그인하는 순간 자동으로 공유가 적용되고, 1회용이라 다른 사람은 못 써요. 레시피가 여러 개면 체크박스로 골라서 같은 이메일로 한 번에 공유할 수도 있어요("선택한 N개 레시피와 공유" 패널). 태그별 공유를 펼치면 그 태그가 붙은 레시피 목록도 바로 보여요.</p>
+    <p><strong>레시피 아카이브</strong>(하단 탭)는 이 둘과 다르게, 특정 상대 없이 로그인 여부와 무관하게 누구나 볼 수 있는 공개 게시판이에요. 레시피의 "링크 공유" 패널에서 "공개 게시판에 올리기"를 누르면 등록되고, 원하면 닉네임을 붙일 수 있어요(비우면 "익명"). 부적절한 게시물은 아카이브에서 "신고" 버튼으로 알릴 수 있어요.</p>
 
     <h3>원가 계산</h3>
-    <p><strong>재료 관리</strong>에서 재료마다 구매량·구매가격을 입력해두면 g당 단가가 자동 계산돼요. <strong>원가 계산</strong>에서 레시피를 재료DB와 연결하면 그 레시피의 g당 원가를 볼 수 있고, 실제로 파는 제품(예: "휘낭시에 30g")을 등록하면 개당 원가와 마진까지 계산해줘요. 서로 다른 레시피를 합친 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)은 "조합 제품"으로 따로 등록해요.</p>
+    <p>로그인 후 화면 하단의 <strong>재료</strong> 탭에서 재료마다 구매량·구매가격을 입력해두면 g당 단가가 자동 계산돼요. 하단의 <strong>원가</strong> 탭에서 레시피를 재료DB와 연결하면 그 레시피의 g당 원가를 볼 수 있고, 실제로 파는 제품(예: "휘낭시에 30g")을 등록하면 개당 원가와 마진까지 계산해줘요. 서로 다른 레시피를 합친 제품(예: 소보로빵 = 소보로 반죽 + 빵 반죽)은 "원가" 탭 안의 "조합 제품" 탭에서 따로 등록해요.</p>
+
+    <h3>상황에 맞게 쓰기</h3>
+    <p><strong>매장 직원에게 특정 태그의 레시피만, 저장은 못 하게 보여주고 싶다면</strong> — 계정 메뉴 &gt; 공유 관리 &gt; 태그별 공유에서 그 태그를 펼치고, 저장 허용을 "비공개"로 둔 채 이메일로 공유하세요. 퇴사 등으로 회수하고 싶으면 같은 곳에서 지우면 그 즉시 접근이 끊겨요.</p>
+    <p><strong>레시피 여러 개를 같은 사람에게 한 번에 공유하고 싶다면</strong> — 공유 관리 &gt; 레시피별 공유에서 체크박스로 여러 개를 고르면 아래 "선택한 N개 레시피와 공유" 패널이 나타나요. 이메일 한 번만 입력하면 전부에 같은 공유가 걸려요(초대 링크는 레시피당 1개씩이라 여기선 안 되고, 개별로 펼쳐서 만들어야 해요).</p>
+    <p><strong>레시피를 엑셀/스프레드시트로 백업하거나 옮기고 싶다면</strong> — 공유 관리 &gt; 레시피별 공유 상단의 "전체 CSV로 내보내기"(또는 체크박스로 골라서 "선택 항목 CSV로 내보내기")를 쓰세요. "CSV 가져오기"로 다시 불러올 때는 바로 반영되지 않고, 뭐가 바뀌는지 체크박스로 확인한 뒤에만 적용돼요.</p>
+    <p><strong>재료 구매 가격이 자주 바뀌어서 매번 손으로 고치기 번거롭다면</strong> — 재료 탭에서 거래명세서(엑셀/CSV)를 "CSV 가져오기"로 통째로 불러오세요. 이 앱 자체가 내보낸 형식이 아니어도, 이름/단위/단가가 어느 칸인지 매칭만 해주면 자동으로 읽어들여요.</p>
+    <p><strong>레시피가 많아서 자주 쓰는 것부터 보고 싶다면</strong> — "내 레시피"에서 각 행의 ▲▼로 순서를 바꾸세요. 서버에 저장되니 다른 기기에서 열어도 그 순서 그대로예요.</p>
+    <p><strong>레시피가 많아져서 종류별로만 골라보고 싶다면</strong> — "내 레시피"의 "+ 태그로 필터링"에서 원하는 태그를 탭하세요. 태그를 그룹으로 나눠서 보고 싶은 거라면(관리 목적이 아니라 훑어보기 목적) "태그별 보기"가 더 맞아요.</p>
 
     <h3>계정</h3>
     <p>구글 계정으로 로그인/로그아웃할 수 있고, 계정 메뉴에서 "회원 탈퇴"를 누르면 저장된 레시피·재료·제품이 전부 함께 삭제돼요(되돌릴 수 없어요). 자세한 개인정보 처리 방침은 계정 메뉴의 "이용약관 및 개인정보처리방침"에서 확인할 수 있어요.</p>
@@ -1543,6 +1598,7 @@
     <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:10px;">
     <button type="button" class="tag-toggle-btn" id="showMyRecipesTagBarBtn" style="display:none;">+ 태그로 필터링</button>
     <div class="field-row" id="myRecipesOrderBarRow" style="display:none;justify-content:flex-end;margin-bottom:6px;">
+      <button type="button" class="io-btn" id="collapseMyRecipesTagBarBtn" style="flex:0 0 auto;">태그 필터 접기</button>
       <button type="button" class="io-btn" id="myRecipesOrderEditBtn" style="flex:0 0 auto;">태그 순서 편집</button>
     </div>
     <div id="myRecipesTagBarEl" style="display:none;"></div>
@@ -1661,6 +1717,7 @@
   var poolishFlourListEl = document.getElementById('poolishFlourList');
   var poolishIngListEl = document.getElementById('poolishIngList');
   var showPoolishBtn = document.getElementById('showPoolishBtn');
+  var closePoolishBtn = document.getElementById('closePoolishBtn');
   var poolishSubtotalEl = document.getElementById('poolishSubtotal');
   var flourPoolishNoteEl = document.getElementById('flourPoolishNote');
   var poolishExpanded = false; // showPoolishBtn 클릭 시 true — 태그 입력칸의 showTagsBtn과 같은 패턴
@@ -2238,6 +2295,22 @@
     poolishExpanded = true;
     updatePoolishVisibility();
   });
+  // 2026-07-27: "+ 사전발효반죽 추가"로 펼친 뒤엔 다시 접을 방법이 없었다 — 카드가 비어있어도
+  // (풀리시 행을 하나도 안 넣었어도) poolishExpanded가 true인 채로 남아 계속 떠 있었다. 실제
+  // 풀리시 행이 있으면 hasPoolish 자체가 카드를 계속 보이게 만드는 조건이라, 단순히 접기만
+  // 해서는(poolishExpanded=false) 다음 갱신에서 hasPoolish가 다시 카드를 띄운다 — 그래서 내용이
+  // 있으면 확인 후 실제로 지우고 접는다.
+  closePoolishBtn.addEventListener('click', function(){
+    var hasPoolish = state.flours.concat(state.ingredients).some(function(r){ return r.stage === 'pre'; });
+    if (hasPoolish){
+      if (!confirm('사전발효반죽 내용을 지우고 접을까요?')) return;
+      state.flours = state.flours.filter(function(f){ return f.stage !== 'pre'; });
+      state.ingredients = state.ingredients.filter(function(i){ return i.stage !== 'pre'; });
+      if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }];
+    }
+    poolishExpanded = false;
+    render();
+  });
 
   // Percent info toggle
   document.getElementById('pctInfoBtn').addEventListener('click', function(){
@@ -2506,6 +2579,7 @@
   var myRecipesOrderBarRowEl = document.getElementById('myRecipesOrderBarRow');
   var myRecipesTagBarEl = document.getElementById('myRecipesTagBarEl');
   var showMyRecipesTagBarBtn = document.getElementById('showMyRecipesTagBarBtn');
+  var collapseMyRecipesTagBarBtn = document.getElementById('collapseMyRecipesTagBarBtn');
   var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
   var recipeTagsPageEl = document.getElementById('recipeTagsPage');
   var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
@@ -6443,6 +6517,17 @@
     });
     showMyRecipesTagBarBtn.addEventListener('click', function(){
       myRecipesTagBarExpanded = true;
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+    // 2026-07-27: 펼친 뒤엔 다시 접을 방법이 없었다 — 활성 필터가 있으면(myRecipesActiveTagFilter)
+    // 그것만으로도 계속 펼쳐진 상태를 유지시키므로(renderMyRecipesTagBar의 expanded 계산), 접기는
+    // 필터도 함께 "전체"로 되돌려야 실제로 접힌다. 사전발효반죽 닫기와 같은 "접기 = 초기 상태로"
+    // 원칙.
+    collapseMyRecipesTagBarBtn.addEventListener('click', function(){
+      myRecipesTagBarExpanded = false;
+      myRecipesActiveTagFilter = null;
+      myRecipesOrderEditMode = false;
+      myRecipesOrderEditBtn.textContent = '태그 순서 편집';
       renderMyRecipesList(myRecipesListSearchInput.value);
     });
     myRecipesOrderEditBtn.addEventListener('click', function(){
