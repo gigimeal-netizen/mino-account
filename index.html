@@ -1716,17 +1716,32 @@
     return total > 0 ? state.targetTotal / total : 0;
   }
 
+  // 2026-07-27: pctFromWeight()가 roundPct()(2자리)로 저장하던 걸 roundPctPrecise()(6자리)로
+  // 바꿨다 — 총 반죽량이 큰 배치(예: 밀가루 총량 14705g)에서 타이핑한 무게(물 8750g)가 %로
+  // 변환·저장된 뒤 화면 갱신 때 다시 무게로 역산되면서 8751g으로 1g씩 밀리는 버그가 있었다.
+  // 원인은 %를 2자리로 반올림해서 저장하면 그 2자리 자체가 손실 압축이라, 큰 총량에서는
+  // round(%)*flourWeight/100을 다시 계산했을 때 원래 입력한 정수 그램으로 정확히 안 돌아온다
+  // (예: 59.5057%를 59.51%로 저장하면 14705g 기준 재계산 시 8751.05g → 반올림 8751g). 저장은
+  // roundPctPrecise(6자리)로 정밀하게 하고, 화면에 보여줄 때만 roundPct(2자리)로 깔끔하게
+  // 표시한다 — 사용자가 보는 숫자는 그대로 "59.51%"지만, 내부적으로 그램 역산에 쓰이는 값은
+  // 훨씬 정밀해서 원래 입력한 무게로 다시 반올림된다.
   function pctFromWeight(weight, flourWeight){
     if (!flourWeight) return 0;
-    return roundPct((parseFloat(weight)||0) / flourWeight * 100);
+    return roundPctPrecise((parseFloat(weight)||0) / flourWeight * 100);
   }
 
   // Weight↔% conversions produce float noise (e.g. 2.1999999999999997) that, left
   // unrounded, makes the % field show a long digit string and visually clip in its
   // narrow column. Round to 2 decimals — plenty of precision for a percentage, and
-  // clean enough to never overflow.
+  // clean enough to never overflow. Display-only now (see roundPctPrecise for storage).
   function roundPct(p){
     return Math.round((parseFloat(p)||0) * 100) / 100;
+  }
+  // Storage-precision rounding — still eliminates float noise, but keeps enough
+  // resolution (6 decimals) that a weight typed in and immediately converted back
+  // (weight → % → weight) reproduces the same gram value even for large batch totals.
+  function roundPctPrecise(p){
+    return Math.round((parseFloat(p)||0) * 1e6) / 1e6;
   }
 
   // % / weight boxes are a fixed width, but recipes can scale up to numbers with far
@@ -2607,11 +2622,11 @@
     });
     if (state.type === 'bread'){
       state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
-        return migrateIngredientRow({ ingredientId: (f && f.ingredientId) || null, name: String(f && f.name || ''), pct: roundPct(f && f.pct), stage: (f && f.stage === 'pre') ? 'pre' : 'final' });
+        return migrateIngredientRow({ ingredientId: (f && f.ingredientId) || null, name: String(f && f.name || ''), pct: roundPctPrecise(f && f.pct), stage: (f && f.stage === 'pre') ? 'pre' : 'final' });
       });
       if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPct(i && i.pct), stage: (i && i.stage === 'pre') ? 'pre' : 'final' });
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPctPrecise(i && i.pct), stage: (i && i.stage === 'pre') ? 'pre' : 'final' });
       });
     } else {
       state.flours = [];
