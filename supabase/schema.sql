@@ -451,3 +451,30 @@ begin
   delete from auth.users where id = auth.uid();
 end; $$;
 grant execute on function delete_own_account() to authenticated;
+
+-- 내 레시피 목록/태그 필터의 사용자별 커스텀 순서 (2026-07-27) — "레시피 위치 이동, 태그
+-- 위치 이동" 요청. recipes 테이블 자체에 순서 컬럼을 두지 않은 이유: 공유받은 레시피는 RLS상
+-- 소유자만 그 행을 update할 수 있어서, 공유받은 사람이 자기 화면에서만 순서를 바꾸고 싶어도
+-- recipes 행을 못 건드린다. 대신 "이 사용자가 이 레시피/태그를 몇 번째로 보고 싶어하는지"를
+-- 뷰어(user_id) 기준으로 따로 저장 — 소유자든 공유받은 사람이든 자기 화면 순서를 독립적으로
+-- 가질 수 있다. 명시적 순서가 없는 항목(아직 한 번도 옮긴 적 없는 레시피/태그)은 account.html의
+-- renderMyRecipesList()가 기존 폴백 순서(레시피는 updated_at 내림차순, 태그는 첫 등장 순)를 그대로 쓴다.
+create table recipe_list_order (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  recipe_id uuid not null references recipes(id) on delete cascade,
+  sort_order integer not null,
+  primary key (user_id, recipe_id)
+);
+alter table recipe_list_order enable row level security;
+create policy "user manages own recipe order" on recipe_list_order for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create table tag_list_order (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tag text not null,
+  sort_order integer not null,
+  primary key (user_id, tag)
+);
+alter table tag_list_order enable row level security;
+create policy "user manages own tag order" on tag_list_order for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());

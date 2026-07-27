@@ -444,6 +444,26 @@
   .reorder-btns button:disabled{ opacity: 0.3; cursor:default; }
   .reorder-btns button:focus-visible{ outline: 2px solid var(--accent); }
 
+  /* 내 레시피 목록의 태그 필터 칩 + 순서 편집 (2026-07-27). 칩은 탭하면 그 태그가 붙은
+     레시피만 좁혀 보여준다(다시 탭하면 해제) — 활성 칩은 accent로 강조. */
+  .tag-chip-bar{ display:flex; flex-wrap:wrap; gap:6px; margin: 4px 0 14px; }
+  .tag-chip{
+    padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--border-strong);
+    background: var(--bg-elevated); font-family: var(--font-body); font-size: 12.5px;
+    font-weight: 700; color: var(--ink-soft); cursor: pointer;
+  }
+  .tag-chip:hover{ border-color: var(--accent); color: var(--accent); }
+  .tag-chip.active{ background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* 순서 편집 모드: 태그 칩 목록/레시피 목록 둘 다 이 세로 행 레이아웃을 공유한다 — 이름 +
+     .reorder-btns(▲▼), 재료 순서 이동에 이미 쓰는 컴포넌트를 그대로 재사용. */
+  .my-recipes-order-list{ margin: 4px 0 14px; }
+  .my-recipes-order-row{
+    display:flex; align-items:center; gap:10px; padding: 10px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .my-recipes-order-row:last-of-type{ border-bottom:none; }
+  .my-recipes-order-name{ flex:1 1 auto; min-width:0; font-size:14px; color: var(--ink); overflow-wrap:break-word; }
+
   .add-btn{
     width:100%; margin-top: 12px; padding: 12px; border-radius: 10px;
     border: 1.5px dashed var(--border-strong); background: transparent;
@@ -738,7 +758,7 @@
       1회용 초대 링크(?claim_share=/?claim_tag_share=) 랜딩 — 로그인해야만 클레임되므로, 아직
       로그인 전이면 이 안내만 보이고("로그인하면 적용돼요"), 로그인이 완료되는 순간
       tryClaimPendingInvite()가 자동으로 처리한 뒤 토스트로 결과를 알려준다(계산기에 뭘
-      채우지도, 이 배너를 계속 띄워두지도 않음 — 결과는 "공유받은 레시피" 목록에서 확인).
+      채우지도, 이 배너를 계속 띄워두지도 않음 — 결과는 "내 레시피" 목록에서 확인).
     -->
     <p class="hint" id="claimShareBanner" style="display:none;">초대 링크예요 — 로그인하면 자동으로 공유가 적용돼요.</p>
   </header>
@@ -808,16 +828,6 @@
         <div class="combo-dropdown" id="recipeDropdown" style="display:none;"></div>
       </div>
       <p class="hint" id="libraryEmptyHint" style="display:none;">아직 저장된 레시피가 없어요. 위에서 이름을 적고 저장해보세요.</p>
-      <!--
-        2026-07-25: 계정 기반 공유(레시피 개별 + 태그)로 나에게 공유된 레시피 목록 — 이름을
-        몰라도 검색창 없이 눈에 바로 띄게 하려는 용도. 소유자 쪽 "누구에게 공유했는지" 관리는
-        여기가 아니라 계정 메뉴의 "공유 관리" 화면에서.
-      -->
-      <div id="sharedWithMeSection" style="display:none;">
-        <div class="toolbar-divider"></div>
-        <p class="field-label" style="margin-bottom:4px;">공유받은 레시피</p>
-        <div id="sharedWithMeList" class="tag-recipe-list"></div>
-      </div>
     </div>
   </section>
 
@@ -864,8 +874,22 @@
     </p>
   </section>
 
+  <section class="card" id="poolishCard" style="display:none;">
+    <h2>사전발효반죽 (풀리시)</h2>
+    <p class="hint">반죽 일부를 미리 섞어 발효시켜 넣을 때 사용해요. 비율/무게는 전체 반죽(밀가루 100%) 기준 그대로이고, 여기선 그중 풀리시에 들어갈 항목만 따로 모아 보여줘요.</p>
+    <p class="hint" style="font-weight:600;margin:12px 0 4px;">밀가루</p>
+    <div id="poolishFlourList"></div>
+    <button class="add-btn" id="addPoolishFlourBtn">+ 풀리시 밀가루 추가</button>
+    <p class="hint" style="font-weight:600;margin:16px 0 4px;">재료 (물, 이스트 등)</p>
+    <div id="poolishIngList"></div>
+    <button class="add-btn" id="addPoolishIngBtn">+ 풀리시 재료 추가</button>
+    <p class="hint" style="margin-top:12px;">풀리시 총 무게 <strong id="poolishSubtotal">0g</strong></p>
+  </section>
+  <button type="button" class="tag-toggle-btn" id="showPoolishBtn" style="display:none;">+ 사전발효반죽(풀리시) 추가</button>
+
   <section class="card" id="flourCard">
     <h2>밀가루 (합계 100%)</h2>
+    <p class="hint" id="flourPoolishNote" style="display:none;">풀리시 포함 전체 반죽 기준 100%예요 — 풀리시에 들어간 밀가루는 위 사전발효반죽 카드에서 확인해요.</p>
     <div id="flourList"></div>
     <button class="add-btn" id="addFlourBtn">+ 밀가루 종류 추가</button>
     <p class="hint warn-hint" id="flourPctWarning" style="display:none;">
@@ -1417,7 +1441,7 @@
     <p>레시피 이름 옆 태그 칸에 "제빵, OO제과"처럼 쉼표로 구분해서 여러 개를 동시에 붙일 수 있어요(게시판 태그와 같은 개념). 레시피 검색창 옆 아이콘으로 "태그별 보기"를 열면, 태그마다 그룹으로 묶어서 볼 수 있어요 — 태그가 여러 개인 레시피는 해당하는 모든 그룹에 나타나요.</p>
 
     <h3>저장하고 불러오기</h3>
-    <p>구글 계정으로 로그인하면 레시피를 저장하고, 검색창으로 다시 찾아서 불러올 수 있어요. 다른 사람이 공유해준 레시피는 "공유받은 레시피" 목록에 따로 나타나요.</p>
+    <p>구글 계정으로 로그인하면 레시피를 저장하고, 검색창이나 "내 레시피" 목록으로 다시 찾아서 불러올 수 있어요. 다른 사람이 공유해준 레시피도 같은 목록에 "· 공유받음" 표시와 함께 함께 나타나요.</p>
 
     <h3>공유</h3>
     <p>공유하는 방법은 두 가지예요.</p>
@@ -1479,7 +1503,11 @@
     </div>
   </div>
   <div class="subpage-body">
-    <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:14px;">
+    <input type="text" id="myRecipesListSearchInput" class="text-input" autocomplete="off" placeholder="이름 또는 태그로 검색" style="width:100%;margin-bottom:10px;">
+    <div class="field-row" id="myRecipesOrderBarRow" style="justify-content:flex-end;margin-bottom:6px;">
+      <button type="button" class="io-btn" id="myRecipesOrderEditBtn" style="flex:0 0 auto;">순서 편집</button>
+    </div>
+    <div id="myRecipesTagBarEl" style="display:none;"></div>
     <div id="myRecipesListEl"></div>
   </div>
 </div>
@@ -1576,21 +1604,28 @@
     mode: 'A',
     type: 'bread', // 'bread' (engine A: baker's %) | 'confection' | 'other' (engine B: absolute weight)
     flours: [
-      { ingredientId: null, name: '밀가루', pct: 100 }
+      { ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }
     ],
     baseFlour: 0,
     multiplier: 1,
     targetTotal: 0,
     portions: [],
     ingredients: [
-      { ingredientId: null, name: '물', pct: 0 },
-      { ingredientId: null, name: '소금', pct: 0 },
-      { ingredientId: null, name: '이스트', pct: 0 }
+      { ingredientId: null, name: '물', pct: 0, stage: 'final' },
+      { ingredientId: null, name: '소금', pct: 0, stage: 'final' },
+      { ingredientId: null, name: '이스트', pct: 0, stage: 'final' }
     ]
   };
 
   var flourListEl = document.getElementById('flourList');
   var ingListEl = document.getElementById('ingList');
+  var poolishCardEl = document.getElementById('poolishCard');
+  var poolishFlourListEl = document.getElementById('poolishFlourList');
+  var poolishIngListEl = document.getElementById('poolishIngList');
+  var showPoolishBtn = document.getElementById('showPoolishBtn');
+  var poolishSubtotalEl = document.getElementById('poolishSubtotal');
+  var flourPoolishNoteEl = document.getElementById('flourPoolishNote');
+  var poolishExpanded = false; // showPoolishBtn 클릭 시 true — 태그 입력칸의 showTagsBtn과 같은 패턴
   var portionListEl = document.getElementById('portionList');
   var portionSumHintEl = document.getElementById('portionSumHint');
   var portionSumEl = document.getElementById('portionSum');
@@ -1767,8 +1802,18 @@
     });
   }
 
+  // updateDisplays()가 밀가루/재료 행 값을 채울 때, 그 행이 본반죽/풀리시 어느 카드에 렌더링돼
+  // 있는지 몰라도(stage로 갈렸으므로 두 컨테이너 중 하나에만 존재) 값을 찾아 쓸 수 있게 해준다.
+  function queryInBoth(containerA, containerB, selector){
+    return containerA.querySelector(selector) || containerB.querySelector(selector);
+  }
+
+  // 풀리시(사전발효반죽) 지원 2026-07-27: 밀가루/재료 행에 stage('pre'|'final')를 태그해 어느
+  // 카드(#poolishFlourList/#poolishIngList vs 기존 #flourList/#ingList)에 렌더링할지만 가른다 —
+  // 밀가루 100% 버킷/재료 % 계산(computeFlourWeight() 등)은 stage 무관하게 전체 배열 기준 그대로다.
   function buildFlourRows(){
     flourListEl.innerHTML = '';
+    poolishFlourListEl.innerHTML = '';
     state.flours.forEach(function(fl, idx){
       var row = document.createElement('div');
       row.className = 'ing-row flour-row';
@@ -1782,58 +1827,79 @@
             ? '<button class="del-btn" data-idx="' + idx + '" aria-label="밀가루 삭제">×</button>'
             : '') +
         '</div>';
-      flourListEl.appendChild(row);
+      (fl.stage === 'pre' ? poolishFlourListEl : flourListEl).appendChild(row);
     });
 
-    flourListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        state.flours[+el.dataset.idx].name = el.value;
-      });
-    });
-    flourListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        if (state.flours.length === 1) return; // % is pinned to 100 with a single flour type
-        state.flours[+el.dataset.idx].pct = el.value;
-        updateDisplays();
-      });
-      attachRefreshOnBlur(el);
-    });
-    flourListEl.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        // Editing one flour's weight in grams means "this type weighs X" — the other
-        // flour types keep their current gram amounts, so the total (and hence each
-        // type's %) is recomputed from the sum of grams, not from a fixed total split.
-        var idx = +el.dataset.idx;
-        var flourWeight = computeFlourWeight();
-        var weights = state.flours.map(function(f, i){
-          return i === idx ? (parseFloat(el.value) || 0) : flourWeight * (parseFloat(f.pct)||0) / 100;
+    function attachFlourListeners(container){
+      container.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
+        el.addEventListener('input', function(){
+          state.flours[+el.dataset.idx].name = el.value;
         });
-        var newTotal = weights.reduce(function(s,w){ return s + w; }, 0);
-        state.flours.forEach(function(f, i){
-          f.pct = pctFromWeight(weights[i], newTotal);
+      });
+      container.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+        el.addEventListener('input', function(){
+          if (state.flours.length === 1) return; // % is pinned to 100 with a single flour type
+          state.flours[+el.dataset.idx].pct = el.value;
+          updateDisplays();
         });
-        setTotalFlourWeight(newTotal);
-        updateDisplays();
+        attachRefreshOnBlur(el);
       });
-      attachRefreshOnBlur(el);
-    });
-    flourListEl.querySelectorAll('.del-btn').forEach(function(el){
-      el.addEventListener('click', function(){
-        if (state.flours.length > 1){
-          state.flours.splice(+el.dataset.idx, 1);
-          if (state.flours.length === 1) state.flours[0].pct = 100;
-          render();
-        }
+      container.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
+        el.addEventListener('input', function(){
+          // Editing one flour's weight in grams means "this type weighs X" — the other
+          // flour types keep their current gram amounts, so the total (and hence each
+          // type's %) is recomputed from the sum of grams, not from a fixed total split.
+          var idx = +el.dataset.idx;
+          var flourWeight = computeFlourWeight();
+          var weights = state.flours.map(function(f, i){
+            return i === idx ? (parseFloat(el.value) || 0) : flourWeight * (parseFloat(f.pct)||0) / 100;
+          });
+          var newTotal = weights.reduce(function(s,w){ return s + w; }, 0);
+          state.flours.forEach(function(f, i){
+            f.pct = pctFromWeight(weights[i], newTotal);
+          });
+          setTotalFlourWeight(newTotal);
+          updateDisplays();
+        });
+        attachRefreshOnBlur(el);
       });
-    });
+      container.querySelectorAll('.del-btn').forEach(function(el){
+        el.addEventListener('click', function(){
+          if (state.flours.length > 1){
+            state.flours.splice(+el.dataset.idx, 1);
+            if (state.flours.length === 1) state.flours[0].pct = 100;
+            render();
+          }
+        });
+      });
+    }
+    attachFlourListeners(flourListEl);
+    attachFlourListeners(poolishFlourListEl);
+  }
+
+  // 스테이지(풀리시/본반죽)로 카드가 갈린 뒤에는 배열상 바로 옆(idx±1)이 다른 스테이지 행일 수
+  // 있어, 그걸 그대로 스왑하면 화면(같은 카드 안)엔 아무 변화가 없는 눈속임 버튼이 된다 — 같은
+  // stage를 가진 다음/이전 인덱스를 배열에서 직접 탐색해 그 항목하고만 스왑한다.
+  function findAdjacentSameStage(idx, dir){
+    var stage = state.ingredients[idx].stage === 'pre' ? 'pre' : 'final';
+    var i = idx + dir;
+    while (i >= 0 && i < state.ingredients.length){
+      var s = state.ingredients[i].stage === 'pre' ? 'pre' : 'final';
+      if (s === stage) return i;
+      i += dir;
+    }
+    return -1;
   }
 
   function buildIngRows(){
     ingListEl.innerHTML = '';
+    poolishIngListEl.innerHTML = '';
     var isBread = state.type === 'bread';
     state.ingredients.forEach(function(ing, idx){
       var row = document.createElement('div');
       row.className = 'ing-row';
+      var prevIdx = findAdjacentSameStage(idx, -1);
+      var nextIdx = findAdjacentSameStage(idx, 1);
       row.innerHTML =
         '<input class="ing-name" value="' + escapeHtml(ing.name) + '" data-idx="' + idx + '" aria-label="재료 이름">' +
         '<div class="ing-row-numbers">' +
@@ -1842,59 +1908,63 @@
             : '') +
           '<span class="weight-cell"><input class="weight-input" type="number" inputmode="decimal" step="1" data-idx="' + idx + '" aria-label="재료 중량"><span class="weight-unit">g</span></span>' +
           '<span class="reorder-btns">' +
-          '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
-          '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (idx === state.ingredients.length - 1 ? ' disabled' : '') + '>▼</button>' +
+          '<button data-idx="' + idx + '" data-dir="-1" aria-label="위로 이동"' + (prevIdx === -1 ? ' disabled' : '') + '>▲</button>' +
+          '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (nextIdx === -1 ? ' disabled' : '') + '>▼</button>' +
           '</span>' +
           '<button class="del-btn" data-idx="' + idx + '" aria-label="재료 삭제">×</button>' +
         '</div>';
-      ingListEl.appendChild(row);
+      (ing.stage === 'pre' ? poolishIngListEl : ingListEl).appendChild(row);
     });
 
-    ingListEl.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        state.ingredients[+el.dataset.idx].name = el.value;
-      });
-    });
-    if (isBread){
-      ingListEl.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+    function attachIngListeners(container){
+      container.querySelectorAll('.ing-name[data-idx]').forEach(function(el){
         el.addEventListener('input', function(){
-          state.ingredients[+el.dataset.idx].pct = el.value;
+          state.ingredients[+el.dataset.idx].name = el.value;
+        });
+      });
+      if (isBread){
+        container.querySelectorAll('.pct-input[data-idx]').forEach(function(el){
+          el.addEventListener('input', function(){
+            state.ingredients[+el.dataset.idx].pct = el.value;
+            updateDisplays();
+          });
+          attachRefreshOnBlur(el);
+        });
+      }
+      container.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
+        el.addEventListener('input', function(){
+          if (isBread){
+            var flourWeight = computeFlourWeight();
+            state.ingredients[+el.dataset.idx].pct = pctFromWeight(el.value, flourWeight);
+          } else {
+            var scale = computeEngineBScale();
+            var typed = parseFloat(el.value) || 0;
+            state.ingredients[+el.dataset.idx].weight = scale > 0 ? typed / scale : typed;
+          }
           updateDisplays();
         });
         attachRefreshOnBlur(el);
       });
+      container.querySelectorAll('.reorder-btns button').forEach(function(el){
+        el.addEventListener('click', function(){
+          var idx = +el.dataset.idx;
+          var newIdx = findAdjacentSameStage(idx, +el.dataset.dir);
+          if (newIdx === -1) return;
+          var tmp = state.ingredients[idx];
+          state.ingredients[idx] = state.ingredients[newIdx];
+          state.ingredients[newIdx] = tmp;
+          render();
+        });
+      });
+      container.querySelectorAll('.del-btn').forEach(function(el){
+        el.addEventListener('click', function(){
+          state.ingredients.splice(+el.dataset.idx, 1);
+          render();
+        });
+      });
     }
-    ingListEl.querySelectorAll('.weight-input[data-idx]').forEach(function(el){
-      el.addEventListener('input', function(){
-        if (isBread){
-          var flourWeight = computeFlourWeight();
-          state.ingredients[+el.dataset.idx].pct = pctFromWeight(el.value, flourWeight);
-        } else {
-          var scale = computeEngineBScale();
-          var typed = parseFloat(el.value) || 0;
-          state.ingredients[+el.dataset.idx].weight = scale > 0 ? typed / scale : typed;
-        }
-        updateDisplays();
-      });
-      attachRefreshOnBlur(el);
-    });
-    ingListEl.querySelectorAll('.reorder-btns button').forEach(function(el){
-      el.addEventListener('click', function(){
-        var idx = +el.dataset.idx;
-        var newIdx = idx + (+el.dataset.dir);
-        if (newIdx < 0 || newIdx >= state.ingredients.length) return;
-        var tmp = state.ingredients[idx];
-        state.ingredients[idx] = state.ingredients[newIdx];
-        state.ingredients[newIdx] = tmp;
-        render();
-      });
-    });
-    ingListEl.querySelectorAll('.del-btn').forEach(function(el){
-      el.addEventListener('click', function(){
-        state.ingredients.splice(+el.dataset.idx, 1);
-        render();
-      });
-    });
+    attachIngListeners(ingListEl);
+    attachIngListeners(poolishIngListEl);
   }
 
   // Lightweight refresh: recomputes derived numbers and writes them into existing
@@ -1924,8 +1994,8 @@
 
       state.flours.forEach(function(fl, idx){
         var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-        var pctEl = flourListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
-        var wEl = flourListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+        var pctEl = queryInBoth(flourListEl, poolishFlourListEl, '.pct-input[data-idx="' + idx + '"]');
+        var wEl = queryInBoth(flourListEl, poolishFlourListEl, '.weight-input[data-idx="' + idx + '"]');
         if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(fl.pct);
         if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
         if (pctEl) fitDigits(pctEl);
@@ -1934,8 +2004,8 @@
 
       state.ingredients.forEach(function(ing, idx){
         var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-        var pctEl = ingListEl.querySelector('.pct-input[data-idx="' + idx + '"]');
-        var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
+        var pctEl = queryInBoth(ingListEl, poolishIngListEl, '.pct-input[data-idx="' + idx + '"]');
+        var wEl = queryInBoth(ingListEl, poolishIngListEl, '.weight-input[data-idx="' + idx + '"]');
         if (pctEl && document.activeElement !== pctEl) pctEl.value = roundPct(ing.pct);
         if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
         if (pctEl) fitDigits(pctEl);
@@ -1952,6 +2022,16 @@
         return s + flourWeight * ((parseFloat(i.pct)||0)/100);
       }, 0);
       flourWeightLabel.textContent = fmt(flourWeight) + 'g';
+
+      var hasPoolish = state.flours.concat(state.ingredients).some(function(r){ return r.stage === 'pre'; });
+      flourPoolishNoteEl.style.display = hasPoolish ? 'block' : 'none';
+      var poolishWeight = state.flours.reduce(function(s,fl){
+        return s + (fl.stage === 'pre' ? flourWeight * (parseFloat(fl.pct)||0) / 100 : 0);
+      }, 0) + state.ingredients.reduce(function(s,ing){
+        return s + (ing.stage === 'pre' ? flourWeight * (parseFloat(ing.pct)||0) / 100 : 0);
+      }, 0);
+      poolishSubtotalEl.textContent = fmt(poolishWeight) + 'g';
+      updatePoolishVisibility();
     } else {
       var scale = computeEngineBScale();
       state.ingredients.forEach(function(ing, idx){
@@ -2001,6 +2081,18 @@
     pctInfoBlockEl.style.display = isBread ? '' : 'none';
     footerFlourLabelEl.style.display = isBread ? '' : 'none';
     footerScaleLabelEl.style.display = isBread ? 'none' : '';
+    updatePoolishVisibility();
+  }
+
+  // 풀리시 카드는 제빵(bread) 타입에서만, 그리고 실제로 풀리시 행이 있거나(hasPoolish) 사용자가
+  // "+ 사전발효반죽(풀리시) 추가" 링크를 눌러 펼친 적이 있을 때만 보인다 — 태그 입력칸의
+  // showTagsBtn/updateTagsInputVisibility()와 같은 패턴.
+  function updatePoolishVisibility(){
+    var isBread = state.type === 'bread';
+    var hasPoolish = isBread && state.flours.concat(state.ingredients).some(function(r){ return r.stage === 'pre'; });
+    var show = isBread && (hasPoolish || poolishExpanded);
+    poolishCardEl.style.display = show ? '' : 'none';
+    showPoolishBtn.style.display = (isBread && !show) ? 'block' : 'none';
   }
 
   // Mode toggle
@@ -2055,7 +2147,7 @@
 
   // Add flour type
   document.getElementById('addFlourBtn').addEventListener('click', function(){
-    state.flours.push({ ingredientId: null, name: '밀가루', pct: 0 });
+    state.flours.push({ ingredientId: null, name: '밀가루', pct: 0, stage: 'final' });
     render();
     var rows = flourListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
@@ -2064,11 +2156,34 @@
 
   // Add ingredient
   document.getElementById('addIngBtn').addEventListener('click', function(){
-    state.ingredients.push(state.type === 'bread' ? { ingredientId: null, name: '재료', pct: 0 } : { ingredientId: null, name: '재료', weight: 0 });
+    state.ingredients.push(state.type === 'bread' ? { ingredientId: null, name: '재료', pct: 0, stage: 'final' } : { ingredientId: null, name: '재료', weight: 0 });
     render();
     var rows = ingListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
     if (last){ last.focus(); last.select(); }
+  });
+
+  // 풀리시(사전발효반죽) 밀가루/재료 추가 — 제빵 타입에서만 노출되는 카드라 항상 stage:'pre',
+  // pct 기반(제과/기타에는 이 카드 자체가 없음).
+  document.getElementById('addPoolishFlourBtn').addEventListener('click', function(){
+    state.flours.push({ ingredientId: null, name: '풀리시 밀가루', pct: 0, stage: 'pre' });
+    poolishExpanded = true;
+    render();
+    var rows = poolishFlourListEl.querySelectorAll('.ing-name[data-idx]');
+    var last = rows[rows.length-1];
+    if (last){ last.focus(); last.select(); }
+  });
+  document.getElementById('addPoolishIngBtn').addEventListener('click', function(){
+    state.ingredients.push({ ingredientId: null, name: '물', pct: 0, stage: 'pre' });
+    poolishExpanded = true;
+    render();
+    var rows = poolishIngListEl.querySelectorAll('.ing-name[data-idx]');
+    var last = rows[rows.length-1];
+    if (last){ last.focus(); last.select(); }
+  });
+  showPoolishBtn.addEventListener('click', function(){
+    poolishExpanded = true;
+    updatePoolishVisibility();
   });
 
   // Percent info toggle
@@ -2086,14 +2201,23 @@
     var total;
     if (state.type === 'bread'){
       var flourWeight = computeFlourWeight();
-      state.flours.forEach(function(fl){
-        var w = flourWeight * (parseFloat(fl.pct)||0) / 100;
-        lines.push(fl.name + '  ' + fmt(w) + 'g  (' + fl.pct + '%)');
-      });
-      state.ingredients.forEach(function(ing){
-        var w = flourWeight * (parseFloat(ing.pct)||0) / 100;
-        lines.push(ing.name + '  ' + fmt(w) + 'g  (' + ing.pct + '%)');
-      });
+      var hasPoolish = state.flours.concat(state.ingredients).some(function(r){ return r.stage === 'pre'; });
+      var pushRow = function(row){
+        var w = flourWeight * (parseFloat(row.pct)||0) / 100;
+        lines.push(row.name + '  ' + fmt(w) + 'g  (' + row.pct + '%)');
+      };
+      if (hasPoolish){
+        lines.push('[사전발효반죽/풀리시]');
+        state.flours.forEach(function(fl){ if (fl.stage === 'pre') pushRow(fl); });
+        state.ingredients.forEach(function(ing){ if (ing.stage === 'pre') pushRow(ing); });
+        lines.push('');
+        lines.push('[본반죽]');
+        state.flours.forEach(function(fl){ if (fl.stage !== 'pre') pushRow(fl); });
+        state.ingredients.forEach(function(ing){ if (ing.stage !== 'pre') pushRow(ing); });
+      } else {
+        state.flours.forEach(pushRow);
+        state.ingredients.forEach(pushRow);
+      }
       total = flourWeight + state.ingredients.reduce(function(s,i){
         return s + flourWeight * ((parseFloat(i.pct)||0)/100);
       }, 0);
@@ -2166,6 +2290,13 @@
 
   var currentUser = null;
   var myRecipes = []; // rows from `recipes`: own recipes + recipes shared with me (RLS-filtered)
+  // 내 레시피 목록의 사용자별 커스텀 순서 (2026-07-27) — recipe_list_order/tag_list_order에서
+  // openMyRecipesListModal()마다 새로 불러온다({ [id/tag]: sort_order }). 명시적 순서가 없는
+  // 항목은 여기 안 잡히고, 정렬 시 맨 뒤(기존 폴백 순서 유지)로 취급된다.
+  var recipeOrderMap = {};
+  var tagOrderMap = {};
+  var myRecipesActiveTagFilter = null; // null = 전체(필터 없음)
+  var myRecipesOrderEditMode = false;
   var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
   // 2026-07-25: 계정 기반 공유(레시피 개별 + 태그) — RLS가 "내가 owner인 레시피/태그의 공유 행" +
   // "나에게 공유된 행"을 합쳐서 돌려주므로, select('*') 한 번으로 소유자 쪽(공유 관리 화면)과
@@ -2307,6 +2438,9 @@
   var closeMyRecipesListBtn = document.getElementById('closeMyRecipesListBtn');
   var myRecipesListSearchInput = document.getElementById('myRecipesListSearchInput');
   var myRecipesListEl = document.getElementById('myRecipesListEl');
+  var myRecipesOrderEditBtn = document.getElementById('myRecipesOrderEditBtn');
+  var myRecipesOrderBarRowEl = document.getElementById('myRecipesOrderBarRow');
+  var myRecipesTagBarEl = document.getElementById('myRecipesTagBarEl');
   var openRecipeTagsBtn = document.getElementById('openRecipeTagsBtn');
   var recipeTagsPageEl = document.getElementById('recipeTagsPage');
   var closeRecipeTagsBtn = document.getElementById('closeRecipeTagsBtn');
@@ -2314,8 +2448,6 @@
   var recipeTagsListEl = document.getElementById('recipeTagsList');
   var libraryCardEl = document.getElementById('libraryCard');
   var libraryEmptyHintEl = document.getElementById('libraryEmptyHint');
-  var sharedWithMeSectionEl = document.getElementById('sharedWithMeSection');
-  var sharedWithMeListEl = document.getElementById('sharedWithMeList');
   var recipeSearchInput = document.getElementById('recipeSearchInput');
   var recipeDropdownEl = document.getElementById('recipeDropdown');
   var recipeDropdownToggleBtn = document.getElementById('recipeDropdownToggle');
@@ -2435,17 +2567,18 @@
     state.baseFlour = parseFloat(row.base_flour) || 0;
     state.multiplier = parseFloat(row.multiplier) || 1;
     state.targetTotal = parseFloat(row.target_total) || 0;
+    poolishExpanded = false; // 실제 풀리시 행이 있으면 updatePoolishVisibility()의 hasPoolish로 자동 표시됨
     state.portions = (Array.isArray(row.portions) ? row.portions : []).map(function(p){
       if (typeof p === 'number') return { weight: p, qty: 1 };
       return { weight: parseFloat(p && p.weight) || 0, qty: parseFloat(p && p.qty) || 1 };
     });
     if (state.type === 'bread'){
       state.flours = (Array.isArray(row.flours) ? row.flours : []).map(function(f){
-        return migrateIngredientRow({ ingredientId: (f && f.ingredientId) || null, name: String(f && f.name || ''), pct: roundPct(f && f.pct) });
+        return migrateIngredientRow({ ingredientId: (f && f.ingredientId) || null, name: String(f && f.name || ''), pct: roundPct(f && f.pct), stage: (f && f.stage === 'pre') ? 'pre' : 'final' });
       });
-      if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100 }];
+      if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPct(i && i.pct) });
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPct(i && i.pct), stage: (i && i.stage === 'pre') ? 'pre' : 'final' });
       });
     } else {
       state.flours = [];
@@ -2474,7 +2607,6 @@
       // 판단하면 "내 레시피는 하나도 없지만 공유받은 것만 있는" 경우에 이 안내가 잘못 숨는다.
       var ownedCount = myRecipes.filter(function(r){ return r.owner_id === currentUser.id; }).length;
       libraryEmptyHintEl.style.display = ownedCount ? 'none' : 'block';
-      renderSharedWithMeList();
       // Keep the selected recipe's panel (share token, owner badge) in sync after a
       // save/delete/share round trip, instead of silently going stale.
       if (selectedRecipeId){
@@ -2673,12 +2805,16 @@
       rows.push(base.concat(['', '', '', '']));
       return rows;
     }
+    // 풀리시(사전발효반죽) 행은 '밀가루'/'재료' 대신 '풀리시-밀가루'/'풀리시-재료'로 표시 —
+    // 고정 헤더는 그대로라 기존(풀리시 없는) CSV와 이 CSV 모두 handleRecipeCsvImport()가 같이
+    // 읽는다.
     flours.forEach(function(f){
-      rows.push(base.concat(['밀가루', f.name || '', f.pct != null ? f.pct : '', '']));
+      rows.push(base.concat([f.stage === 'pre' ? '풀리시-밀가루' : '밀가루', f.name || '', f.pct != null ? f.pct : '', '']));
     });
     ingredients.forEach(function(ing){
-      if ('pct' in ing) rows.push(base.concat(['재료', ing.name || '', ing.pct != null ? ing.pct : '', '']));
-      else rows.push(base.concat(['재료', ing.name || '', '', ing.weight != null ? ing.weight : '']));
+      var kind = ing.stage === 'pre' ? '풀리시-재료' : '재료';
+      if ('pct' in ing) rows.push(base.concat([kind, ing.name || '', ing.pct != null ? ing.pct : '', '']));
+      else rows.push(base.concat([kind, ing.name || '', '', ing.weight != null ? ing.weight : '']));
     });
     return rows;
   }
@@ -3008,10 +3144,13 @@
       var ingName = (r[8] || '').trim();
       if (!ingName) continue; // 재료가 하나도 없어 빈 줄만 남긴 레시피
       var pctRaw = r[9], weightRaw = r[10];
-      if (kind === '밀가루'){
-        byName[name].flours.push({ ingredientId: null, name: ingName, pct: parseFloat(pctRaw) || 0 });
+      // '풀리시-밀가루'/'풀리시-재료'는 stage:'pre'로, 기존 '밀가루'/'재료'는 'final'로 —
+      // 이전에 내보낸(풀리시 없는) CSV도 그대로 계속 가져와진다.
+      var stage = (kind === '풀리시-밀가루' || kind === '풀리시-재료') ? 'pre' : 'final';
+      if (kind === '밀가루' || kind === '풀리시-밀가루'){
+        byName[name].flours.push({ ingredientId: null, name: ingName, pct: parseFloat(pctRaw) || 0, stage: stage });
       } else if (pctRaw !== '' && pctRaw != null){
-        byName[name].ingredients.push({ ingredientId: null, name: ingName, pct: parseFloat(pctRaw) || 0 });
+        byName[name].ingredients.push({ ingredientId: null, name: ingName, pct: parseFloat(pctRaw) || 0, stage: stage });
       } else {
         byName[name].ingredients.push({ ingredientId: null, name: ingName, weight: parseFloat(weightRaw) || 0 });
       }
@@ -4128,29 +4267,6 @@
     return withNickname[0].author_display_name;
   }
 
-  // 계정 기반 공유(레시피 개별 + 태그)로 나에게 공유된 레시피 — myRecipes 중 내가 owner가 아닌
-  // 행들. "내 레시피" 검색창은 이미 owner 구분 없이 myRecipes 전체를 이름으로 찾을 수 있어서
-  // 이 목록이 없어도 로드 자체는 되지만, 정확한 이름을 몰라도 눈에 띄게 하려는 목적.
-  function renderSharedWithMeList(){
-    var shared = myRecipes.filter(function(r){ return currentUser && r.owner_id !== currentUser.id; });
-    sharedWithMeSectionEl.style.display = shared.length ? 'block' : 'none';
-    sharedWithMeListEl.innerHTML = '';
-    shared.forEach(function(r){
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'tag-recipe-row';
-      btn.textContent = r.recipe_name || '이름 없는 레시피';
-      btn.addEventListener('click', function(){
-        if (!confirmDiscardIfDirty()) return;
-        applyRecipeRowToState(r);
-        renderSelectedRecipe(r);
-        recipeSearchInput.value = '';
-        showToast('레시피를 불러왔어요');
-      });
-      sharedWithMeListEl.appendChild(btn);
-    });
-  }
-
   // Custom searchable dropdown (native <datalist> can't be restyled and can't be
   // opened/closed on demand — this replaces it with a plain styled list).
   function applyLoadedRecipe(recipe){
@@ -4327,40 +4443,203 @@
     });
   }
 
-  // 2026-07-26: "내 레시피" 전용 목록 — 태그별 보기와 달리 그룹핑하지 않고 소유한 레시피
-  // 전부를 한 화면에 flat하게 보여준다(myRecipes가 이미 updated_at 내림차순이라 최근 순).
-  // 검색은 이름/태그 매칭까지만(태그별 보기와 같은 필터 로직), 행 클릭 한 번으로 바로
-  // 계산기에 로드된다 — 한 손가락으로 눌러서 훑어보고 싶다는 요청에 맞춘 단순한 목록.
+  // 2026-07-26: "내 레시피" 전용 목록 — 태그별 보기와 달리 그룹핑하지 않고 myRecipes 전부를
+  // 한 화면에 flat하게 보여준다(myRecipes가 이미 updated_at 내림차순이라 최근 순). 검색은
+  // 이름/태그 매칭까지만(태그별 보기와 같은 필터 로직), 행 클릭 한 번으로 바로 계산기에
+  // 로드된다 — 한 손가락으로 눌러서 훑어보고 싶다는 요청에 맞춘 단순한 목록.
+  // 2026-07-27: 별도 "공유받은 레시피" 섹션(#sharedWithMeSection)이 이 목록 바로 위 카드에
+  // 따로 떠 있어 화면이 난잡하다는 피드백으로 그 섹션을 없애고, 소유 여부와 무관하게 myRecipes
+  // 전체를 여기 한 목록에 합쳤다 — 공유받은(내 소유가 아닌) 행은 검색 드롭다운(renderRecipeDropdown())
+  // 과 같은 "· 공유받음" 표시로 구분한다.
+  // 2026-07-27: 태그 필터 칩 + 레시피/태그 순서 편집 추가. 순서는 recipes 행 자체가 아니라
+  // 별도 recipe_list_order/tag_list_order 테이블에 "이 사용자가 이 레시피/태그를 몇 번째로
+  // 보고 싶어하는지"를 뷰어 기준으로 저장한다 — 공유받은 레시피는 RLS상 소유자만 recipes
+  // 행을 update할 수 있어서, 공유받은 사람이 자기 화면에서만 순서를 바꾸려 해도 그 방법으로는
+  // 안 된다. 명시적 순서가 없는 항목(한 번도 옮긴 적 없음)은 기존 폴백 순서(레시피는
+  // updated_at 내림차순, 태그는 첫 등장 순)를 그대로 쓴다.
+  function loadRecipeListOrder(){
+    return supabase.from('recipe_list_order').select('*').then(function(res){
+      if (res.error){ alert('레시피 순서를 불러오지 못했어요: ' + res.error.message); return; }
+      recipeOrderMap = {};
+      (res.data || []).forEach(function(row){ recipeOrderMap[row.recipe_id] = row.sort_order; });
+    });
+  }
+  function loadTagListOrder(){
+    return supabase.from('tag_list_order').select('*').then(function(res){
+      if (res.error){ alert('태그 순서를 불러오지 못했어요: ' + res.error.message); return; }
+      tagOrderMap = {};
+      (res.data || []).forEach(function(row){ tagOrderMap[row.tag] = row.sort_order; });
+    });
+  }
+  // 명시적 순서가 있는 항목은 그 값으로, 없는 항목은 맨 뒤로 — 동률(전부 순서 없음)일 땐
+  // Array#sort가 안정 정렬이라 원래 배열 순서(myRecipes의 updated_at 내림차순)가 그대로 유지된다.
+  function sortRecipesByCustomOrder(list){
+    return list.slice().sort(function(a, b){
+      var oa = recipeOrderMap.hasOwnProperty(a.id) ? recipeOrderMap[a.id] : Infinity;
+      var ob = recipeOrderMap.hasOwnProperty(b.id) ? recipeOrderMap[b.id] : Infinity;
+      return oa - ob;
+    });
+  }
+  function collectMyRecipeTags(){
+    var seen = {}; var tags = [];
+    myRecipes.forEach(function(r){
+      (Array.isArray(r.tags) ? r.tags : []).forEach(function(t){
+        if (!t || seen[t]) return;
+        seen[t] = true; tags.push(t);
+      });
+    });
+    tags.sort(function(a, b){
+      var oa = tagOrderMap.hasOwnProperty(a) ? tagOrderMap[a] : Infinity;
+      var ob = tagOrderMap.hasOwnProperty(b) ? tagOrderMap[b] : Infinity;
+      return oa - ob;
+    });
+    return tags;
+  }
+  // ▲▼ 클릭: 아직 명시적 순서가 없으면(이 목록에서 처음 편집하는 경우) 지금 보이는 순서
+  // 그대로 baseline을 매긴 뒤 두 항목을 맞바꾸고, 이미 있으면 그 두 항목만 바로 맞바꾼다.
+  // 처음 한 번만 전체를 저장하고, 그 다음부터는 바뀐 두 행만 저장한다.
+  function moveRecipeOrder(orderedList, recipeId, dir){
+    var idx = orderedList.findIndex(function(r){ return r.id === recipeId; });
+    var newIdx = idx + dir;
+    if (idx === -1 || newIdx < 0 || newIdx >= orderedList.length) return;
+    var needsInit = orderedList.some(function(r){ return !recipeOrderMap.hasOwnProperty(r.id); });
+    if (needsInit) orderedList.forEach(function(r, i){ recipeOrderMap[r.id] = i; });
+    var a = orderedList[idx], b = orderedList[newIdx];
+    var tmp = recipeOrderMap[a.id]; recipeOrderMap[a.id] = recipeOrderMap[b.id]; recipeOrderMap[b.id] = tmp;
+    var toSave = needsInit ? orderedList : [a, b];
+    var payload = toSave.map(function(r){ return { user_id: currentUser.id, recipe_id: r.id, sort_order: recipeOrderMap[r.id] }; });
+    supabase.from('recipe_list_order').upsert(payload, { onConflict: 'user_id,recipe_id' }).then(function(res){
+      if (res.error){ alert('순서를 저장하지 못했어요: ' + res.error.message); return; }
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+  }
+  function moveTagOrder(orderedTags, tag, dir){
+    var idx = orderedTags.indexOf(tag);
+    var newIdx = idx + dir;
+    if (idx === -1 || newIdx < 0 || newIdx >= orderedTags.length) return;
+    var needsInit = orderedTags.some(function(t){ return !tagOrderMap.hasOwnProperty(t); });
+    if (needsInit) orderedTags.forEach(function(t, i){ tagOrderMap[t] = i; });
+    var a = orderedTags[idx], b = orderedTags[newIdx];
+    var tmp = tagOrderMap[a]; tagOrderMap[a] = tagOrderMap[b]; tagOrderMap[b] = tmp;
+    var toSave = needsInit ? orderedTags : [a, b];
+    var payload = toSave.map(function(t){ return { user_id: currentUser.id, tag: t, sort_order: tagOrderMap[t] }; });
+    supabase.from('tag_list_order').upsert(payload, { onConflict: 'user_id,tag' }).then(function(res){
+      if (res.error){ alert('태그 순서를 저장하지 못했어요: ' + res.error.message); return; }
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+  }
+  // 태그가 하나도 없으면 필터 칩 자체를 숨긴다(필터할 게 없으므로) — 순서 편집 모드
+  // 여부와 무관하게 레시피 목록은 항상 아래에서 따로 렌더링된다.
+  function renderMyRecipesTagBar(){
+    var tags = collectMyRecipeTags();
+    myRecipesTagBarEl.innerHTML = '';
+    if (tags.length === 0){
+      myRecipesTagBarEl.style.display = 'none';
+      return;
+    }
+    myRecipesTagBarEl.style.display = '';
+    if (myRecipesOrderEditMode){
+      myRecipesTagBarEl.className = 'my-recipes-order-list';
+      tags.forEach(function(tag, idx){
+        var row = document.createElement('div');
+        row.className = 'my-recipes-order-row';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'my-recipes-order-name';
+        nameSpan.textContent = tag;
+        var btnWrap = document.createElement('div');
+        btnWrap.className = 'reorder-btns';
+        var upBtn = document.createElement('button');
+        upBtn.type = 'button'; upBtn.textContent = '▲'; upBtn.setAttribute('aria-label', '위로 이동');
+        if (idx === 0) upBtn.disabled = true;
+        upBtn.addEventListener('click', function(){ moveTagOrder(tags, tag, -1); });
+        var downBtn = document.createElement('button');
+        downBtn.type = 'button'; downBtn.textContent = '▼'; downBtn.setAttribute('aria-label', '아래로 이동');
+        if (idx === tags.length - 1) downBtn.disabled = true;
+        downBtn.addEventListener('click', function(){ moveTagOrder(tags, tag, 1); });
+        btnWrap.appendChild(upBtn); btnWrap.appendChild(downBtn);
+        row.appendChild(nameSpan); row.appendChild(btnWrap);
+        myRecipesTagBarEl.appendChild(row);
+      });
+      return;
+    }
+    myRecipesTagBarEl.className = 'tag-chip-bar';
+    var allChip = document.createElement('button');
+    allChip.type = 'button';
+    allChip.className = 'tag-chip' + (myRecipesActiveTagFilter === null ? ' active' : '');
+    allChip.textContent = '전체';
+    allChip.addEventListener('click', function(){
+      myRecipesActiveTagFilter = null;
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+    myRecipesTagBarEl.appendChild(allChip);
+    tags.forEach(function(tag){
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tag-chip' + (myRecipesActiveTagFilter === tag ? ' active' : '');
+      chip.textContent = tag;
+      chip.addEventListener('click', function(){
+        myRecipesActiveTagFilter = (myRecipesActiveTagFilter === tag) ? null : tag;
+        renderMyRecipesList(myRecipesListSearchInput.value);
+      });
+      myRecipesTagBarEl.appendChild(chip);
+    });
+  }
   function renderMyRecipesList(query){
+    myRecipesOrderBarRowEl.style.display = myRecipes.length ? '' : 'none';
+    renderMyRecipesTagBar();
     myRecipesListEl.innerHTML = '';
-    var owned = myRecipes.filter(function(r){ return currentUser && r.owner_id === currentUser.id; });
     var q = (query || '').trim().toLowerCase();
-    var filtered = owned.filter(function(r){
+    var filtered = myRecipes.filter(function(r){
+      if (myRecipesActiveTagFilter && !(Array.isArray(r.tags) && r.tags.indexOf(myRecipesActiveTagFilter) !== -1)) return false;
       if (!q) return true;
       if ((r.recipe_name || '').toLowerCase().indexOf(q) !== -1) return true;
       return (Array.isArray(r.tags) ? r.tags : []).some(function(t){ return t.toLowerCase().indexOf(q) !== -1; });
     });
-    if (filtered.length === 0){
+    var ordered = sortRecipesByCustomOrder(filtered);
+    if (ordered.length === 0){
       var empty = document.createElement('p');
       empty.className = 'hint';
-      empty.textContent = owned.length === 0 ? '아직 등록된 레시피가 없어요.' : '검색 결과가 없어요';
+      empty.textContent = myRecipes.length === 0 ? '아직 등록된 레시피가 없어요.' : '검색 결과가 없어요';
       myRecipesListEl.appendChild(empty);
       return;
     }
-    filtered.forEach(function(r){
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'tag-recipe-row';
+    ordered.forEach(function(r, idx){
       var tagsText = (Array.isArray(r.tags) && r.tags.length) ? ' · ' + r.tags.join(', ') : '';
-      btn.textContent = (r.recipe_name || '이름 없는 레시피') + tagsText;
-      btn.addEventListener('click', function(){
-        if (!confirmDiscardIfDirty()) return;
-        applyRecipeRowToState(r);
-        renderSelectedRecipe(r);
-        closeMyRecipesListModal();
-        showToast('레시피를 불러왔어요');
-      });
-      myRecipesListEl.appendChild(btn);
+      var sharedText = (currentUser && r.owner_id !== currentUser.id) ? ' · 공유받음' : '';
+      var label = (r.recipe_name || '이름 없는 레시피') + tagsText + sharedText;
+      if (myRecipesOrderEditMode){
+        var row = document.createElement('div');
+        row.className = 'my-recipes-order-row';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'my-recipes-order-name';
+        nameSpan.textContent = label;
+        var btnWrap = document.createElement('div');
+        btnWrap.className = 'reorder-btns';
+        var upBtn = document.createElement('button');
+        upBtn.type = 'button'; upBtn.textContent = '▲'; upBtn.setAttribute('aria-label', '위로 이동');
+        if (idx === 0) upBtn.disabled = true;
+        upBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, -1); });
+        var downBtn = document.createElement('button');
+        downBtn.type = 'button'; downBtn.textContent = '▼'; downBtn.setAttribute('aria-label', '아래로 이동');
+        if (idx === ordered.length - 1) downBtn.disabled = true;
+        downBtn.addEventListener('click', function(){ moveRecipeOrder(ordered, r.id, 1); });
+        btnWrap.appendChild(upBtn); btnWrap.appendChild(downBtn);
+        row.appendChild(nameSpan); row.appendChild(btnWrap);
+        myRecipesListEl.appendChild(row);
+      } else {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tag-recipe-row';
+        btn.textContent = label;
+        btn.addEventListener('click', function(){
+          if (!confirmDiscardIfDirty()) return;
+          applyRecipeRowToState(r);
+          renderSelectedRecipe(r);
+          closeMyRecipesListModal();
+          showToast('레시피를 불러왔어요');
+        });
+        myRecipesListEl.appendChild(btn);
+      }
     });
   }
 
@@ -4516,12 +4795,13 @@
     state.multiplier = 1;
     state.targetTotal = 0;
     state.portions = [];
+    poolishExpanded = false;
     if (state.type === 'bread'){
-      state.flours = [{ ingredientId: null, name: '밀가루', pct: 100 }];
+      state.flours = [{ ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }];
       state.ingredients = [
-        { ingredientId: null, name: '물', pct: 0 },
-        { ingredientId: null, name: '소금', pct: 0 },
-        { ingredientId: null, name: '이스트', pct: 0 }
+        { ingredientId: null, name: '물', pct: 0, stage: 'final' },
+        { ingredientId: null, name: '소금', pct: 0, stage: 'final' },
+        { ingredientId: null, name: '이스트', pct: 0, stage: 'final' }
       ];
     } else {
       state.flours = [];
@@ -4787,7 +5067,12 @@
 
   function openMyRecipesListModal(){
     myRecipesListSearchInput.value = ''; // don't carry over a filter from the last time this was open
-    renderMyRecipesList();
+    myRecipesActiveTagFilter = null;
+    myRecipesOrderEditMode = false;
+    myRecipesOrderEditBtn.textContent = '순서 편집';
+    Promise.all([loadRecipeListOrder(), loadTagListOrder()]).then(function(){
+      renderMyRecipesList();
+    });
     showSubpage(myRecipesListPageEl);
     closeMyRecipesListBtn.focus();
   }
@@ -5856,6 +6141,8 @@
       myTagShares = [];
       myRecipeShares = [];
       myTagAccountShares = [];
+      recipeOrderMap = {};
+      tagOrderMap = {};
       recipeSearchInput.value = '';
       clearSelectedRecipe();
       markClean();
@@ -5950,8 +6237,8 @@
       if (res.error){ alert('초대 링크 처리 실패: ' + res.error.message); return; }
       claimShareBannerEl.style.display = 'none';
       if (res.data === 'ok' || res.data === 'already_yours'){
-        loadMyRecipes(); // "공유받은 레시피" 목록에 방금 늘어난 항목 반영
-        showToast('공유가 적용됐어요 — "공유받은 레시피"에서 확인해보세요');
+        loadMyRecipes(); // "내 레시피" 목록에 방금 늘어난 항목 반영
+        showToast('공유가 적용됐어요 — "내 레시피" 목록에서 확인해보세요');
       } else if (res.data === 'already_claimed'){
         alert('이 초대 링크는 이미 다른 계정에서 사용됐어요.');
       } else if (res.data === 'not_found'){
@@ -5987,6 +6274,11 @@
     });
     openMyRecipesListBtn.addEventListener('click', openMyRecipesListModal);
     myRecipesListSearchInput.addEventListener('input', function(){
+      renderMyRecipesList(myRecipesListSearchInput.value);
+    });
+    myRecipesOrderEditBtn.addEventListener('click', function(){
+      myRecipesOrderEditMode = !myRecipesOrderEditMode;
+      myRecipesOrderEditBtn.textContent = myRecipesOrderEditMode ? '완료' : '순서 편집';
       renderMyRecipesList(myRecipesListSearchInput.value);
     });
     document.getElementById('addCompositeProductBtn').addEventListener('click', function(){
