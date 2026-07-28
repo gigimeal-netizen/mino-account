@@ -923,16 +923,6 @@
     <h2 id="ingCardTitle">재료 (밀가루 기준 %)</h2>
     <div id="ingList"></div>
     <button class="add-btn" id="addIngBtn">+ 재료 추가</button>
-    <!-- 2026-07-28: 초코바게트(바게트 반죽 일부 + 추가 재료)처럼 "다른 레시피의 일부를 이
-         레시피의 재료로 쓰는" 경우를 위한 1회성 가져오기 — 재료 행마다 상시 노출되는 링크(먼저
-         만들었다가 "더 헷갈린다"는 피드백으로 되돌린 버전)와 달리, 카드당 링크 하나만 접어두고
-         고른 무게만큼 계산해서 평범한 재료 행으로 삽입한다. 삽입 후엔 다른 재료 행과 완전히
-         똑같은 일반 행 — 지속되는 연결/뱃지 없음. -->
-    <button type="button" class="tag-toggle-btn" id="importFromRecipeBtn" style="display:none;">+ 다른 레시피에서 가져오기</button>
-    <div class="ing-link-combo" id="importRecipeCombo" style="display:none; margin-top:8px;">
-      <input type="text" class="text-input" id="importRecipeSearchInput" placeholder="레시피 검색" autocomplete="off">
-      <div class="combo-dropdown" id="importRecipeDropdown" style="display:none;"></div>
-    </div>
     <p class="hint" id="ingHint">퍼센트나 중량, 편한 쪽을 입력하면 서로 자동 계산돼요.</p>
     <div id="pctInfoBlock">
       <p class="hint">
@@ -2290,118 +2280,6 @@
     if (last){ last.focus(); last.select(); }
   });
 
-  // 2026-07-28: "다른 레시피에서 가져오기" — 초코바게트(바게트 반죽 일부 + 코코아파우더/우유/
-  // 피칸)처럼 다른 레시피의 일부를 이 레시피의 재료로 쓰고 싶을 때. 지정한 무게만큼 원본
-  // 레시피의 현재 배합비로 계산해서 평범한 재료 행 여러 개로 한 번에 삽입한다 — 삽입 뒤엔
-  // 지속되는 연결이 전혀 없는 완전히 평범한 행(이름 직접 타이핑한 것과 구분 안 됨). 원본이
-  // 나중에 바뀌어도 자동 반영은 안 되지만(1회성 스냅샷), 그 대신 재료 행마다 상시 노출되는
-  // 링크 UI 없이 카드당 버튼 하나로 끝난다.
-  var importFromRecipeBtn = document.getElementById('importFromRecipeBtn');
-  var importRecipeCombo = document.getElementById('importRecipeCombo');
-  var importRecipeSearchInput = document.getElementById('importRecipeSearchInput');
-  var importRecipeDropdown = document.getElementById('importRecipeDropdown');
-
-  function updateImportFromRecipeVisibility(){
-    var hasOtherOwned = currentUser && myRecipes.some(function(r){
-      return r.owner_id === currentUser.id && r.id !== selectedRecipeId;
-    });
-    importFromRecipeBtn.style.display = hasOtherOwned ? '' : 'none';
-    if (!hasOtherOwned){
-      importRecipeCombo.style.display = 'none';
-      importRecipeSearchInput.value = '';
-    }
-  }
-
-  importFromRecipeBtn.addEventListener('click', function(){
-    importFromRecipeBtn.style.display = 'none';
-    importRecipeCombo.style.display = 'block';
-    importRecipeSearchInput.value = '';
-    importRecipeSearchInput.focus();
-  });
-
-  function renderImportRecipeDropdown(showAll){
-    var q = showAll ? '' : importRecipeSearchInput.value.trim().toLowerCase();
-    var matches = myRecipes.filter(function(r){
-      return currentUser && r.owner_id === currentUser.id && r.id !== selectedRecipeId &&
-        (!q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1);
-    });
-    importRecipeDropdown.innerHTML = '';
-    if (matches.length === 0){
-      var empty = document.createElement('div');
-      empty.className = 'combo-dropdown-empty';
-      empty.textContent = '가져올 만한 레시피가 없어요';
-      importRecipeDropdown.appendChild(empty);
-      return;
-    }
-    matches.forEach(function(r){
-      var item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'combo-dropdown-item';
-      item.textContent = r.recipe_name || '이름 없는 레시피';
-      item.addEventListener('click', function(){
-        importRecipeDropdown.style.display = 'none';
-        importRecipeCombo.style.display = 'none';
-        updateImportFromRecipeVisibility();
-        promptImportFromRecipe(r);
-      });
-      importRecipeDropdown.appendChild(item);
-    });
-  }
-  importRecipeSearchInput.addEventListener('focus', function(){ renderImportRecipeDropdown(true); importRecipeDropdown.style.display = 'block'; });
-  importRecipeSearchInput.addEventListener('input', function(){ renderImportRecipeDropdown(false); importRecipeDropdown.style.display = 'block'; });
-  // 검색만 하고 아무것도 안 고른 채 포커스를 잃으면 버튼 상태로 되돌린다 — 드롭다운 항목
-  // 클릭은 mousedown 시점에 blur가 먼저 발생하므로, setTimeout으로 클릭 처리(위 핸들러가
-  // 이미 combo를 숨김)가 끝난 뒤 판단한다.
-  importRecipeSearchInput.addEventListener('blur', function(){
-    setTimeout(function(){
-      if (document.activeElement !== importRecipeSearchInput) updateImportFromRecipeVisibility();
-    }, 150);
-  });
-
-  function promptImportFromRecipe(recipe){
-    var weightStr = prompt('"' + (recipe.recipe_name || '이름 없는 레시피') + '"에서 가져올 무게(g)를 입력하세요');
-    if (weightStr === null) return;
-    var weight = parseFloat(weightStr);
-    if (!(weight > 0)){ alert('올바른 무게를 입력해주세요.'); return; }
-    importIngredientsFromRecipe(recipe, weight);
-  }
-
-  // 원본 레시피의 밀가루+재료를 computeCostBreakdown()과 같은 비율 계산(제빵: 100 기준 pct,
-  // 제과/기타: scale-1 weight)으로 지정 무게만큼 스케일한 뒤, 지금 열려있는 레시피의 타입에 맞는
-  // 형태(제빵이면 pct, 아니면 weight)로 변환해 재료 행으로 추가한다 — pctFromWeight()/기존
-  // weight-input 핸들러와 완전히 같은 변환식을 재사용해서 새 계산 로직을 만들지 않는다.
-  function importIngredientsFromRecipe(recipe, weight){
-    var isBread = state.type === 'bread';
-    // pctFromWeight()는 flourWeight가 0이면 조용히 0%를 반환하므로(정상 케이스에선 안전한
-    // 기본값), 여기서 그대로 두면 "기준 밀가루/배율을 아직 안 정한 새 레시피"에 가져오기를 하면
-    // 모든 재료가 소리 없이 0%로 들어가버린다 — 미리 걸러서 원인을 알려준다.
-    if (isBread && computeFlourWeight() <= 0){
-      alert('먼저 이 레시피의 기준 밀가루(또는 배율/총 반죽량)를 0보다 크게 설정한 뒤 가져와주세요.');
-      return;
-    }
-    var recipeLike = {
-      type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
-      flours: Array.isArray(recipe.flours) ? recipe.flours : [],
-      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : []
-    };
-    var breakdown = computeCostBreakdown(recipeLike);
-    if (breakdown.totalWeight <= 0){ alert('가져올 재료가 없는 레시피예요.'); return; }
-    var scale = weight / breakdown.totalWeight;
-    var flourWeight = isBread ? computeFlourWeight() : 0;
-    var engineBScale = isBread ? 0 : computeEngineBScale();
-    breakdown.items.forEach(function(it){
-      var itemWeight = it.weight * scale;
-      var name = it.row.name || '이름 없음';
-      if (isBread){
-        state.ingredients.push({ ingredientId: null, name: name, pct: pctFromWeight(itemWeight, flourWeight), stage: 'final' });
-      } else {
-        state.ingredients.push({ ingredientId: null, name: name, weight: engineBScale > 0 ? itemWeight / engineBScale : itemWeight });
-      }
-    });
-    render();
-    showToast('"' + (recipe.recipe_name || '이름 없는 레시피') + '"에서 재료 ' + breakdown.items.length + '개를 가져왔어요');
-  }
-
   // 풀리시(사전발효반죽) 밀가루/재료 추가 — 제빵 타입에서만 노출되는 카드라 항상 stage:'pre',
   // pct 기반(제과/기타에는 이 카드 자체가 없음).
   document.getElementById('addPoolishFlourBtn').addEventListener('click', function(){
@@ -2885,8 +2763,6 @@
         var stillThere = myRecipes.find(function(r){ return r.id === selectedRecipeId; });
         if (stillThere) renderSelectedRecipe(stillThere);
         else clearSelectedRecipe();
-      } else {
-        updateImportFromRecipeVisibility();
       }
     });
   }
@@ -4564,12 +4440,10 @@
     selectedSharePanelEl.style.display = 'none';
     currentRecipeSaveAllowed = true;
     updateSaveButtonVisibility();
-    updateImportFromRecipeVisibility();
   }
 
   function renderSelectedRecipe(recipe){
     selectedRecipeId = recipe.id;
-    updateImportFromRecipeVisibility();
     var isOwner = currentUser && recipe.owner_id === currentUser.id;
     shareSelectedBtn.style.display = isOwner ? '' : 'none';
     deleteSelectedBtn.style.display = isOwner ? '' : 'none';
