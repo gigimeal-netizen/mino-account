@@ -215,6 +215,38 @@ returns boolean language sql security definer stable as $$
   select exists (select 1 from share_blocks where blocker_id = auth.uid() and blocked_owner_id = p_owner_id);
 $$;
 
+-- 2026-07-28 공유 스팸 방지 2단계 — 받는 쪽 차단(위)이 "이미 걸린 공유를 정리하는 사후 대응"
+-- 이라면, 이건 "애초에 짧은 시간에 공유/초대 링크를 너무 많이 만드는 것 자체"를 막는 사전
+-- 방어다. share_recipe_with_email/share_tag_with_email/create_recipe_share_invite/
+-- create_tag_share_invite 네 함수 전부 본문 맨 앞에서 이 함수를 호출한다 — 이메일이 존재하는지
+-- 등 다른 검증보다 먼저 실행해서, 존재하지 않는 이메일을 대상으로 한 실패한 시도까지도 횟수에
+-- 포함시킨다(이메일 존재 여부를 무제한으로 훑어보는 것 자체도 막고 싶어서).
+-- 클라이언트는 이 테이블에 전혀 접근하지 않는다(정책을 아예 안 둠 — RLS 활성화 + 정책 0개는
+-- 기본적으로 모든 비-슈퍼유저 접근을 막는다) — 오직 이 파일의 SECURITY DEFINER 함수들만
+-- 건드리며, 그 함수들은 테이블을 만든 역할(이 스키마를 실행한 역할)로 실행되므로 RLS 대상이
+-- 아니다(이 파일의 다른 SECURITY DEFINER 함수들과 같은 원리 — 맨 위 is_owner_of_recipe() 참고).
+create table share_rate_log (
+  id bigint generated always as identity primary key,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table share_rate_log enable row level security;
+
+create or replace function check_share_rate_limit()
+returns void language plpgsql security definer as $$
+declare recent_count int;
+begin
+  -- 오래된 기록은 그때그때 지워서 별도 정리 작업(cron) 없이도 테이블이 계속 작게 유지된다 —
+  -- 이 앱 규모에서 매 호출마다 지우는 비용은 무시할 만하다.
+  delete from share_rate_log where created_at < now() - interval '1 day';
+  select count(*) into recent_count from share_rate_log
+    where owner_id = auth.uid() and created_at > now() - interval '10 minutes';
+  if recent_count >= 20 then
+    raise exception '공유/초대 링크 요청이 너무 많아요 — 잠시 후 다시 시도해주세요';
+  end if;
+  insert into share_rate_log (owner_id) values (auth.uid());
+end; $$;
+
 -- Owner: full CRUD. Recipient of an account-share (레시피 개별 공유 또는 태그 공유): read only.
 create policy "owner full access" on recipes for all
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
@@ -239,6 +271,7 @@ create or replace function share_recipe_with_email(p_recipe_id uuid, p_email tex
 returns void language plpgsql security definer as $$
 declare target_id uuid;
 begin
+  perform check_share_rate_limit();
   select id into target_id from auth.users where email = p_email;
   if target_id is null then
     raise exception '해당 이메일의 계정을 찾을 수 없어요';
@@ -328,6 +361,7 @@ create or replace function share_tag_with_email(p_tag text, p_email text, p_can_
 returns void language plpgsql security definer as $$
 declare target_id uuid;
 begin
+  perform check_share_rate_limit();
   select id into target_id from auth.users where email = p_email;
   if target_id is null then
     raise exception '해당 이메일의 계정을 찾을 수 없어요';
@@ -366,6 +400,7 @@ create or replace function create_recipe_share_invite(p_recipe_id uuid, p_can_sa
 returns uuid language plpgsql security definer as $$
 declare new_token uuid;
 begin
+  perform check_share_rate_limit();
   if not exists (select 1 from recipes where id = p_recipe_id and owner_id = auth.uid()) then
     raise exception '본인 소유 레시피만 초대 링크를 만들 수 있어요';
   end if;
@@ -422,6 +457,7 @@ create or replace function create_tag_share_invite(p_tag text, p_can_save boolea
 returns uuid language plpgsql security definer as $$
 declare new_token uuid;
 begin
+  perform check_share_rate_limit();
   insert into tag_share_invites (owner_id, tag, can_save) values (auth.uid(), p_tag, p_can_save)
     returning token into new_token;
   return new_token;
