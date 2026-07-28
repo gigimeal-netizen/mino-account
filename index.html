@@ -5751,7 +5751,11 @@
       reportBtn.addEventListener('click', function(){
         var reason = prompt('신고 사유를 알려주세요 (예: 다른 레시피 도용, 부적절한 내용 등)');
         if (reason === null) return;
-        supabase.from('recipe_reports').insert({ recipe_id: r.id, reason: reason.trim() }).then(function(res){
+        // 2026-07-28: 서버(recipe_reports_reason_not_blank 제약)도 빈 사유를 막지만, 거기서
+        // 걸리면 사용자에게 낯선 DB 에러 문구가 그대로 노출된다 — 클라이언트에서 먼저 걸러서
+        // 자연스러운 재입력 흐름으로 유도한다.
+        if (!reason.trim()){ alert('신고 사유를 입력해주세요.'); return; }
+        supabase.from('recipe_reports').insert({ recipe_id: r.id, reason: reason.trim().slice(0, 500) }).then(function(res){
           if (res.error){ alert('신고 접수 실패: ' + res.error.message); return; }
           showToast('신고가 접수됐어요');
         });

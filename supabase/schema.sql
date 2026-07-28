@@ -258,6 +258,39 @@ create policy "shared read access" on recipes for select
 create policy "public recipes are readable by anyone" on recipes for select
   using (is_public = true);
 
+-- 2026-07-28: 아카이브 게시(is_public을 true로 바꾸는 것) 자체에도 rate limit — 커뮤니티에 공개로
+-- 열면 스팸/저품질 레시피를 대량으로 빠르게 올리는 게 실제 위협이 된다. 게시는 RPC가 아니라
+-- account.html이 recipes 테이블을 직접 update하는 경로라(공유 RPC들과 다름) check_share_rate_limit()
+-- 같은 함수 호출 방식을 못 쓴다 — 대신 트리거로 강제한다. 트리거는 클라이언트가 어떤 경로로
+-- update를 보내든(직접 update든 나중에 생길 다른 경로든) 항상 걸리므로 RPC보다 오히려 더 안전하다.
+create table archive_publish_log (
+  id bigint generated always as identity primary key,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table archive_publish_log enable row level security;
+
+create or replace function enforce_archive_publish_rate_limit()
+returns trigger language plpgsql security definer as $$
+declare recent_count int;
+begin
+  -- false→true로 바뀌는 순간(새로 게시하는 순간)만 검사한다 — 이미 공개인 레시피를 그냥
+  -- 저장(다른 필드 수정)하는 흔한 경우는 매번 다시 세지 않는다.
+  if new.is_public = true and coalesce(old.is_public, false) = false then
+    delete from archive_publish_log where created_at < now() - interval '1 day';
+    select count(*) into recent_count from archive_publish_log
+      where owner_id = auth.uid() and created_at > now() - interval '10 minutes';
+    if recent_count >= 10 then
+      raise exception '레시피 아카이브 게시가 너무 잦아요 — 잠시 후 다시 시도해주세요';
+    end if;
+    insert into archive_publish_log (owner_id) values (auth.uid());
+  end if;
+  return new;
+end; $$;
+create trigger recipes_archive_publish_rate_limit
+  before update on recipes
+  for each row execute function enforce_archive_publish_rate_limit();
+
 create policy "owner manages shares" on recipe_shares for all
   using (is_owner_of_recipe(recipe_id));
 create policy "recipient sees own share row" on recipe_shares for select
@@ -496,10 +529,33 @@ create table recipe_reports (
   id uuid primary key default gen_random_uuid(),
   recipe_id uuid not null references recipes(id) on delete cascade,
   reason text not null default '',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 2026-07-28: 아카이브를 커뮤니티에 공개하기 전 모더레이션 보강 — 로그인 여부와 무관하게
+  -- 누구나 insert할 수 있는 테이블이라 auth.uid() 기반 rate limit(check_share_rate_limit()과
+  -- 같은 방식)을 쓸 수 없다(익명 요청은 신원이 없음). 대신 신고 자체의 최소 품질(빈 사유 금지,
+  -- 과도한 길이 금지)만 제약 조건으로 강제한다.
+  constraint recipe_reports_reason_not_blank check (length(trim(reason)) > 0),
+  constraint recipe_reports_reason_maxlen check (length(reason) <= 500)
 );
 alter table recipe_reports enable row level security;
 create policy "anyone can report" on recipe_reports for insert with check (true);
+
+-- 신원 기반 rate limit이 안 통하는 익명 신고 경로에서, 그래도 "한 레시피에 신고를 무한정 쌓아
+-- 운영자 신고함을 스팸으로 도배"하는 것만은 막는다 — 신원과 무관하게 recipe_id별 누적 개수만
+-- 세면 되므로 익명 요청에도 그대로 적용된다. 50건이면 이미 운영자가 검토하기에 충분한 신호라,
+-- 그 이상 쌓이는 건 신호가 아니라 잡음일 뿐이라고 판단.
+create or replace function enforce_recipe_report_cap()
+returns trigger language plpgsql security definer as $$
+declare existing_count int;
+begin
+  select count(*) into existing_count from recipe_reports where recipe_id = new.recipe_id;
+  if existing_count >= 50 then
+    raise exception '이 레시피는 이미 신고가 많이 접수됐어요 — 운영자가 검토 중이에요';
+  end if;
+  return new;
+end; $$;
+create trigger recipe_reports_cap before insert on recipe_reports
+  for each row execute function enforce_recipe_report_cap();
 -- auth.users is never exposed to clients directly (같은 원칙, 파일 맨 위 참고) — 일반 RLS 정책은
 -- 클라이언트 권한으로 평가되기 때문에 auth.users를 직접 조회하면 "permission denied for table
 -- users"가 난다. share_recipe_with_email()처럼 SECURITY DEFINER 함수로 감싸서 우회한다.
