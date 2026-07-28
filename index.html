@@ -383,22 +383,6 @@
     display:block; background:none; border:none; padding:0; margin-top:8px;
     color: var(--accent); font-weight:700; font-size: 12.5px; cursor:pointer; text-decoration: underline;
   }
-  .tag-toggle-btn.danger{ color: var(--danger); }
-
-  /* 2026-07-28: "다른 레시피 연결(하위 반죽)" — 완성된 다른 레시피의 일부를 떼어내(예: 바게트
-     반죽 2kg) 이 레시피의 재료 한 줄로 쓰는 경우를 위한 것. .ing-link-combo/.combo-dropdown 등은
-     재료 DB 연결(원가 계산 전용)과 같은 컴포넌트를 재사용하지만, 이건 레시피 편집 화면 자체에
-     있다는 점이 다르다 — 재료 DB 연결은 "레시피 작성을 방해하지 않기 위해" 일부러 원가 계산
-     모달로 분리했지만, 이 기능은 반대로 실제 배합량(g) 계산 자체가 목적이라 편집 화면에 있어야
-     의미가 있다. */
-  .ing-sub-link-row{ margin-top: 2px; }
-  .ing-sub-link-active{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-  .ing-sub-link-badge{ font-size:12.5px; font-weight:700; color: var(--accent); }
-  .ing-sub-breakdown{
-    margin-top:4px; padding: 8px 10px; background: var(--bg-elevated); border-radius: 8px;
-  }
-  .ing-sub-breakdown p{ margin:2px 0; font-size:12.5px; color: var(--ink-soft); }
-  .sub-recipe-combo{ margin-top:6px; }
 
   /* Ingredient rows: name gets its own full-width line so it can never clip regardless of
      how long it is (this used to be a grid column sharing the row with the number fields,
@@ -2045,10 +2029,8 @@
           '<button data-idx="' + idx + '" data-dir="1" aria-label="아래로 이동"' + (nextIdx === -1 ? ' disabled' : '') + '>▼</button>' +
           '</span>' +
           '<button class="del-btn" data-idx="' + idx + '" aria-label="재료 삭제">×</button>' +
-        '</div>' +
-        '<div class="ing-sub-link-row" data-idx="' + idx + '"></div>';
+        '</div>';
       (ing.stage === 'pre' ? poolishIngListEl : ingListEl).appendChild(row);
-      buildSubRecipeLinkUI(row.querySelector('.ing-sub-link-row'), ing, idx);
     });
 
     function attachIngListeners(container){
@@ -2102,140 +2084,6 @@
     attachIngListeners(poolishIngListEl);
   }
 
-  // "다른 레시피 연결(하위 반죽)" 재료 행 하나의 링크 UI 전체(뱃지/구성 보기/연결 해제, 또는
-  // 아직 연결 안 됐을 때의 검색 콤보)를 만든다 — buildIngRows()에서 구조 재생성 시에만 호출
-  // (매 키 입력마다가 아님). 실제 g수는 여기서 계산하지 않는다 — buildIngRows() 직후 항상
-  // 이어서 도는 updateDisplays()가 그 시점의 실제 무게로 채워 넣는다(updateSubRecipeBreakdownEl
-  // 참고), 이 함수는 뼈대와 이벤트 연결만 담당.
-  function buildSubRecipeLinkUI(container, ing, idx){
-    container.innerHTML = '';
-    if (ing.subRecipeId){
-      var linkedRecipe = myRecipes.find(function(r){ return r.id === ing.subRecipeId; });
-      var wrap = document.createElement('div');
-      wrap.className = 'ing-sub-link-active';
-      var badge = document.createElement('span');
-      badge.className = 'ing-sub-link-badge';
-      badge.textContent = '🔗 ' + (linkedRecipe ? (linkedRecipe.recipe_name || '이름 없는 레시피') : '삭제된 레시피');
-      var toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.className = 'tag-toggle-btn';
-      toggleBtn.style.marginTop = '0';
-      toggleBtn.textContent = '구성 보기';
-      var unlinkBtn = document.createElement('button');
-      unlinkBtn.type = 'button';
-      unlinkBtn.className = 'tag-toggle-btn danger';
-      unlinkBtn.style.marginTop = '0';
-      unlinkBtn.textContent = '연결 해제';
-      wrap.appendChild(badge);
-      wrap.appendChild(toggleBtn);
-      wrap.appendChild(unlinkBtn);
-      container.appendChild(wrap);
-
-      var breakdownEl = document.createElement('div');
-      breakdownEl.className = 'ing-sub-breakdown';
-      breakdownEl.dataset.idx = idx;
-      breakdownEl.style.display = 'none';
-      container.appendChild(breakdownEl);
-
-      toggleBtn.addEventListener('click', function(){
-        breakdownEl.style.display = breakdownEl.style.display === 'none' ? 'block' : 'none';
-      });
-      unlinkBtn.addEventListener('click', function(){
-        ing.subRecipeId = null;
-        render();
-      });
-    } else {
-      var openBtn = document.createElement('button');
-      openBtn.type = 'button';
-      openBtn.className = 'tag-toggle-btn';
-      openBtn.textContent = '+ 다른 레시피 연결(하위 반죽)';
-      container.appendChild(openBtn);
-
-      var comboWrap = document.createElement('div');
-      comboWrap.className = 'ing-link-combo sub-recipe-combo';
-      comboWrap.style.display = 'none';
-      comboWrap.innerHTML = '<input type="text" class="text-input" placeholder="레시피 검색" autocomplete="off"><div class="combo-dropdown" style="display:none;"></div>';
-      container.appendChild(comboWrap);
-
-      openBtn.addEventListener('click', function(){
-        openBtn.style.display = 'none';
-        comboWrap.style.display = 'block';
-        comboWrap.querySelector('input').focus();
-      });
-      attachSubRecipePicker(comboWrap.querySelector('input'), comboWrap.querySelector('.combo-dropdown'), selectedRecipeId, function(r){
-        ing.subRecipeId = r.id;
-        render();
-      });
-    }
-  }
-
-  // 하위 레시피 검색 콤보 — attachIngredientLinker()와 같은 "show-all-on-focus/filter-on-type"
-  // 패턴이지만 myRecipes 중 내 소유 레시피만, 그리고 자기 자신(excludeRecipeId)은 제외한다(자기
-  // 자신을 재료로 연결하면 의미가 없을뿐더러 무한 순환의 소지가 있음). 문서 레벨 outside-click
-  // closer는 .ing-link-combo 클래스를 공유하므로(위 4041번 줄) 별도 등록 불필요.
-  function attachSubRecipePicker(inputEl, dropdownEl, excludeRecipeId, onPick){
-    function renderList(showAll){
-      var typed = inputEl.value.trim();
-      var q = showAll ? '' : typed.toLowerCase();
-      var matches = myRecipes.filter(function(r){
-        return currentUser && r.owner_id === currentUser.id && r.id !== excludeRecipeId &&
-          (!q || (r.recipe_name || '').toLowerCase().indexOf(q) !== -1);
-      });
-      dropdownEl.innerHTML = '';
-      if (matches.length === 0){
-        var empty = document.createElement('div');
-        empty.className = 'combo-dropdown-empty';
-        empty.textContent = '연결할 만한 레시피가 없어요';
-        dropdownEl.appendChild(empty);
-        return;
-      }
-      matches.forEach(function(r){
-        var item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'combo-dropdown-item';
-        item.textContent = r.recipe_name || '이름 없는 레시피';
-        item.addEventListener('click', function(){
-          dropdownEl.style.display = 'none';
-          onPick(r);
-        });
-        dropdownEl.appendChild(item);
-      });
-    }
-    inputEl.addEventListener('focus', function(){ renderList(true); dropdownEl.style.display = 'block'; });
-    inputEl.addEventListener('input', function(){ renderList(false); dropdownEl.style.display = 'block'; });
-  }
-
-  // updateDisplays()의 매 갱신마다 호출 — 연결된 하위 레시피의 "현재" 배합비를 그 재료 행의
-  // "지금" 실제 무게(weight, 호출부에서 계산해서 넘겨줌)로 스케일해 g수 목록을 다시 채운다.
-  // 스냅샷이 아니라 항상 최신 myRecipes 데이터를 기준으로 계산하므로, 연결된 레시피의 배합비가
-  // 바뀌면 다음 갱신 때 자동으로 반영된다.
-  function updateSubRecipeBreakdownEl(idx, weight){
-    var el = queryInBoth(ingListEl, poolishIngListEl, '.ing-sub-breakdown[data-idx="' + idx + '"]');
-    if (!el) return;
-    var ing = state.ingredients[idx];
-    if (!ing || !ing.subRecipeId) return;
-    var data = computeSubRecipeBreakdown(ing.subRecipeId, weight);
-    el.innerHTML = '';
-    if (!data){
-      var p = document.createElement('p');
-      p.className = 'warn-hint';
-      p.textContent = '연결된 레시피를 찾을 수 없어요(삭제됨) — 연결을 해제해주세요.';
-      el.appendChild(p);
-      return;
-    }
-    if (data.items.length === 0){
-      var p2 = document.createElement('p');
-      p2.textContent = '구성 재료가 없어요.';
-      el.appendChild(p2);
-      return;
-    }
-    data.items.forEach(function(it){
-      var line = document.createElement('p');
-      line.textContent = it.name + ': ' + fmt(it.weight) + 'g';
-      el.appendChild(line);
-    });
-  }
-
   // Lightweight refresh: recomputes derived numbers and writes them into existing
   // DOM nodes (never rebuilds), so the field the user is actively typing in keeps focus.
   function updateDisplays(){
@@ -2279,7 +2127,6 @@
         if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
         if (pctEl) fitDigits(pctEl);
         if (wEl) fitDigits(wEl);
-        if (ing.subRecipeId) updateSubRecipeBreakdownEl(idx, w);
       });
 
       var flourPctSum = state.flours.reduce(function(s,f){ return s + (parseFloat(f.pct)||0); }, 0);
@@ -2309,7 +2156,6 @@
         var wEl = ingListEl.querySelector('.weight-input[data-idx="' + idx + '"]');
         if (wEl && document.activeElement !== wEl) wEl.value = fmt(w);
         if (wEl) fitDigits(wEl);
-        if (ing.subRecipeId) updateSubRecipeBreakdownEl(idx, w);
       });
       total = state.ingredients.reduce(function(s,i){ return s + (parseFloat(i.weight)||0)*scale; }, 0);
       // Bread's footer label shows the flour weight the numbers were derived from; engine B
@@ -2427,7 +2273,7 @@
 
   // Add ingredient
   document.getElementById('addIngBtn').addEventListener('click', function(){
-    state.ingredients.push(state.type === 'bread' ? { ingredientId: null, subRecipeId: null, name: '재료', pct: 0, stage: 'final' } : { ingredientId: null, subRecipeId: null, name: '재료', weight: 0 });
+    state.ingredients.push(state.type === 'bread' ? { ingredientId: null, name: '재료', pct: 0, stage: 'final' } : { ingredientId: null, name: '재료', weight: 0 });
     render();
     var rows = ingListEl.querySelectorAll('.ing-name[data-idx]');
     var last = rows[rows.length-1];
@@ -2882,12 +2728,12 @@
       });
       if (state.flours.length === 0) state.flours = [{ ingredientId: null, name: '밀가루', pct: 100, stage: 'final' }];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, subRecipeId: (i && i.subRecipeId) || null, name: String(i && i.name || ''), pct: roundPctPrecise(i && i.pct), stage: (i && i.stage === 'pre') ? 'pre' : 'final' });
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), pct: roundPctPrecise(i && i.pct), stage: (i && i.stage === 'pre') ? 'pre' : 'final' });
       });
     } else {
       state.flours = [];
       state.ingredients = (Array.isArray(row.ingredients) ? row.ingredients : []).map(function(i){
-        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, subRecipeId: (i && i.subRecipeId) || null, name: String(i && i.name || ''), weight: parseFloat(i && i.weight) || 0 });
+        return migrateIngredientRow({ ingredientId: (i && i.ingredientId) || null, name: String(i && i.name || ''), weight: parseFloat(i && i.weight) || 0 });
       });
     }
 
@@ -3066,14 +2912,7 @@
     var items = rows.map(function(row){
       var w = isBread ? BASE * (parseFloat(row.pct) || 0) / 100 : (parseFloat(row.weight) || 0);
       var pricePerGram = null, category = '';
-      if (row.subRecipeId){
-        // "다른 레시피 연결(하위 반죽)" 재료 행 — 원가는 연결된 레시피의 현재 g당원가를 그대로
-        // 가져온다. 그 레시피가 또 다른 레시피를 하위 반죽으로 물고 있으면 재귀적으로 계속
-        // 내려가서 계산된다(costPerGramForRecipeId의 순환 감지가 무한 루프만 막아줄 뿐).
-        category = '하위 레시피';
-        var subResult = costPerGramForRecipeId(row.subRecipeId);
-        if (!subResult.hasUnpriced) pricePerGram = subResult.costPerGram;
-      } else if (row.ingredientId){
+      if (row.ingredientId){
         var found = myIngredients.find(function(ig){ return ig.id === row.ingredientId; });
         if (found){
           category = found.category || '';
@@ -3102,30 +2941,6 @@
   function computeRecipeCostPerGramFor(recipeLike){
     var breakdown = computeCostBreakdown(recipeLike);
     return { costPerGram: breakdown.costPerGram, hasUnpriced: breakdown.hasUnpriced };
-  }
-
-  // "다른 레시피 연결(하위 반죽)" 재료 행의 실제 g수 분해 — 레시피 편집 화면에서 그 재료 행이
-  // 지금 몇 g인지(targetWeight, 호출부에서 계산해서 넘겨줌)에 맞춰, 연결된 레시피의 "현재"
-  // 배합비(myRecipes 캐시, 스냅샷 아님)를 그 무게로 스케일한 목록을 반환한다. computeCostBreakdown()
-  // 과 같은 비율 계산(BASE=100 for bread / weight for engine B)을 재사용하되 가격이 아니라 무게만
-  // 본다 — 한 단계까지만 펼쳐 보여준다(연결된 레시피가 또 다른 레시피를 물고 있어도 그 안쪽까지
-  // 재귀적으로 펼치진 않음 — 원가 계산은 재귀적으로 다 반영되지만, 이 화면의 "구성 보기"는
-  // 어디까지나 참고용 한 단계 미리보기).
-  function computeSubRecipeBreakdown(recipeId, targetWeight){
-    var recipe = myRecipes.find(function(r){ return r.id === recipeId; });
-    if (!recipe) return null;
-    var recipeLike = {
-      type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
-      flours: Array.isArray(recipe.flours) ? recipe.flours : [],
-      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : []
-    };
-    var breakdown = computeCostBreakdown(recipeLike);
-    var target = parseFloat(targetWeight) || 0;
-    var scale = breakdown.totalWeight > 0 ? target / breakdown.totalWeight : 0;
-    var items = breakdown.items.map(function(it){
-      return { name: it.row.name || '이름 없음', weight: roundWeight(it.weight * scale) };
-    });
-    return { name: recipe.recipe_name || '이름 없는 레시피', items: items };
   }
 
   function loadMyIngredients(){
@@ -4301,13 +4116,7 @@
   // A component's own recipe may itself be unpriced/underpriced — same computeRecipeCostPerGramFor()
   // used by the plain "제품 & 원가" screen, just looked up by recipe_id here since a composite
   // product isn't tied to any single recipe the way costModalRecipe is.
-  // 2026-07-28: "다른 레시피 연결(하위 반죽)" 재료가 computeCostBreakdown()을 통해 이 함수를
-  // 재귀적으로 호출할 수 있게 되면서(A가 B를 하위 반죽으로 물고, B도 A를 물면) 진짜 무한 루프
-  // 가능성이 생겼다 — 순환이 감지되면(이미 계산 중인 recipeId) 그 자리에서 "가격 없음"으로
-  // 끊어서 스택 오버플로 대신 조용히 미가격 처리한다.
-  var costPerGramRecursionGuard = {};
   function costPerGramForRecipeId(recipeId){
-    if (costPerGramRecursionGuard[recipeId]) return { costPerGram: 0, hasUnpriced: true };
     var recipe = myRecipes.find(function(r){ return r.id === recipeId; });
     if (!recipe) return { costPerGram: 0, hasUnpriced: true };
     var recipeLike = {
@@ -4315,10 +4124,7 @@
       flours: Array.isArray(recipe.flours) ? recipe.flours : [],
       ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : []
     };
-    costPerGramRecursionGuard[recipeId] = true;
-    var result = computeRecipeCostPerGramFor(recipeLike);
-    delete costPerGramRecursionGuard[recipeId];
-    return result;
+    return computeRecipeCostPerGramFor(recipeLike);
   }
 
   // The other half of a component's cost lookup: a single priced ingredient (e.g. 프레첼 위에
