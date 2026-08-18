@@ -4116,13 +4116,26 @@
   // A component's own recipe may itself be unpriced/underpriced — same computeRecipeCostPerGramFor()
   // used by the plain "제품 & 원가" screen, just looked up by recipe_id here since a composite
   // product isn't tied to any single recipe the way costModalRecipe is.
+  // 2026-08-18 버그 수정 — 조합 제품에서 모든 구성요소가 "원가 0원 · 단가 없음"으로 나오던 문제.
+  // 여기서 recipe.flours/ingredients(라이브 컬럼)를 읽고 있었는데, 재료 DB 연결(ingredientId)은
+  // 2026-07-25 스냅샷 도입 이후 cost_snapshot_* 쪽에만 저장된다(saveCostRecipeLinks 참고).
+  // 즉 원가 계산 화면에서 재료를 아무리 연결해도 조합 제품은 연결이 하나도 없는 라이브 컬럼을
+  // 보고 있었다 — 레시피 탭(renderCostRecipesList)이 이미 스냅샷을 보고 있으므로 소스를 맞춘다.
+  // 스냅샷이 아직 없는(원가 계산에서 한 번도 안 연) 레시피만 라이브 컬럼으로 폴백하되, 그때도
+  // migrateIngredientRow()로 이름 자동 매칭을 적용한다 — 이 함수에만 그 호출이 빠져 있어서
+  // 재료 관리의 이름과 정확히 같아도 연결이 안 잡히던 것이 두 번째 원인이었다.
   function costPerGramForRecipeId(recipeId){
     var recipe = myRecipes.find(function(r){ return r.id === recipeId; });
     if (!recipe) return { costPerGram: 0, hasUnpriced: true };
+    var useSnapshot = !!recipe.cost_snapshot_taken_at;
+    var rawFlours = useSnapshot ? recipe.cost_snapshot_flours : recipe.flours;
+    var rawIngredients = useSnapshot ? recipe.cost_snapshot_ingredients : recipe.ingredients;
+    // migrateIngredientRow()는 넘겨받은 행을 제자리에서 수정하므로, myRecipes 캐시를 건드리지
+    // 않도록 사본을 넘긴다(openCostCalcRecipe()가 하는 것과 같은 방식).
     var recipeLike = {
       type: (recipe.recipe_type === 'confection' || recipe.recipe_type === 'other') ? recipe.recipe_type : 'bread',
-      flours: Array.isArray(recipe.flours) ? recipe.flours : [],
-      ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : []
+      flours: (Array.isArray(rawFlours) ? rawFlours : []).map(function(f){ return migrateIngredientRow(Object.assign({}, f)); }),
+      ingredients: (Array.isArray(rawIngredients) ? rawIngredients : []).map(function(i){ return migrateIngredientRow(Object.assign({}, i)); })
     };
     return computeRecipeCostPerGramFor(recipeLike);
   }
