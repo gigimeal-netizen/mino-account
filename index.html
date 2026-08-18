@@ -698,6 +698,70 @@
     .reorder-btns{ flex-basis: 26px; }
     h1{ font-size: 26px; }
   }
+  /* ==========================================================================
+     BOM 품목 화면 (2026-08-18) — 스펙 2026-08-18_BOM원가계산_스펙.md §6
+     대부분 기존 컴포넌트(.acc-row-*, .field-row, .io-btn, .add-btn)를 그대로 쓰고,
+     여기엔 이 화면에만 필요한 것만 둔다.
+     ========================================================================== */
+  .item-chip-bar{ display:flex; flex-wrap:wrap; gap:6px; margin: 0 0 14px; }
+  .item-chip{
+    padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--border-strong);
+    background: var(--bg-elevated); font-family: var(--font-body); font-size: 12.5px;
+    font-weight: 700; color: var(--ink-soft); cursor: pointer;
+  }
+  .item-chip:hover{ border-color: var(--accent); color: var(--accent); }
+  .item-chip.active{ background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* 품목 종류 배지 — 목록에서 구매/반죽/판매를 한눈에 구분 */
+  .kind-badge{
+    flex:0 0 auto; font-family: var(--font-body); font-size: 10.5px; font-weight: 700;
+    padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border-strong);
+    color: var(--ink-soft); background: var(--bg-elevated); white-space: nowrap;
+  }
+  .kind-badge.sellable{ color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* 원가 요약 박스 (제조/판매 품목 상세 상단) */
+  .cost-summary{ background: var(--bg-elevated); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .cost-summary-row{ display:flex; justify-content:space-between; align-items:baseline; padding: 3px 0; gap: 10px; }
+  .cost-summary-row .k{ font-size: 13px; color: var(--ink-soft); }
+  .cost-summary-row .v{ font-family: var(--font-mono); font-size: 15px; font-weight: 800; text-align:right; }
+  .cost-summary-row.big .v{ font-size: 21px; color: var(--accent); }
+  .cost-summary-row.margin .v{ color: var(--success); }
+
+  /* BOM 구성 라인 */
+  .bom-line{ display:flex; align-items:center; gap:8px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+  .bom-line:last-of-type{ border-bottom: none; }
+  .bom-line-name{ flex: 1 1 auto; min-width:0; font-size: 14px; overflow-wrap:break-word; }
+  .bom-line-name .sub{ display:block; font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  .bom-line-qty{ flex: 0 0 76px; width: 76px; }
+  .bom-line-cost{
+    flex: 0 0 auto; min-width: 70px; text-align: right;
+    font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--ink);
+  }
+  .bom-line-cost.unpriced{ color: var(--danger); font-size: 11.5px; }
+
+  /* 원가 산정 방식 토글 (직접 입력 / 배합에서 계산) */
+  .seg{ display:flex; border:1.5px solid var(--border-strong); border-radius:10px; overflow:hidden; flex:1 1 auto; }
+  .seg button{
+    flex:1; padding: 10px 8px; background: var(--bg-elevated); border:none; cursor:pointer;
+    font-family: var(--font-display); font-weight: 800; font-size: 12.5px; color: var(--ink-soft);
+    min-height: 44px;
+  }
+  .seg button[aria-pressed="true"]{ background: var(--accent); color:#fff; }
+
+  /* 가격 변화 표 (스펙 §7.4) */
+  .price-history{ margin-top: 6px; }
+  .ph-row{
+    display:flex; align-items:center; gap:10px; padding: 8px 0;
+    border-bottom: 1px dashed var(--border); font-family: var(--font-mono); font-size: 12.5px;
+  }
+  .ph-row:last-child{ border-bottom:none; }
+  .ph-date{ flex:0 0 84px; color: var(--ink-soft); }
+  .ph-price{ flex:1 1 auto; min-width:0; }
+  .ph-unit{ flex:0 0 auto; color: var(--ink-soft); }
+  .ph-delta{ flex:0 0 54px; text-align:right; font-weight:700; }
+  .ph-delta.up{ color: var(--danger); }
+  .ph-delta.down{ color: var(--success); }
 </style>
 </head>
 <body>
@@ -744,6 +808,10 @@
               <!-- 재료 관리/원가 계산은 2026-07-25에 하단 네비게이션 탭으로 옮기고 여기서
                    제거 — 두 군데 동시에 있으면 중복. -->
               <button class="menu-btn" id="openShareManagerBtn">공유 관리</button>
+              <!-- 2026-08-18: "재료" 탭이 새 BOM 품목 화면으로 바뀌면서, 구 재료 관리는
+                   CSV 가져오기 때문에 여기 임시로 남겨둔다 (스펙 §9 4단계에서 CSV를 새 화면으로
+                   옮기고 나면 이 항목과 구 화면을 같이 제거한다). -->
+              <button class="menu-btn" id="openLegacyIngredientsBtn">재료 CSV 가져오기 (구버전)</button>
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
               <button class="menu-btn" id="openReportsBtn" style="display:none;">신고 내역</button>
@@ -1080,6 +1148,34 @@
   드롭다운 같은 작은 팝오버들과는 성격이 다르다. 하단 네비게이션 바(2026-07-25)는 이
   서브페이지 위에서도 계속 보인다(z-index가 더 높음) — .wrap과 달리 숨겨지지 않는다.
 -->
+<!--
+  BOM 품목 화면 (2026-08-18) — 스펙 2026-08-18_BOM원가계산_스펙.md §6
+  구 "재료 관리"(#ingredientManagerPage, 바로 아래)를 대체한다. 아직 병행 기간이라 구 화면도
+  계정 메뉴에 남겨뒀다 — CSV 가져오기가 아직 그쪽에만 있기 때문(§9 4단계에서 이리로 옮긴다).
+  이 화면은 items / bom_lines / item_price_history만 읽고 쓴다.
+-->
+<div class="subpage" id="itemsPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeItemsBtn" aria-label="계산기 메인 화면으로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </button>
+      <h2>재료</h2>
+      <div class="header-actions subpage-header-actions"></div>
+    </div>
+  </div>
+  <div class="subpage-body">
+    <input type="text" id="itemSearchInput" class="text-input" autocomplete="off" placeholder="이름으로 찾기" style="width:100%;margin-bottom:14px;">
+    <div class="item-chip-bar" id="itemChipBar"></div>
+    <button type="button" class="hint warn-hint hint-btn" id="itemUnpricedHint" style="display:none;"></button>
+    <button class="add-btn" id="addItemBtn" style="margin-bottom:14px;">+ 재료 추가</button>
+    <div id="itemList"></div>
+  </div>
+</div>
+
 <div class="subpage" id="ingredientManagerPage" style="display:none;">
   <div class="subpage-header">
     <div class="subpage-header-inner">
@@ -5310,6 +5406,7 @@
   // 해당하는 것만 강조 표시 — 서브페이지가 없는 화면(공유 관리/도움말/신고 내역/태그별 보기)은
   // 매핑에 없으니 전부 꺼진 채로 둔다(탭 4개 중 아무것도 지금 화면을 대표하지 않으므로).
   var navTabForPageId = {
+    itemsPage: navIngredientsBtn,          // 2026-08-18: 새 BOM 품목 화면이 "재료" 탭을 대표한다
     ingredientManagerPage: navIngredientsBtn,
     costCalcPage: navCostBtn,
     archivePage: navArchiveBtn
@@ -6433,6 +6530,785 @@
     refreshProductCosts();
   }
 
+  // ==========================================================================
+  // BOM 품목 화면 + 원가 롤업 엔진 (2026-08-18)
+  // 스펙: 2026-08-18_BOM원가계산_스펙.md §5(엔진) §6(화면) §7(가격 이력) §12(개수 단위)
+  //
+  // 이 블록은 items / bom_lines / item_price_history만 읽고 쓴다. 기존 코드(ingredients /
+  // products / composite_products를 쓰는 재료 관리·원가 계산)는 전혀 건드리지 않았다 —
+  // 병행 기간에 새 화면에 문제가 생기면 하단 탭 연결 한 줄만 되돌리면 원래대로 돌아간다.
+  // ==========================================================================
+  var itemsPageEl = document.getElementById('itemsPage');
+  var closeItemsBtn = document.getElementById('closeItemsBtn');
+  var itemSearchInput = document.getElementById('itemSearchInput');
+  var itemChipBarEl = document.getElementById('itemChipBar');
+  var itemUnpricedHintEl = document.getElementById('itemUnpricedHint');
+  var itemListEl = document.getElementById('itemList');
+  var addItemBtn = document.getElementById('addItemBtn');
+
+  var myItems = [];                 // items 행 전부
+  var itemsById = {};               // id -> item
+  var bomLinesByParent = {};        // parent_item_id -> [bom_line...]
+  var itemHistoryCache = {};        // item_id -> [item_price_history...] (펼칠 때만 로드)
+  var itemFilter = 'purchased';     // 기본값: 구매 재료 (스펙 §10-2 — 첫인상을 기존 재료 관리와 같게)
+  var expandedItemId = null;
+  var itemUnpricedOnly = false;     // "단가 미입력만 보기" 토글 — 이름/분류 검색과 AND로 함께 걸린다
+
+  var PURCHASE_UNIT_GRAMS = { g: 1, kg: 1000, ml: 1, l: 1000 };
+
+  function wonFmt(n){ return Math.round(n || 0).toLocaleString('ko-KR'); }
+  function won2Fmt(n){ return (Math.round((n || 0) * 100) / 100).toLocaleString('ko-KR'); }
+
+  // 구매 정보 → 원/g, 원/개 (스펙 §12-4).
+  // 개수로 사면 개당 가격은 나눗셈으로 바로 나오지만, 원/g은 "1개당 사용 무게"가 있어야 한다 —
+  // 나눌 때 구매 기준 무게가 아니라 **사용 무게**로 나눠야 껍질값이 원가에 남는다.
+  function purchasedUnitCost(it){
+    var amount = parseFloat(it.purchase_amount) || 0;
+    var price = parseFloat(it.purchase_price) || 0;
+    var usable = parseFloat(it.usable_weight_g) || 0;
+    if (it.purchase_unit === 'ea'){
+      var perEa = amount > 0 ? price / amount : 0;
+      return { perGram: usable > 0 ? perEa / usable : 0, perEa: perEa };
+    }
+    var grams = amount * (PURCHASE_UNIT_GRAMS[it.purchase_unit] || 1);
+    var perGram = grams > 0 ? price / grams : 0;
+    return { perGram: perGram, perEa: usable > 0 ? perGram * usable : 0 };
+  }
+
+  // "단가 0"과 "단가 미입력"을 구분한다 (스펙 §10-6). 물은 진짜 0원이므로 가격이 아니라
+  // **구매량을 입력했는지**로 판단한다 — 프로토타입에서 물이 "단가 없음"으로 잡혀 발견한 규칙.
+  function isItemPriced(it){
+    if (it.kind === 'purchased') return (parseFloat(it.purchase_amount) || 0) > 0;
+    if (it.cost_mode === 'manual') return it.manual_cost_per_gram !== null && it.manual_cost_per_gram !== undefined;
+    return true; // auto는 하위에서 판단
+  }
+
+  // 스펙 §5의 롤업. manual을 만나면 거기서 멈춘다(잎으로 취급) — 사전발효반죽을 수동 단가로
+  // 두면 실질 깊이가 1~2단계라 성능 부담이 없고, 연결(§3.3b)했으면 재귀로 끝까지 내려간다.
+  function rollupCost(itemId, memo, visiting){
+    memo = memo || {}; visiting = visiting || {};
+    if (visiting[itemId]) return { perGram: 0, perEa: 0, unpriced: ['(순환 참조)'], yieldG: 0, totalCost: 0 };
+    if (memo[itemId]) return memo[itemId];
+
+    var it = itemsById[itemId];
+    if (!it) return { perGram: 0, perEa: 0, unpriced: ['(삭제된 품목)'], yieldG: 0, totalCost: 0 };
+
+    if (it.kind === 'purchased' || it.cost_mode === 'manual'){
+      var r;
+      if (it.kind === 'purchased'){
+        var c = purchasedUnitCost(it);
+        r = { perGram: c.perGram, perEa: c.perEa, unpriced: isItemPriced(it) ? [] : [it.name], yieldG: 0, totalCost: 0 };
+      } else {
+        var m = parseFloat(it.manual_cost_per_gram) || 0;
+        r = { perGram: m, perEa: parseFloat(it.manual_cost_per_ea) || 0,
+              unpriced: isItemPriced(it) ? [] : [it.name], yieldG: 0, totalCost: 0 };
+      }
+      return (memo[itemId] = r);
+    }
+
+    visiting[itemId] = true;
+    var lines = bomLinesByParent[itemId] || [];
+    var flourG = 1000; // pct 라인의 기준 밀가루 무게 — 비율만 쓰므로 어떤 값이든 결과가 같다
+    var totalCost = 0, totalWeight = 0, unpriced = [];
+    lines.forEach(function(line){
+      var child = rollupCost(line.child_item_id, memo, visiting);
+      var g = bomLineGrams(line, child, flourG);
+      var raw = line.qty_unit === 'ea' ? (parseFloat(line.qty) || 0) * child.perEa : g * child.perGram;
+      var loss = Math.max(0, Math.min(99, parseFloat(line.loss_pct) || 0)) / 100;
+      totalCost += loss > 0 ? raw / (1 - loss) : raw;
+      totalWeight += g;
+      child.unpriced.forEach(function(n){ if (unpriced.indexOf(n) === -1) unpriced.push(n); });
+    });
+    delete visiting[itemId];
+
+    var batchG = parseFloat(it.batch_yield_g) || totalWeight;
+    var yieldG = batchG * (1 - (Math.max(0, Math.min(99, parseFloat(it.process_loss_pct) || 0)) / 100));
+    var res = {
+      perGram: yieldG > 0 ? totalCost / yieldG : 0, perEa: 0,
+      unpriced: unpriced, yieldG: yieldG, totalCost: totalCost
+    };
+    return (memo[itemId] = res);
+  }
+
+  function bomLineGrams(line, child, flourG){
+    var qty = parseFloat(line.qty) || 0;
+    if (line.qty_unit === 'pct') return flourG * qty / 100;
+    if (line.qty_unit === 'ea'){
+      var childItem = itemsById[line.child_item_id];
+      return qty * (parseFloat(childItem && childItem.usable_weight_g) || 0);
+    }
+    return qty;
+  }
+
+  // 판매 제품 1개의 원가 — 산출량으로 나누지 않는다(1개 자체가 단위이므로 라인 합계가 곧 원가).
+  function sellableUnitCost(itemId){
+    var lines = bomLinesByParent[itemId] || [];
+    var total = 0, unpriced = [];
+    lines.forEach(function(line){
+      var child = rollupCost(line.child_item_id, {}, {});
+      var g = bomLineGrams(line, child, 1000);
+      var raw = line.qty_unit === 'ea' ? (parseFloat(line.qty) || 0) * child.perEa : g * child.perGram;
+      var loss = Math.max(0, Math.min(99, parseFloat(line.loss_pct) || 0)) / 100;
+      total += loss > 0 ? raw / (1 - loss) : raw;
+      child.unpriced.forEach(function(n){ if (unpriced.indexOf(n) === -1) unpriced.push(n); });
+    });
+    return { cost: total, unpriced: unpriced };
+  }
+
+  function bomLineCost(line){
+    var child = rollupCost(line.child_item_id, {}, {});
+    var g = bomLineGrams(line, child, 1000);
+    var raw = line.qty_unit === 'ea' ? (parseFloat(line.qty) || 0) * child.perEa : g * child.perGram;
+    var loss = Math.max(0, Math.min(99, parseFloat(line.loss_pct) || 0)) / 100;
+    return { grams: g, cost: loss > 0 ? raw / (1 - loss) : raw, unpriced: child.unpriced.length > 0 };
+  }
+
+  function rebuildItemIndexes(){
+    itemsById = {};
+    myItems.forEach(function(it){ itemsById[it.id] = it; });
+  }
+
+  function loadItems(){
+    return supabase.from('items').select('*').order('name').then(function(res){
+      if (res.error){ alert('품목 목록을 불러오지 못했어요: ' + res.error.message); return; }
+      myItems = res.data || [];
+      rebuildItemIndexes();
+    });
+  }
+
+  function loadBomLines(){
+    return supabase.from('bom_lines').select('*').order('sort_order').then(function(res){
+      if (res.error){ alert('배합 구성을 불러오지 못했어요: ' + res.error.message); return; }
+      bomLinesByParent = {};
+      (res.data || []).forEach(function(l){
+        (bomLinesByParent[l.parent_item_id] = bomLinesByParent[l.parent_item_id] || []).push(l);
+      });
+    });
+  }
+
+  // ---- 저장 ---------------------------------------------------------------
+  // 가격 관련 필드가 실제로 바뀐 경우에만 item_price_history에 한 줄 쌓는다 (스펙 §7).
+  // 덮어쓰지 않고 append하는 게 핵심 — 현재 단가는 "가장 최근 이력"과 항상 같다.
+  function saveItemFields(it, fields, opts){
+    opts = opts || {};
+    return supabase.from('items').update(fields).eq('id', it.id).select().then(function(res){
+      if (res.error){ alert('저장 실패: ' + res.error.message); return; }
+      if (!res.data || res.data.length === 0){ alert('저장되지 않았어요 (권한 문제일 수 있어요).'); return; }
+      Object.keys(fields).forEach(function(k){ it[k] = res.data[0][k]; });
+      if (opts.appendHistory) return appendPriceHistory(it);
+    });
+  }
+
+  function appendPriceHistory(it){
+    var c = purchasedUnitCost(it);
+    var last = (itemHistoryCache[it.id] || [])[0];
+    // 값이 실제로 달라졌을 때만 쌓는다 — 같은 값으로 저장을 반복해도 이력이 늘지 않게.
+    if (last &&
+        Number(last.purchase_amount) === (parseFloat(it.purchase_amount) || 0) &&
+        last.purchase_unit === it.purchase_unit &&
+        Number(last.purchase_price) === (parseFloat(it.purchase_price) || 0)) return Promise.resolve();
+    return supabase.from('item_price_history').insert({
+      item_id: it.id,
+      purchase_amount: parseFloat(it.purchase_amount) || 0,
+      purchase_unit: it.purchase_unit,
+      purchase_price: parseFloat(it.purchase_price) || 0,
+      price_per_gram: c.perGram,
+      source: 'manual'
+    }).select().then(function(res){
+      if (res.error){ alert('가격 이력 저장 실패: ' + res.error.message); return; }
+      itemHistoryCache[it.id] = (res.data || []).concat(itemHistoryCache[it.id] || []);
+    });
+  }
+
+  function loadItemHistory(itemId){
+    if (itemHistoryCache[itemId]) return Promise.resolve(itemHistoryCache[itemId]);
+    return supabase.from('item_price_history').select('*').eq('item_id', itemId)
+      .order('effective_date', { ascending: false }).order('id', { ascending: false })
+      .then(function(res){
+        if (res.error) return [];
+        return (itemHistoryCache[itemId] = res.data || []);
+      });
+  }
+
+  // ---- 목록 ---------------------------------------------------------------
+  var ITEM_FILTERS = [
+    { key: 'all', label: '전체' },
+    { key: 'purchased', label: '구매 재료' },
+    { key: 'dough', label: '반죽·반제품' },
+    { key: 'product', label: '판매 제품' }
+  ];
+
+  function itemMatchesFilter(it, key){
+    if (key === 'all') return true;
+    if (key === 'purchased') return it.kind === 'purchased';
+    if (key === 'dough') return it.kind === 'made' && !it.is_sellable;
+    if (key === 'product') return !!it.is_sellable;
+    return true;
+  }
+
+  function renderItemChips(){
+    itemChipBarEl.innerHTML = '';
+    ITEM_FILTERS.forEach(function(f){
+      var count = myItems.filter(function(it){ return itemMatchesFilter(it, f.key); }).length;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'item-chip' + (itemFilter === f.key ? ' active' : '');
+      b.textContent = f.label + ' ' + count;
+      b.addEventListener('click', function(){ itemFilter = f.key; expandedItemId = null; renderItemsList(); });
+      itemChipBarEl.appendChild(b);
+    });
+  }
+
+  function itemSummaryText(it){
+    if (it.is_sellable){
+      var s = sellableUnitCost(it.id);
+      var price = parseFloat(it.selling_price) || 0;
+      var margin = price - s.cost;
+      var rate = price > 0 ? Math.round(margin / price * 100) : null;
+      return '1개당 ' + wonFmt(s.cost) + '원' +
+        (price > 0 ? ' · 마진 ' + wonFmt(margin) + '원 (' + rate + '%)' : '') +
+        (s.unpriced.length ? '\n단가 없음: ' + s.unpriced.join(', ') : '');
+    }
+    if (it.kind === 'purchased'){
+      if (!isItemPriced(it)) return '단가 미입력';
+      var c = purchasedUnitCost(it);
+      if (it.purchase_unit === 'ea'){
+        return '개당 ' + wonFmt(c.perEa) + '원' +
+          (c.perGram > 0 ? ' · ' + won2Fmt(c.perGram) + '원/g' : ' · 1개당 사용 무게 미입력');
+      }
+      return won2Fmt(c.perGram) + '원/g' + (c.perGram === 0 ? ' (무상)' : '');
+    }
+    var r = rollupCost(it.id, {}, {});
+    if (it.cost_mode === 'manual'){
+      return isItemPriced(it) ? (won2Fmt(r.perGram) + '원/g (직접 입력)') : '단가 미입력';
+    }
+    return won2Fmt(r.perGram) + '원/g' + (r.unpriced.length ? '\n단가 없음: ' + r.unpriced.join(', ') : '');
+  }
+
+  function itemHasIssue(it){
+    if (it.is_sellable) return sellableUnitCost(it.id).unpriced.length > 0;
+    if (it.kind === 'purchased') return !isItemPriced(it);
+    if (it.cost_mode === 'manual') return !isItemPriced(it);
+    return rollupCost(it.id, {}, {}).unpriced.length > 0;
+  }
+
+  function itemKindBadge(it){
+    if (it.is_sellable) return { text: '판매 제품', cls: 'sellable' };
+    if (it.kind === 'made') return { text: '반죽', cls: '' };
+    return { text: '구매', cls: '' };
+  }
+
+  function renderItemsList(){
+    renderItemChips();
+
+    var unpricedCount = myItems.filter(function(it){
+      return it.kind === 'purchased' && it.is_active !== false && !isItemPriced(it);
+    }).length;
+    itemUnpricedHintEl.style.display = unpricedCount ? 'block' : 'none';
+    itemUnpricedHintEl.textContent = '단가 미입력 ' + unpricedCount + '개 — 눌러서 그것만 보기';
+
+    var q = (itemSearchInput.value || '').trim().toLowerCase();
+    var visible = myItems.filter(function(it){
+      if (!itemMatchesFilter(it, itemFilter)) return false;
+      if (itemUnpricedOnly && isItemPriced(it)) return false;
+      if (q && it.name.toLowerCase().indexOf(q) === -1 &&
+          (it.category || '').toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+
+    itemListEl.innerHTML = '';
+    if (visible.length === 0){
+      var empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = myItems.length === 0 ? '아직 등록된 재료가 없어요.' : '해당하는 재료가 없어요.';
+      itemListEl.appendChild(empty);
+      return;
+    }
+
+    visible.forEach(function(it){
+      var row = document.createElement('div');
+      row.className = 'acc-row';
+      if (expandedItemId === it.id) row.setAttribute('data-expanded', 'true');
+
+      var badge = itemKindBadge(it);
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'acc-row-toggle';
+      toggle.setAttribute('aria-expanded', expandedItemId === it.id ? 'true' : 'false');
+      toggle.innerHTML =
+        '<div class="acc-row-toggle-top">' +
+          '<span class="acc-row-name-label"></span>' +
+          '<span class="kind-badge"></span>' +
+          '<svg class="acc-row-warn-icon" style="display:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="확인 필요">' +
+            '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>' +
+            '<line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>' +
+          '</svg>' +
+          '<svg class="acc-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+        '</div>' +
+        '<div class="acc-row-toggle-summary"></div>';
+      toggle.querySelector('.acc-row-name-label').textContent = it.name + (it.is_active === false ? ' (사용중지)' : '');
+      var badgeEl = toggle.querySelector('.kind-badge');
+      badgeEl.textContent = badge.text;
+      if (badge.cls) badgeEl.classList.add(badge.cls);
+      toggle.querySelector('.acc-row-toggle-summary').textContent = itemSummaryText(it);
+      if (itemHasIssue(it)) toggle.querySelector('.acc-row-warn-icon').style.display = 'block';
+      toggle.addEventListener('click', function(){
+        expandedItemId = (expandedItemId === it.id) ? null : it.id;
+        renderItemsList();
+      });
+      row.appendChild(toggle);
+
+      if (expandedItemId === it.id){
+        var detail = document.createElement('div');
+        detail.className = 'acc-row-detail';
+        if (it.is_sellable) buildSellableItemDetail(detail, it);
+        else if (it.kind === 'made') buildMadeItemDetail(detail, it);
+        else buildPurchasedItemDetail(detail, it);
+        row.appendChild(detail);
+      }
+      itemListEl.appendChild(row);
+    });
+  }
+
+  itemUnpricedHintEl.addEventListener('click', function(){
+    itemUnpricedOnly = !itemUnpricedOnly;
+    expandedItemId = null;
+    renderItemsList();
+  });
+
+  // ---- 상세: 공용 입력 행 --------------------------------------------------
+  function itemNumberRow(parent, label, value, onCommit, unit){
+    var row = document.createElement('div');
+    row.className = 'field-row';
+    var lab = document.createElement('span');
+    lab.className = 'field-label';
+    lab.textContent = label;
+    var inp = document.createElement('input');
+    inp.type = 'number';
+    inp.inputMode = 'decimal';
+    inp.style.width = '96px';
+    inp.value = (value === null || value === undefined || value === '') ? '' : value;
+    // change(=blur/확정)에서만 저장한다 — input마다 저장하면 가격 이력이 타이핑 중간값으로 쌓인다.
+    inp.addEventListener('change', function(){ onCommit(inp.value === '' ? null : parseFloat(inp.value)); });
+    row.appendChild(lab); row.appendChild(inp);
+    if (unit){
+      var u = document.createElement('span');
+      u.className = 'unit'; u.textContent = unit;
+      row.appendChild(u);
+    }
+    parent.appendChild(row);
+    return inp;
+  }
+
+  // ---- 상세: 구매 재료 ----------------------------------------------------
+  function buildPurchasedItemDetail(el, it){
+    var isEa = it.purchase_unit === 'ea';
+
+    // 이름은 구매 품목에서만 고칠 수 있다 — 제조 품목의 이름은 레시피 이름을 따라가므로
+    // 여기서 바꾸면 레시피와 어긋난다(레시피 화면에서 고쳐야 한다).
+    var nameRow = document.createElement('div');
+    nameRow.className = 'field-row';
+    var nameLab = document.createElement('span');
+    nameLab.className = 'field-label'; nameLab.textContent = '이름';
+    var nameInp = document.createElement('input');
+    nameInp.className = 'text-input';
+    nameInp.value = it.name || '';
+    nameInp.addEventListener('change', function(){
+      var v = nameInp.value.trim();
+      if (!v){ nameInp.value = it.name; return; }  // 빈 이름은 목록에서 찾을 수 없게 되므로 되돌린다
+      it.name = v;
+      saveItemFields(it, { name: v }).then(function(){ renderItemsList(); });
+    });
+    nameRow.appendChild(nameLab); nameRow.appendChild(nameInp);
+    el.appendChild(nameRow);
+
+    var buyRow = document.createElement('div');
+    buyRow.className = 'field-row';
+    var buyLab = document.createElement('span');
+    buyLab.className = 'field-label'; buyLab.textContent = '구매';
+    buyRow.appendChild(buyLab);
+
+    var amt = document.createElement('input');
+    amt.type = 'number'; amt.inputMode = 'decimal'; amt.style.width = '76px';
+    amt.value = it.purchase_amount > 0 ? it.purchase_amount : '';
+    var unitSel = document.createElement('select');
+    unitSel.className = 'text-input';
+    unitSel.style.flex = '0 0 72px'; unitSel.style.minWidth = '72px';
+    ['g','kg','ml','l','ea'].forEach(function(u){
+      var o = document.createElement('option');
+      o.value = u; o.textContent = (u === 'ea' ? '개' : u);
+      if (it.purchase_unit === u) o.selected = true;
+      unitSel.appendChild(o);
+    });
+    var price = document.createElement('input');
+    price.type = 'number'; price.inputMode = 'decimal'; price.style.width = '96px';
+    price.value = it.purchase_price > 0 ? it.purchase_price : '';
+    var wonU = document.createElement('span');
+    wonU.className = 'unit'; wonU.textContent = '원';
+    buyRow.appendChild(amt); buyRow.appendChild(unitSel); buyRow.appendChild(price); buyRow.appendChild(wonU);
+    el.appendChild(buyRow);
+
+    function commitPurchase(){
+      var next = {
+        purchase_amount: parseFloat(amt.value) || 0,
+        purchase_unit: unitSel.value,
+        purchase_price: parseFloat(price.value) || 0
+      };
+      var changed = next.purchase_amount !== (parseFloat(it.purchase_amount) || 0) ||
+                    next.purchase_unit !== it.purchase_unit ||
+                    next.purchase_price !== (parseFloat(it.purchase_price) || 0);
+      Object.assign(it, next);
+      next.price_per_gram = purchasedUnitCost(it).perGram;
+      saveItemFields(it, next, { appendHistory: changed }).then(function(){ renderItemsList(); });
+    }
+    amt.addEventListener('change', commitPurchase);
+    price.addEventListener('change', commitPurchase);
+    unitSel.addEventListener('change', commitPurchase);
+
+    // 개수로 사면 "1개당 사용 무게"가 있어야 그램 배합에 쓸 수 있다 (스펙 §12) —
+    // 없으면 못 쓰는 상태이므로 접어두지 않고 바로 보여준다.
+    if (isEa){
+      itemNumberRow(el, '1개당 사용 무게', it.usable_weight_g, function(v){
+        it.usable_weight_g = v;
+        saveItemFields(it, { usable_weight_g: v, price_per_gram: purchasedUnitCost(it).perGram })
+          .then(function(){ renderItemsList(); });
+      }, 'g');
+      var uh = document.createElement('p');
+      uh.className = 'hint';
+      uh.textContent = '손질 후, 실제 배합에 들어가는 무게예요 (계란이면 껍질 깐 무게).';
+      el.appendChild(uh);
+
+      if (it._showBuyWeight){
+        itemNumberRow(el, '구매 기준 무게', it.unit_weight_g, function(v){
+          it.unit_weight_g = v;
+          saveItemFields(it, { unit_weight_g: v }).then(function(){ renderItemsList(); });
+        }, 'g');
+      } else {
+        var more = document.createElement('button');
+        more.type = 'button'; more.className = 'tag-toggle-btn';
+        more.textContent = '+ 구매 기준 무게 입력 (선택)';
+        more.addEventListener('click', function(){ it._showBuyWeight = true; renderItemsList(); });
+        el.appendChild(more);
+      }
+    }
+
+    var c = purchasedUnitCost(it);
+    var res = document.createElement('p');
+    res.className = 'hint';
+    if (!isItemPriced(it)){
+      res.className = 'hint warn-hint';
+      res.textContent = '구매량과 가격을 입력하면 단가가 계산돼요.';
+    } else if (isEa){
+      if (!(c.perGram > 0)){
+        res.className = 'hint warn-hint';
+        res.textContent = '→ 개당 ' + wonFmt(c.perEa) + '원 · 1개당 사용 무게를 입력하면 그램으로도 쓸 수 있어요';
+      } else {
+        var lossTxt = '';
+        var uw = parseFloat(it.unit_weight_g) || 0, sw = parseFloat(it.usable_weight_g) || 0;
+        if (uw > 0 && sw > 0 && uw > sw) lossTxt = ' (손질 로스 ' + Math.round((1 - sw / uw) * 100) + '%)';
+        res.textContent = '→ 개당 ' + wonFmt(c.perEa) + '원 · 1g당 ' + won2Fmt(c.perGram) + '원' + lossTxt;
+      }
+    } else {
+      res.textContent = '→ 1g당 ' + won2Fmt(c.perGram) + '원' + (c.perGram === 0 ? ' (무상)' : '');
+    }
+    el.appendChild(res);
+
+    var supRow = document.createElement('div');
+    supRow.className = 'field-row';
+    var supLab = document.createElement('span');
+    supLab.className = 'field-label'; supLab.textContent = '구매품명';
+    var sup = document.createElement('input');
+    sup.className = 'text-input';
+    sup.value = it.supplier_item_name || '';
+    sup.placeholder = '예: 앵커버터 (비우면 이름과 같음)';
+    sup.addEventListener('change', function(){
+      it.supplier_item_name = sup.value;
+      saveItemFields(it, { supplier_item_name: sup.value });
+    });
+    supRow.appendChild(supLab); supRow.appendChild(sup);
+    el.appendChild(supRow);
+
+    var catRow = document.createElement('div');
+    catRow.className = 'field-row';
+    var catLab = document.createElement('span');
+    catLab.className = 'field-label'; catLab.textContent = '분류';
+    var cat = document.createElement('input');
+    cat.className = 'text-input';
+    cat.value = it.category || '';
+    cat.placeholder = '예: 유제품';
+    cat.addEventListener('change', function(){
+      it.category = cat.value;
+      saveItemFields(it, { category: cat.value }).then(function(){ renderItemsList(); });
+    });
+    catRow.appendChild(catLab); catRow.appendChild(cat);
+    el.appendChild(catRow);
+
+    // 가격 변화 (스펙 §7.4) — 펼칠 때 그 품목 것만 불러온다.
+    var histWrap = document.createElement('div');
+    el.appendChild(histWrap);
+    loadItemHistory(it.id).then(function(rows){
+      if (!rows || rows.length === 0) return;
+      var d = document.createElement('div'); d.className = 'divider'; histWrap.appendChild(d);
+      var h = document.createElement('p');
+      h.className = 'field-label'; h.style.minWidth = 'auto'; h.textContent = '가격 변화';
+      histWrap.appendChild(h);
+      var ph = document.createElement('div'); ph.className = 'price-history';
+      rows.forEach(function(row, i){
+        var prev = rows[i + 1];
+        var delta = '', cls = '';
+        if (prev && Number(prev.price_per_gram) > 0){
+          var pct = Math.round((Number(row.price_per_gram) - Number(prev.price_per_gram)) / Number(prev.price_per_gram) * 100);
+          if (pct !== 0){ delta = (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%'; cls = pct > 0 ? 'up' : 'down'; }
+        }
+        var r = document.createElement('div');
+        r.className = 'ph-row';
+        r.innerHTML = '<span class="ph-date"></span><span class="ph-price"></span><span class="ph-unit"></span><span class="ph-delta ' + cls + '"></span>';
+        r.querySelector('.ph-date').textContent = (row.effective_date || '').slice(2); // YY-MM-DD → MM-DD 자리 절약
+        r.querySelector('.ph-price').textContent = wonFmt(row.purchase_price) + '원 / ' + row.purchase_amount + (row.purchase_unit === 'ea' ? '개' : row.purchase_unit);
+        r.querySelector('.ph-unit').textContent = row.purchase_unit === 'ea' ? '' : (won2Fmt(row.price_per_gram) + '원/g');
+        r.querySelector('.ph-delta').textContent = delta;
+        ph.appendChild(r);
+      });
+      histWrap.appendChild(ph);
+    });
+
+    var actions = document.createElement('div');
+    actions.className = 'field-row';
+    actions.style.marginTop = '16px';
+    var toggleActive = document.createElement('button');
+    toggleActive.type = 'button'; toggleActive.className = 'io-btn';
+    toggleActive.textContent = it.is_active === false ? '다시 사용' : '사용중지';
+    toggleActive.addEventListener('click', function(){
+      var next = it.is_active === false;
+      it.is_active = next;
+      saveItemFields(it, { is_active: next }).then(function(){ renderItemsList(); });
+    });
+    actions.appendChild(toggleActive);
+    el.appendChild(actions);
+  }
+
+  // ---- 상세: 제조 품목(반죽) ----------------------------------------------
+  function buildMadeItemDetail(el, it){
+    var segWrap = document.createElement('div');
+    segWrap.className = 'field-row';
+    var segLab = document.createElement('span');
+    segLab.className = 'field-label'; segLab.textContent = '원가 산정';
+    segWrap.appendChild(segLab);
+    var seg = document.createElement('div');
+    seg.className = 'seg';
+    ['manual', 'auto'].forEach(function(mode){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = mode === 'manual' ? '직접 입력' : '배합에서 계산';
+      b.setAttribute('aria-pressed', it.cost_mode === mode ? 'true' : 'false');
+      b.addEventListener('click', function(){
+        it.cost_mode = mode;
+        saveItemFields(it, { cost_mode: mode }).then(function(){ renderItemsList(); });
+      });
+      seg.appendChild(b);
+    });
+    segWrap.appendChild(seg);
+    el.appendChild(segWrap);
+
+    if (it.cost_mode === 'manual'){
+      itemNumberRow(el, '1g당 원가', it.manual_cost_per_gram, function(v){
+        it.manual_cost_per_gram = v;
+        saveItemFields(it, { manual_cost_per_gram: v }).then(function(){ renderItemsList(); });
+      }, '원');
+      var mh = document.createElement('p');
+      mh.className = 'hint';
+      mh.textContent = '배합을 따로 등록하지 않고 넘어가고 싶을 때 쓰세요. 0을 넣어도 됩니다(원가에 안 잡힘).';
+      el.appendChild(mh);
+      return;
+    }
+
+    var r = rollupCost(it.id, {}, {});
+    var sum = document.createElement('div');
+    sum.className = 'cost-summary';
+    sum.innerHTML =
+      '<div class="cost-summary-row big"><span class="k">1g당 원가</span><span class="v">' + won2Fmt(r.perGram) + '원</span></div>' +
+      '<div class="cost-summary-row"><span class="k">배합 산출량</span><span class="v">' + wonFmt(r.yieldG) + 'g</span></div>' +
+      '<div class="cost-summary-row"><span class="k">배합 총원가</span><span class="v">' + wonFmt(r.totalCost) + '원</span></div>';
+    el.appendChild(sum);
+
+    if (r.unpriced.length){
+      var w = document.createElement('p');
+      w.className = 'hint warn-hint';
+      w.textContent = '⚠ 단가 없는 재료: ' + r.unpriced.join(', ');
+      el.appendChild(w);
+    }
+
+    var head = document.createElement('p');
+    head.className = 'field-label'; head.style.minWidth = 'auto';
+    head.textContent = '구성 (배합)';
+    el.appendChild(head);
+    renderItemBomLines(el, it, true);
+
+    var hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = '배합 비율은 계산기(레시피 화면)에서 수정해요.';
+    el.appendChild(hint);
+
+    var d = document.createElement('div'); d.className = 'divider'; el.appendChild(d);
+    itemNumberRow(el, '산출량', it.batch_yield_g, function(v){
+      it.batch_yield_g = v;
+      saveItemFields(it, { batch_yield_g: v }).then(function(){ renderItemsList(); });
+    }, 'g');
+    var yh = document.createElement('p');
+    yh.className = 'hint';
+    yh.textContent = '비워두면 재료 합계(' + wonFmt(r.yieldG) + 'g)로 자동 계산돼요.';
+    el.appendChild(yh);
+    itemNumberRow(el, '제조 로스', it.process_loss_pct, function(v){
+      it.process_loss_pct = v || 0;
+      saveItemFields(it, { process_loss_pct: v || 0 }).then(function(){ renderItemsList(); });
+    }, '%');
+    var ph2 = document.createElement('p');
+    ph2.className = 'hint';
+    ph2.textContent = '믹싱볼에 남거나 발효 중 줄어드는 양이에요. 모르면 비워두세요.';
+    el.appendChild(ph2);
+  }
+
+  // ---- 상세: 판매 제품 ----------------------------------------------------
+  function buildSellableItemDetail(el, it){
+    var s = sellableUnitCost(it.id);
+    var price = parseFloat(it.selling_price) || 0;
+    var margin = price - s.cost;
+    var rate = price > 0 ? Math.round(margin / price * 100) : null;
+
+    var sum = document.createElement('div');
+    sum.className = 'cost-summary';
+    sum.innerHTML =
+      '<div class="cost-summary-row big"><span class="k">1개당 원가</span><span class="v">' + wonFmt(s.cost) + '원</span></div>' +
+      '<div class="cost-summary-row"><span class="k">판매가</span><span class="v">' + wonFmt(price) + '원</span></div>' +
+      '<div class="cost-summary-row margin"><span class="k">마진</span><span class="v">' + wonFmt(margin) + '원' + (rate !== null ? ' (' + rate + '%)' : '') + '</span></div>';
+    el.appendChild(sum);
+
+    if (s.unpriced.length){
+      var w = document.createElement('p');
+      w.className = 'hint warn-hint';
+      w.textContent = '⚠ 단가 없는 재료: ' + s.unpriced.join(', ') + ' — 원가가 실제보다 낮게 나옵니다.';
+      el.appendChild(w);
+    }
+
+    var head = document.createElement('p');
+    head.className = 'field-label'; head.style.minWidth = 'auto';
+    head.textContent = '구성';
+    el.appendChild(head);
+    renderItemBomLines(el, it, false);
+
+    var d = document.createElement('div'); d.className = 'divider'; el.appendChild(d);
+    itemNumberRow(el, '판매가', it.selling_price, function(v){
+      it.selling_price = v || 0;
+      saveItemFields(it, { selling_price: v || 0 }).then(function(){ renderItemsList(); });
+    }, '원');
+  }
+
+  // ---- 구성 라인 목록 ------------------------------------------------------
+  function renderItemBomLines(el, it, readOnlyQty){
+    var lines = bomLinesByParent[it.id] || [];
+    if (!lines.length){
+      var p = document.createElement('p');
+      p.className = 'hint';
+      p.textContent = '아직 구성이 없어요.';
+      el.appendChild(p);
+      return;
+    }
+    lines.forEach(function(line){
+      var child = itemsById[line.child_item_id];
+      var lc = bomLineCost(line);
+
+      var row = document.createElement('div');
+      row.className = 'bom-line';
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'bom-line-name';
+      nameEl.textContent = line.display_name || (child ? child.name : '(삭제된 재료)');
+      var subText = line.qty_unit === 'pct' ? (wonFmt(lc.grams) + 'g')
+        : (child && child.kind === 'made' && child.cost_mode === 'manual' ? '직접 입력 단가' : '');
+      if (subText){
+        var sub = document.createElement('span');
+        sub.className = 'sub'; sub.textContent = subText;
+        nameEl.appendChild(sub);
+      }
+      row.appendChild(nameEl);
+
+      if (readOnlyQty){
+        var qtyLabel = document.createElement('span');
+        qtyLabel.className = 'bom-line-cost';
+        qtyLabel.style.color = 'var(--ink-soft)';
+        qtyLabel.style.minWidth = '52px';
+        qtyLabel.textContent = (Math.round((parseFloat(line.qty) || 0) * 100) / 100) +
+          (line.qty_unit === 'pct' ? '%' : line.qty_unit === 'ea' ? '개' : 'g');
+        row.appendChild(qtyLabel);
+      } else {
+        var qty = document.createElement('input');
+        qty.type = 'number'; qty.inputMode = 'decimal'; qty.className = 'bom-line-qty';
+        qty.value = line.qty;
+        qty.addEventListener('change', function(){
+          var v = parseFloat(qty.value) || 0;
+          line.qty = v;
+          supabase.from('bom_lines').update({ qty: v }).eq('id', line.id).select().then(function(res){
+            if (res.error){ alert('저장 실패: ' + res.error.message); return; }
+            renderItemsList();
+          });
+        });
+        row.appendChild(qty);
+        var u = document.createElement('span');
+        u.className = 'unit'; u.textContent = line.qty_unit === 'ea' ? '개' : 'g';
+        row.appendChild(u);
+      }
+
+      var costEl = document.createElement('span');
+      if (lc.unpriced){
+        costEl.className = 'bom-line-cost unpriced';
+        costEl.textContent = '단가 없음';
+      } else {
+        costEl.className = 'bom-line-cost';
+        costEl.textContent = wonFmt(lc.cost) + '원';
+      }
+      row.appendChild(costEl);
+      el.appendChild(row);
+    });
+  }
+
+  // ---- 열기/닫기 + 배선 ----------------------------------------------------
+  function openItemsModal(){
+    itemSearchInput.value = '';
+    itemUnpricedOnly = false;
+    expandedItemId = null;
+    itemHistoryCache = {};
+    Promise.all([loadItems(), loadBomLines()]).then(function(){ renderItemsList(); });
+    showSubpage(itemsPageEl);
+    closeItemsBtn.focus();
+  }
+  function closeItemsModal(){ hideSubpage(itemsPageEl); }
+  closeItemsBtn.addEventListener('click', closeItemsModal);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && itemsPageEl.style.display !== 'none') closeItemsModal();
+  });
+  itemSearchInput.addEventListener('input', function(){ expandedItemId = null; renderItemsList(); });
+  document.getElementById('openLegacyIngredientsBtn').addEventListener('click', function(){
+    closeAccountMenu();
+    openIngredientManagerModal();
+  });
+  addItemBtn.addEventListener('click', function(){
+    if (!currentUser) return;
+    supabase.from('items').insert({
+      owner_id: currentUser.id, name: '새 재료', kind: 'purchased', cost_mode: 'manual', category: '미분류'
+    }).select().single().then(function(res){
+      if (res.error){ alert('추가 실패: ' + res.error.message); return; }
+      myItems.push(res.data);
+      rebuildItemIndexes();
+      itemFilter = 'purchased';
+      itemSearchInput.value = '';
+      itemUnpricedOnly = false;
+      expandedItemId = res.data.id;
+      renderItemsList();
+      var row = itemListEl.querySelector('.acc-row[data-expanded="true"]');
+      if (row) row.scrollIntoView({ block: 'center' });
+    });
+  });
+
   function applyAuthUI(){
     closeAccountMenu();
     if (currentUser){
@@ -6479,10 +7355,15 @@
       navCostBtn.classList.add('locked');
       navCostBtn.setAttribute('aria-label', '원가 계산 (로그인 필요)');
       closeIngredientManagerModal();
+      closeItemsModal();
       closeCostCalcModal();
       closeRecipeTagsModal();
       closeShareManagerModal();
       closeMyRecipesListModal();
+      myItems = [];
+      itemsById = {};
+      bomLinesByParent = {};
+      itemHistoryCache = {};
       myRecipes = [];
       myIngredients = [];
       myCompositeProducts = [];
@@ -6609,9 +7490,12 @@
     // 2026-07-26: 로그인 전엔 흐리게 보이지만(.locked) 눌러볼 수는 있다 — 그냥 숨기는 것보다
     // "여기 기능이 있다"는 걸 알려주는 편이 낫다는 판단. 눌렀을 때 조용히 아무 일도 없는 것보다
     // 로그인이 필요하다는 걸 토스트로 짚어준다.
+    // 2026-08-18: "재료" 탭이 이제 새 BOM 품목 화면(#itemsPage)을 연다. 구 재료 관리
+    // (#ingredientManagerPage)는 CSV 가져오기가 아직 그쪽에만 있어서 계정 메뉴에 남겨뒀다
+    // (스펙 §9 4단계에서 옮긴다). 새 화면에 문제가 생기면 이 한 줄만 되돌리면 원래대로 돌아간다.
     navIngredientsBtn.addEventListener('click', function(){
       if (!currentUser){ showToast('로그인 후 이용할 수 있어요'); return; }
-      openIngredientManagerModal();
+      openItemsModal();
     });
     navCostBtn.addEventListener('click', function(){
       if (!currentUser){ showToast('로그인 후 이용할 수 있어요'); return; }
