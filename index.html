@@ -546,6 +546,14 @@
     background: var(--accent-soft); outline: none;
   }
   .combo-dropdown-item.combo-add-new{ color: var(--accent); font-weight: 700; }
+  /* 2026-08-18: 후보 이름만으로는 어느 걸 골라야 할지 알 수 없어서(설탕 후보 4개 등)
+     단가/구매정보/갱신일을 두 번째 줄로 같이 보여준다. */
+  .combo-item-name{ display:block; }
+  .combo-item-meta{
+    display:block; margin-top: 3px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft);
+  }
+  .combo-item-meta.warn-hint{ color: var(--danger); }
   .combo-dropdown-empty{ padding: 10px 14px; font-size: 13px; color: var(--ink-soft); }
 
   /* Subpage (재료 관리 / 원가 계산): the first true "leaves the calculator" screens in this
@@ -3675,10 +3683,15 @@
         }
       });
 
+      // 2026-08-18: updated_at을 명시적으로 채운다 — DB 트리거가 없어서 여기서 안 넣으면
+      // 생성 시각(default now())에 영원히 머문다(recipes.updated_at이 같은 이유로 죽은 데이터였고
+      // 2026-07-25에 같은 방식으로 고쳤다). 재료 연결 드롭다운이 "언제 갱신된 단가인지"를
+      // 보여주려면 이 값이 실제로 움직여야 한다.
       function saveFields(fields){
-        supabase.from('ingredients').update(fields).eq('id', ig.id).then(function(res){
+        var payload = Object.assign({ updated_at: new Date().toISOString() }, fields);
+        supabase.from('ingredients').update(payload).eq('id', ig.id).then(function(res){
           if (res.error){ alert('재료 정보 저장 실패: ' + res.error.message); return; }
-          Object.keys(fields).forEach(function(k){ ig[k] = fields[k]; });
+          Object.keys(payload).forEach(function(k){ ig[k] = payload[k]; });
         });
       }
       nameEl.addEventListener('blur', function(){
@@ -4074,7 +4087,7 @@
       }).map(function(r){ return { kind: 'recipe', id: r.id, name: r.recipe_name || '이름 없는 레시피' }; });
       var ingredientMatches = myIngredients.filter(function(ig){
         return ig.is_active !== false && (!q || ig.name.toLowerCase().indexOf(q) !== -1);
-      }).map(function(ig){ return { kind: 'ingredient', id: ig.id, name: ig.name }; });
+      }).map(function(ig){ return { kind: 'ingredient', id: ig.id, name: ig.name, ig: ig }; });
       var matches = recipeMatches.concat(ingredientMatches);
       dropdownEl.innerHTML = '';
       if (matches.length === 0){
@@ -4088,7 +4101,24 @@
         var item = document.createElement('button');
         item.type = 'button';
         item.className = 'combo-dropdown-item';
-        item.textContent = (m.kind === 'recipe' ? '[레시피] ' : '[재료] ') + m.name;
+        var nameLine = document.createElement('span');
+        nameLine.className = 'combo-item-name';
+        nameLine.textContent = (m.kind === 'recipe' ? '[레시피] ' : '[재료] ') + m.name;
+        item.appendChild(nameLine);
+        // 재료 연결 드롭다운과 같은 이유로 단가/갱신일을 같이 보여준다. 레시피는 구매 정보가
+        // 없으므로 계산된 g당 원가만 보여준다.
+        var metaLine = document.createElement('span');
+        metaLine.className = 'combo-item-meta';
+        if (m.kind === 'ingredient'){
+          metaLine.textContent = ingredientPickerMeta(m.ig);
+          if (!(m.ig.price_per_gram > 0)) metaLine.classList.add('warn-hint');
+        } else {
+          var rc = costPerGramForRecipeId(m.id);
+          metaLine.textContent = (Math.round(rc.costPerGram * 100) / 100) + '원/g' +
+            (rc.hasUnpriced ? ' · 일부 재료 단가 없음' : '');
+          if (rc.hasUnpriced) metaLine.classList.add('warn-hint');
+        }
+        item.appendChild(metaLine);
         item.addEventListener('click', function(){
           inputEl.value = m.name;
           closeDropdown();
@@ -4114,6 +4144,28 @@
   // the whole point of this screen: a recipe can keep a short generic name ("버터") while
   // being linked to a specific costed ingredient ("앵커버터") for cost calculation, without
   // the recipe's own display ever getting silently renamed to the specific brand name.
+  // 재료 선택 드롭다운의 두 번째 줄 — "단가 · 구매 정보 · 갱신일".
+  // 'ea'(개수) 단위는 price_per_gram이 0으로 남는 게 정상이라, "단가 없음"이 아니라
+  // 그램 환산이 안 된다는 걸 따로 알려준다(잘못 고를 이유가 되니까).
+  function ingredientPickerMeta(ig){
+    var parts = [];
+    if (ig.purchase_unit_type === 'ea'){
+      parts.push('개수 단위 (원가 미반영)');
+    } else if (ig.price_per_gram > 0){
+      parts.push((Math.round(ig.price_per_gram * 100) / 100) + '원/g');
+    } else {
+      parts.push('단가 없음');
+    }
+    if (ig.purchase_amount > 0 && ig.purchase_price > 0){
+      var unitLabel = ig.purchase_unit_type === 'ea' ? '개' : ig.purchase_unit_type;
+      parts.push(Math.round(ig.purchase_price).toLocaleString('ko-KR') + '원/' + ig.purchase_amount + unitLabel);
+    }
+    var when = ig.updated_at || ig.created_at;
+    if (when) parts.push(String(when).slice(0, 10).replace(/-/g, '.') + ' 갱신');
+    if (ig.is_active === false) parts.push('사용중지');
+    return parts.join(' · ');
+  }
+
   function attachIngredientLinker(inputEl, dropdownEl, row, onChange){
     function linkedName(){
       if (row.ingredientId){
@@ -4144,7 +4196,17 @@
         var item = document.createElement('button');
         item.type = 'button';
         item.className = 'combo-dropdown-item';
-        item.textContent = ig.name;
+        // 이름만 보여주면 "설탕(대한제당)" / "설탕(대한제당) 원당 100%" / "흑설탕" 중 뭘 골라야
+        // 할지 알 수 없다 — 단가와 마지막 갱신일을 같이 보여줘서 고를 수 있게 한다(2026-08-18).
+        var nameLine = document.createElement('span');
+        nameLine.className = 'combo-item-name';
+        nameLine.textContent = ig.name;
+        item.appendChild(nameLine);
+        var metaLine = document.createElement('span');
+        metaLine.className = 'combo-item-meta';
+        metaLine.textContent = ingredientPickerMeta(ig);
+        if (!(ig.price_per_gram > 0)) metaLine.classList.add('warn-hint');
+        item.appendChild(metaLine);
         item.addEventListener('click', function(){
           row.ingredientId = ig.id;
           inputEl.value = ig.name;
@@ -7644,7 +7706,11 @@
           price_per_gram: computePricePerGram(item.purchase_amount, item.purchase_unit_type, item.purchase_price)
         }).select().single();
       }).concat(changedChecked.map(function(item){
-        return supabase.from('ingredients').update(item.fields).eq('id', item.ig.id).select().single();
+        // updated_at을 같이 넣는다 — CSV로 갱신한 단가도 "언제 바뀐 값인지" 남아야 재료 연결
+        // 드롭다운의 날짜 표시가 의미를 갖는다(위 saveFields()와 같은 이유).
+        return supabase.from('ingredients')
+          .update(Object.assign({ updated_at: new Date().toISOString() }, item.fields))
+          .eq('id', item.ig.id).select().single();
       }));
       Promise.all(tasks).then(function(results){
         var failed = 0;
