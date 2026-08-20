@@ -729,6 +729,10 @@
   .kind-badge.sellable{ color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
   /* 원가 요약 박스 (제조/판매 품목 상세 상단) */
+  /* 원가 계산에서 "+ 새 재료로 추가" 직후 그 자리에 뜨는 단가 입력 패널 (2026-08-20) */
+  .inline-price-entry{ background: var(--bg-elevated); border: 1px solid var(--accent); border-radius: 10px; padding: 12px; margin: 8px 0 4px; }
+  .inline-price-entry .field-row{ margin-bottom: 8px; }
+  .inline-price-entry .field-row:last-child{ margin-bottom: 0; }
   .cost-summary{ background: var(--bg-elevated); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
   .cost-summary-row{ display:flex; justify-content:space-between; align-items:baseline; padding: 3px 0; gap: 10px; }
   .cost-summary-row .k{ font-size: 13px; color: var(--ink-soft); }
@@ -819,7 +823,6 @@
               <!-- 2026-08-18: "재료" 탭이 새 BOM 품목 화면으로 바뀌면서, 구 재료 관리는
                    CSV 가져오기 때문에 여기 임시로 남겨둔다 (스펙 §9 4단계에서 CSV를 새 화면으로
                    옮기고 나면 이 항목과 구 화면을 같이 제거한다). -->
-              <button class="menu-btn" id="openLegacyIngredientsBtn">재료 CSV 가져오기 (구버전)</button>
               <!-- 사장님 계정(gigimeal@gmail.com)일 때만 JS가 보여준다 — 실제 보안은
                    recipe_reports의 RLS가 담당, 이건 다른 사용자 눈에 안 띄게 하는 편의. -->
               <button class="menu-btn" id="openReportsBtn" style="display:none;">신고 내역</button>
@@ -1158,8 +1161,9 @@
 -->
 <!--
   BOM 품목 화면 (2026-08-18) — 스펙 2026-08-18_BOM원가계산_스펙.md §6
-  구 "재료 관리"(#ingredientManagerPage, 바로 아래)를 대체한다. 아직 병행 기간이라 구 화면도
-  계정 메뉴에 남겨뒀다 — CSV 가져오기가 아직 그쪽에만 있기 때문(§9 4단계에서 이리로 옮긴다).
+  구 "재료 관리"(#ingredientManagerPage, 바로 아래)를 대체한다. 4단계(2026-08-20)에서 CSV
+  가져오기/내보내기까지 이리로 옮겨왔고, 구 화면은 더 이상 어디서도 열리지 않는다 — 마크업과
+  코드는 6단계에서 구 테이블과 함께 지운다(지금 지우면 getElementById가 null이 되는 곳이 많다).
   이 화면은 items / bom_lines / item_price_history만 읽고 쓴다.
 -->
 <div class="subpage" id="itemsPage" style="display:none;">
@@ -1180,35 +1184,6 @@
     <div class="item-chip-bar" id="itemChipBar"></div>
     <button type="button" class="hint warn-hint hint-btn" id="itemUnpricedHint" style="display:none;"></button>
     <button class="add-btn" id="addItemBtn" style="margin-bottom:14px;">+ 재료 추가</button>
-    <div id="itemList"></div>
-  </div>
-</div>
-
-<div class="subpage" id="ingredientManagerPage" style="display:none;">
-  <div class="subpage-header">
-    <div class="subpage-header-inner">
-      <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="계산기 메인 화면으로 돌아가기">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
-          <polyline points="9 22 9 12 15 12 15 22"></polyline>
-        </svg>
-      </button>
-      <h2>재료 관리</h2>
-      <div class="header-actions subpage-header-actions"></div>
-    </div>
-  </div>
-  <div class="subpage-body">
-    <!--
-      단가 미입력 재료만 보기 — 원래는 그냥 안내 문구였는데, 그 자리에 눌러서 바로 필터링할
-      수 있게 버튼으로 바꿨다(요청: "단가 미입력 재료만 따로 볼 수 있는 기능"). renderIngredientManager()가
-      토글 상태에 따라 목록을 걸러내고, 문구 자체도 지금 필터 중인지 다시 알려준다.
-    -->
-    <button type="button" class="hint warn-hint hint-btn" id="ingredientManagerUnpricedHint" style="display:none;"></button>
-    <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
-    <!-- Pinned above the list (not below it) so adding a new ingredient never requires
-         scrolling past however long the list has grown — only finding the just-added row
-         afterward needs a scroll, which the click handler does automatically. -->
-    <button class="add-btn" id="addIngredientMasterBtn" style="margin-top:0;margin-bottom:14px;">+ 재료 추가</button>
     <div class="field-row" style="margin-bottom:14px;">
       <button type="button" class="io-btn" id="exportIngredientsCsvBtn">CSV로 내보내기</button>
       <button type="button" class="io-btn" id="importIngredientsCsvBtn">CSV 가져오기</button>
@@ -1261,6 +1236,43 @@
         <button type="button" class="io-btn" id="cancelIngredientImportBtn">취소</button>
       </div>
     </div>
+    <div id="itemList"></div>
+  </div>
+</div>
+
+<!--
+  구 "재료 관리" — 더 이상 어디서도 열리지 않는 죽은 화면이다 (BOM 4단계, 2026-08-20).
+  재료의 유일한 출처는 이제 items 이고, 이 화면의 목록/추가/삭제 코드는 전부 구 ingredients
+  표에만 쓴다. CSV 가져오기/내보내기는 위 #itemsPage 로 옮겼다.
+  마크업과 관련 JS는 6단계에서 구 테이블과 함께 한 번에 지운다 — 지금 마크업만 지우면
+  아직 남아있는 getElementById 들이 null 이 되어 초기화가 통째로 깨진다.
+-->
+<div class="subpage" id="ingredientManagerPage" style="display:none;">
+  <div class="subpage-header">
+    <div class="subpage-header-inner">
+      <button class="icon-btn" id="closeIngredientManagerBtn" aria-label="계산기 메인 화면으로 돌아가기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </button>
+      <h2>재료 관리</h2>
+      <div class="header-actions subpage-header-actions"></div>
+    </div>
+  </div>
+  <div class="subpage-body">
+    <!--
+      단가 미입력 재료만 보기 — 원래는 그냥 안내 문구였는데, 그 자리에 눌러서 바로 필터링할
+      수 있게 버튼으로 바꿨다(요청: "단가 미입력 재료만 따로 볼 수 있는 기능"). renderIngredientManager()가
+      토글 상태에 따라 목록을 걸러내고, 문구 자체도 지금 필터 중인지 다시 알려준다.
+    -->
+    <button type="button" class="hint warn-hint hint-btn" id="ingredientManagerUnpricedHint" style="display:none;"></button>
+    <input type="text" id="ingredientManagerSearch" class="text-input" autocomplete="off" placeholder="이름/카테고리로 검색" style="width:100%;margin-bottom:14px;">
+    <!-- Pinned above the list (not below it) so adding a new ingredient never requires
+         scrolling past however long the list has grown — only finding the just-added row
+         afterward needs a scroll, which the click handler does automatically. -->
+    <button class="add-btn" id="addIngredientMasterBtn" style="margin-top:0;margin-bottom:14px;">+ 재료 추가</button>
+
     <!--
       일괄/선택 삭제 — 개별 행의 "완전 삭제"는 사용중지 상태여야만 나오는 안전장치가 있지만
       (재료 하나씩 정리할 때), 여러 개를 한 번에 정리하고 싶을 때는 그 두 단계를 매번 거치는
@@ -2538,7 +2550,9 @@
   // 지적으로 기본은 접어두고("+ 태그로 필터링" 링크만), 링크를 누르거나 필터가 이미 걸려있으면
   // (아래 renderMyRecipesTagBar) 펼쳐진 채로 유지 — 태그 입력칸 접어두기와 같은 패턴.
   var myRecipesTagBarExpanded = false;
-  var myIngredients = []; // rows from `ingredients`: this user's personal ingredient master list
+  // 원가 계산 쪽이 쓰는 재료 목록. BOM 4단계(2026-08-20)부터 출처는 items 이고, 구 ingredients
+  // 표의 모양(purchase_unit_type / price_per_gram 등)으로 변환해서 담는다 — itemToIngredientView() 참고.
+  var myIngredients = [];
   // 2026-07-25: 계정 기반 공유(레시피 개별 + 태그) — RLS가 "내가 owner인 레시피/태그의 공유 행" +
   // "나에게 공유된 행"을 합쳐서 돌려주므로, select('*') 한 번으로 소유자 쪽(공유 관리 화면)과
   // 수신자 쪽(canSaveThisRecipe) 판단을 동시에 커버한다.
@@ -3047,10 +3061,34 @@
     return { costPerGram: breakdown.costPerGram, hasUnpriced: breakdown.hasUnpriced };
   }
 
+  // BOM 4단계(2026-08-20) — 재료의 유일한 출처를 items로 옮겼다. 구 ingredients 표는 더 이상
+  // 읽지도 쓰지도 않는다. 그 전까지는 원가 계산(이 화면들)이 ingredients를, 새 재료 탭이
+  // items를 봐서, 새 탭에서 입력한 단가가 원가 계산에 전혀 반영되지 않는 분기가 있었다.
+  //
+  // 기존 레시피가 저장해 둔 ingredientId는 구 ingredients.id이므로, 마이그레이션이 남겨준
+  // legacy_ingredient_id를 그대로 id로 노출해서 예전 연결이 그대로 풀리게 한다. 마이그레이션
+  // 이후 새로 만든 품목은 legacy가 없으니 자기 items.id를 쓴다 — 둘 다 유일하므로 섞여도 안전.
+  function itemToIngredientView(it){
+    var c = purchasedUnitCost(it);
+    return {
+      id: it.legacy_ingredient_id || it.id,
+      itemId: it.id,
+      name: it.name,
+      category: it.category || '',
+      purchase_amount: Number(it.purchase_amount) || 0,
+      purchase_unit_type: it.purchase_unit || 'g',
+      purchase_price: Number(it.purchase_price) || 0,
+      price_per_gram: c.perGram,
+      is_active: it.is_active !== false,
+      created_at: it.created_at,
+      updated_at: it.updated_at
+    };
+  }
+
   function loadMyIngredients(){
-    supabase.from('ingredients').select('*').order('name').then(function(res){
+    return supabase.from('items').select('*').eq('kind', 'purchased').order('name').then(function(res){
       if (res.error){ alert('재료 목록을 불러오지 못했어요: ' + res.error.message); return; }
-      myIngredients = res.data || [];
+      myIngredients = (res.data || []).map(itemToIngredientView);
     });
   }
 
@@ -3321,6 +3359,19 @@
     }
   }
 
+  // CSV 매핑/미리보기가 떠 있는 동안은 재료 목록 쪽 UI를 잠시 치운다 — 한 화면에서 두 가지를
+  // 동시에 보여주면 "지금 뭘 확인해야 하는지"가 흐려진다. 4단계(2026-08-20)에서 CSV가 구
+  // 재료 관리 화면에서 이 화면으로 옮겨오면서, 가리는 대상도 같이 옮겼다.
+  function setItemsScreenChrome(visible){
+    var v = visible ? '' : 'none';
+    itemListEl.style.display = v;
+    addItemBtn.style.display = v;
+    itemSearchInput.style.display = v;
+    itemChipBarEl.style.display = visible ? '' : 'none';
+    if (visible) renderItemsList();          // 숨긴 사이 바뀐 목록/단가 미입력 배지를 다시 맞춘다
+    else itemUnpricedHintEl.style.display = 'none';
+  }
+
   // Column-mapping step for a non-own-format CSV: lets the user say which column is the
   // item name / unit(-with-weight) / unit price, since a supplier's 거래원장 has no fixed
   // column order this app can assume. Each <select> is labeled with the header text (if the
@@ -3328,8 +3379,7 @@
   // can tell columns apart without needing to already know the file's structure by heart.
   function startIngredientImportMapping(rows){
     pendingMappingRows = rows;
-    ingredientManagerListEl.style.display = 'none';
-    document.getElementById('addIngredientMasterBtn').style.display = 'none';
+    setItemsScreenChrome(false);
     ingredientImportMappingEl.style.display = 'block';
     renderImportMappingOptions();
     importMapHasHeaderCheckbox.onchange = renderImportMappingOptions;
@@ -3355,14 +3405,12 @@
   }
   function closeIngredientImportMapping(){
     ingredientImportMappingEl.style.display = 'none';
-    ingredientManagerListEl.style.display = '';
-    document.getElementById('addIngredientMasterBtn').style.display = '';
+    setItemsScreenChrome(true);
     pendingMappingRows = null;
   }
 
   function renderIngredientImportPreview(){
-    ingredientManagerListEl.style.display = 'none';
-    document.getElementById('addIngredientMasterBtn').style.display = 'none';
+    setItemsScreenChrome(false);
     ingredientImportPreviewEl.style.display = 'block';
     if (pendingImportNew.length === 0 && pendingImportChanged.length === 0){
       ingredientImportSummaryEl.textContent = '변경 사항이 없어요 — 모든 재료가 이미 최신 상태예요.';
@@ -3403,8 +3451,7 @@
 
   function closeIngredientImportPreview(){
     ingredientImportPreviewEl.style.display = 'none';
-    ingredientManagerListEl.style.display = '';
-    document.getElementById('addIngredientMasterBtn').style.display = '';
+    setItemsScreenChrome(true);
     pendingImportNew = [];
     pendingImportChanged = [];
   }
@@ -4166,6 +4213,104 @@
     return parts.join(' · ');
   }
 
+  // 방금 만든 재료의 구매량/단위/가격을 그 자리에서 받는 작은 패널. 저장하면 items에 쓰고
+  // item_price_history에도 첫 줄을 남긴다(재료 화면에서 입력한 것과 똑같은 경로).
+  // "나중에"를 누르면 이름만 있는 상태로 두고 넘어간다 — 단가 없는 재료로 표시될 뿐 막지 않는다.
+  function openInlinePriceEntry(item, hostEl, onDone){
+    var wrap = document.createElement('div');
+    wrap.className = 'inline-price-entry';
+
+    var title = document.createElement('p');
+    title.className = 'hint';
+    title.textContent = '"' + item.name + '" 단가를 지금 입력할까요?';
+    wrap.appendChild(title);
+
+    var rowEl = document.createElement('div');
+    rowEl.className = 'field-row';
+    var amt = document.createElement('input');
+    amt.type = 'number'; amt.inputMode = 'decimal'; amt.style.width = '76px'; amt.placeholder = '구매량';
+    var unitSel = document.createElement('select');
+    unitSel.className = 'text-input';
+    unitSel.style.flex = '0 0 72px'; unitSel.style.minWidth = '72px';
+    ['g', 'kg', 'ml', 'l', 'ea'].forEach(function(u){
+      var o = document.createElement('option');
+      o.value = u; o.textContent = (u === 'ea' ? '개' : u);
+      if (u === 'kg') o.selected = true;
+      unitSel.appendChild(o);
+    });
+    var price = document.createElement('input');
+    price.type = 'number'; price.inputMode = 'decimal'; price.style.width = '96px'; price.placeholder = '가격';
+    var won = document.createElement('span');
+    won.className = 'unit'; won.textContent = '원';
+    rowEl.appendChild(amt); rowEl.appendChild(unitSel); rowEl.appendChild(price); rowEl.appendChild(won);
+    wrap.appendChild(rowEl);
+
+    var resultEl = document.createElement('p');
+    resultEl.className = 'hint';
+    wrap.appendChild(resultEl);
+
+    function preview(){
+      var draft = Object.assign({}, item, {
+        purchase_amount: parseFloat(amt.value) || 0,
+        purchase_unit: unitSel.value,
+        purchase_price: parseFloat(price.value) || 0
+      });
+      var c = purchasedUnitCost(draft);
+      if (!((parseFloat(amt.value) || 0) > 0)){ resultEl.textContent = ''; return; }
+      if (unitSel.value === 'ea'){
+        resultEl.textContent = '→ 개당 ' + wonFmt(c.perEa) + '원 (무게 환산은 재료 화면에서 사용 무게를 넣어주세요)';
+      } else {
+        resultEl.textContent = '→ 1g당 ' + won2Fmt(c.perGram) + '원';
+      }
+    }
+    amt.addEventListener('input', preview);
+    price.addEventListener('input', preview);
+    unitSel.addEventListener('change', preview);
+
+    function finish(){
+      wrap.remove();
+      if (onDone) onDone();
+    }
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'field-row';
+    var saveBtn = document.createElement('button');
+    saveBtn.type = 'button'; saveBtn.className = 'io-btn primary'; saveBtn.textContent = '저장';
+    saveBtn.addEventListener('click', function(){
+      var fields = {
+        purchase_amount: parseFloat(amt.value) || 0,
+        purchase_unit: unitSel.value,
+        purchase_price: parseFloat(price.value) || 0
+      };
+      if (!(fields.purchase_amount > 0)){ alert('구매량을 입력해주세요.'); amt.focus(); return; }
+      saveBtn.disabled = true;
+      // 여기서 item에 미리 값을 넣지 않는다 — saveItemFields()가 성공했을 때만 서버가 돌려준
+      // 값으로 채우므로, 그게 곧 "저장에 성공했는지"의 판정 기준이 된다.
+      saveItemFields(item, fields, { appendHistory: true }).then(function(){
+        saveBtn.disabled = false;
+        // 실패하면 alert만 뜨고 item은 그대로다(구매량은 기본값 0). 그럴 땐 패널을 닫지 않는다 —
+        // 닫으면 방금 친 값이 사라져서 처음부터 다시 입력해야 한다. 가격이 아니라 구매량으로
+        // 판정하는 이유는, 가격은 0원이 정상인 재료(물)가 있어서 0을 실패와 구분할 수 없기 때문.
+        if ((Number(item.purchase_amount) || 0) !== fields.purchase_amount) return;
+        // myIngredients의 그 재료도 새 단가로 맞춘다 — 다시 불러오지 않고 바로 반영되게.
+        var view = itemToIngredientView(item);
+        var idx = myIngredients.findIndex(function(ig){ return ig.itemId === item.id; });
+        if (idx >= 0) myIngredients[idx] = view; else myIngredients.push(view);
+        finish();
+      });
+    });
+    var laterBtn = document.createElement('button');
+    laterBtn.type = 'button'; laterBtn.className = 'io-btn'; laterBtn.textContent = '나중에';
+    laterBtn.addEventListener('click', finish);
+    btnRow.appendChild(saveBtn); btnRow.appendChild(laterBtn);
+    wrap.appendChild(btnRow);
+
+    if (hostEl.parentNode) hostEl.parentNode.insertBefore(wrap, hostEl.nextSibling);
+    else hostEl.appendChild(wrap);
+    wrap.scrollIntoView({ block: 'center' });
+    amt.focus();
+  }
+
   function attachIngredientLinker(inputEl, dropdownEl, row, onChange){
     function linkedName(){
       if (row.ingredientId){
@@ -4223,14 +4368,23 @@
         addItem.className = 'combo-dropdown-item combo-add-new';
         addItem.textContent = '+ "' + typed + '" 새 재료로 추가';
         addItem.addEventListener('click', function(){
-          supabase.from('ingredients').insert({ owner_id: currentUser.id, name: typed }).select().single().then(function(res){
+          supabase.from('items').insert({
+            owner_id: currentUser.id, name: typed, kind: 'purchased', cost_mode: 'manual', category: '미분류'
+          }).select().single().then(function(res){
             if (res.error){ alert('재료 추가 실패: ' + res.error.message); return; }
-            myIngredients.push(res.data);
-            row.ingredientId = res.data.id;
-            inputEl.value = res.data.name;
+            myItems.push(res.data);
+            rebuildItemIndexes();
+            var view = itemToIngredientView(res.data);
+            myIngredients.push(view);
+            row.ingredientId = view.id;
+            inputEl.value = view.name;
             inputEl.removeAttribute('data-unresolved');
             closeDropdown();
-            if (onChange) onChange();
+            // 여기서 바로 단가를 받는다 — 예전엔 이름만 만들어 두고 재료 화면으로 따로 가서
+            // 가격을 넣어야 했는데, 레시피를 정리하는 흐름이 매번 끊겼다(요청).
+            // onChange()는 이 패널이 끝난 뒤에 부른다 — 먼저 부르면 목록이 다시 그려지면서
+            // 패널이 들어있는 DOM이 통째로 날아간다.
+            openInlinePriceEntry(res.data, inputEl.closest('.ing-link-combo') || inputEl.parentNode, onChange);
           });
         });
         dropdownEl.appendChild(addItem);
@@ -7401,10 +7555,6 @@
     if (e.key === 'Escape' && itemsPageEl.style.display !== 'none') closeItemsModal();
   });
   itemSearchInput.addEventListener('input', function(){ expandedItemId = null; renderItemsList(); });
-  document.getElementById('openLegacyIngredientsBtn').addEventListener('click', function(){
-    closeAccountMenu();
-    openIngredientManagerModal();
-  });
   addItemBtn.addEventListener('click', function(){
     if (!currentUser) return;
     supabase.from('items').insert({
@@ -7750,35 +7900,58 @@
       var changedChecked = Array.prototype.slice.call(ingredientImportChangedListEl.querySelectorAll('input[data-kind="changed"]:checked'))
         .map(function(el){ return pendingImportChanged[parseInt(el.dataset.idx, 10)]; });
       if (newChecked.length === 0 && changedChecked.length === 0){ closeIngredientImportPreview(); return; }
+      // BOM 4단계(2026-08-20) — items에 쓴다. 구 ingredients 표에는 더 이상 쓰지 않는다.
+      // updated_at을 같이 넣는 이유는 saveItemFields()와 같다(이 스키마엔 자동 갱신 트리거가 없다).
       var tasks = newChecked.map(function(item){
-        return supabase.from('ingredients').insert({
-          owner_id: currentUser.id, name: item.name, category: item.category,
-          purchase_amount: item.purchase_amount, purchase_unit_type: item.purchase_unit_type,
-          purchase_price: item.purchase_price,
-          price_per_gram: computePricePerGram(item.purchase_amount, item.purchase_unit_type, item.purchase_price)
+        return supabase.from('items').insert({
+          owner_id: currentUser.id, name: item.name, kind: 'purchased', cost_mode: 'manual',
+          category: item.category || '미분류',
+          purchase_amount: item.purchase_amount, purchase_unit: item.purchase_unit_type,
+          purchase_price: item.purchase_price
         }).select().single();
       }).concat(changedChecked.map(function(item){
-        // updated_at을 같이 넣는다 — CSV로 갱신한 단가도 "언제 바뀐 값인지" 남아야 재료 연결
-        // 드롭다운의 날짜 표시가 의미를 갖는다(위 saveFields()와 같은 이유).
-        return supabase.from('ingredients')
-          .update(Object.assign({ updated_at: new Date().toISOString() }, item.fields))
-          .eq('id', item.ig.id).select().single();
+        return supabase.from('items').update({
+          updated_at: new Date().toISOString(),
+          purchase_amount: item.fields.purchase_amount,
+          purchase_unit: item.fields.purchase_unit_type,
+          purchase_price: item.fields.purchase_price
+        }).eq('id', item.ig.itemId).select().single();
       }));
       Promise.all(tasks).then(function(results){
         var failed = 0;
-        results.forEach(function(res, i){
-          if (res.error){ failed++; return; }
-          if (i < newChecked.length){
-            myIngredients.push(res.data);
-          } else {
-            var changedItem = changedChecked[i - newChecked.length];
-            Object.keys(changedItem.fields).forEach(function(k){ changedItem.ig[k] = changedItem.fields[k]; });
-          }
+        var applied = [];
+        results.forEach(function(res){
+          if (res.error || !res.data){ failed++; return; }
+          applied.push(res.data);
         });
-        closeIngredientImportPreview();
-        renderIngredientManager();
-        if (failed > 0) alert('일부 항목 저장에 실패했어요 (' + failed + '개).');
-        else showToast((newChecked.length + changedChecked.length) + '개 항목을 적용했어요');
+        // 가격 이력 — CSV로 갱신한 값도 "언제 얼마였는지"가 남아야 가격 변화를 볼 수 있다
+        // (이게 CSV 가져오기를 items로 옮긴 가장 큰 이유다, 스펙 §7.3).
+        var histRows = applied.filter(function(it){ return (Number(it.purchase_amount) || 0) > 0; })
+          .map(function(it){
+            return {
+              item_id: it.id,
+              purchase_amount: Number(it.purchase_amount) || 0,
+              purchase_unit: it.purchase_unit,
+              purchase_price: Number(it.purchase_price) || 0,
+              price_per_gram: purchasedUnitCost(it).perGram,
+              source: 'csv'
+            };
+          });
+        var histTask = histRows.length
+          ? supabase.from('item_price_history').insert(histRows)
+          : Promise.resolve({});
+        histTask.then(function(hres){
+          // 이력 저장 실패가 이미 적용된 단가를 무효로 만들지는 않는다 — 따로 알린다.
+          var histFailed = !!(hres && hres.error);
+          itemHistoryCache = {};
+          closeIngredientImportPreview();
+          Promise.all([loadItems(), loadMyIngredients()]).then(function(){
+            if (itemsPageEl.style.display !== 'none') renderItemsList();
+          });
+          if (failed > 0) alert('일부 항목 저장에 실패했어요 (' + failed + '개).');
+          else if (histFailed) alert(applied.length + '개 항목을 적용했어요. 다만 가격 이력은 남기지 못했어요.');
+          else showToast(applied.length + '개 항목을 적용했어요');
+        });
       });
     });
 
