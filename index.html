@@ -6753,6 +6753,9 @@
   // 덮어쓰지 않고 append하는 게 핵심 — 현재 단가는 "가장 최근 이력"과 항상 같다.
   function saveItemFields(it, fields, opts){
     opts = opts || {};
+    // 이 스키마엔 updated_at 자동 갱신 트리거가 없다 — 저장 경로마다 직접 넣어야 한다
+    // (recipes.updated_at / ingredients.updated_at이 같은 이유로 죽어 있던 전례가 있다).
+    fields = Object.assign({ updated_at: new Date().toISOString() }, fields);
     return supabase.from('items').update(fields).eq('id', it.id).select().then(function(res){
       if (res.error){ alert('저장 실패: ' + res.error.message); return; }
       if (!res.data || res.data.length === 0){ alert('저장되지 않았어요 (권한 문제일 수 있어요).'); return; }
@@ -6926,6 +6929,7 @@
         if (it.is_sellable) buildSellableItemDetail(detail, it);
         else if (it.kind === 'made') buildMadeItemDetail(detail, it);
         else buildPurchasedItemDetail(detail, it);
+        appendItemDeleteBtn(detail, it);
         row.appendChild(detail);
       }
       itemListEl.appendChild(row);
@@ -6937,6 +6941,54 @@
     expandedItemId = null;
     renderItemsList();
   });
+
+  // ---- 상세: 삭제 (세 종류 공통) ------------------------------------------
+  // bom_lines.child_item_id가 on delete restrict라, 어딘가에 쓰이는 품목은 DB가 삭제를 거부한다.
+  // 원시 FK 에러 문구를 그대로 보여주는 대신 "어느 배합에서 쓰고 있는지"를 먼저 알려주고 막는다
+  // (스펙 §10-4). 소프트 삭제(사용중지)는 그대로 남겨두고 그 옆에 두는 별개 동작이다.
+  function itemsUsing(itemId){
+    var names = [];
+    Object.keys(bomLinesByParent).forEach(function(parentId){
+      var used = (bomLinesByParent[parentId] || []).some(function(l){ return l.child_item_id === itemId; });
+      if (!used) return;
+      var parent = itemsById[parentId];
+      names.push(parent ? parent.name : '(이름 없는 품목)');
+    });
+    return names;
+  }
+
+  function appendItemDeleteBtn(el, it){
+    var wrap = document.createElement('div');
+    wrap.className = 'field-row';
+    wrap.style.marginTop = '10px';
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'io-btn danger';
+    del.textContent = '삭제';
+    del.addEventListener('click', function(){
+      var users = itemsUsing(it.id);
+      if (users.length){
+        alert('"' + it.name + '"은(는) 아래 배합에서 쓰고 있어서 삭제할 수 없어요.\n\n' +
+              users.slice(0, 5).join(', ') + (users.length > 5 ? ' 외 ' + (users.length - 5) + '개' : '') +
+              '\n\n먼저 그 배합에서 빼거나, 대신 "사용중지"를 눌러주세요.');
+        return;
+      }
+      if (!confirm('"' + it.name + '"을(를) 완전히 삭제할까요?\n가격 이력도 함께 사라지고, 되돌릴 수 없어요.')) return;
+      supabase.from('items').delete().eq('id', it.id).select().then(function(res){
+        if (res.error){ alert('삭제 실패: ' + res.error.message); return; }
+        if (!res.data || res.data.length === 0){ alert('삭제되지 않았어요 (권한 문제일 수 있어요).'); return; }
+        myItems = myItems.filter(function(x){ return x.id !== it.id; });
+        delete itemsById[it.id];
+        delete itemHistoryCache[it.id];
+        delete bomLinesByParent[it.id];
+        if (expandedItemId === it.id) expandedItemId = null;
+        renderItemsList();
+        showToast('삭제했어요');
+      });
+    });
+    wrap.appendChild(del);
+    el.appendChild(wrap);
+  }
 
   // ---- 상세: 공용 입력 행 --------------------------------------------------
   function itemNumberRow(parent, label, value, onCommit, unit){
@@ -7020,7 +7072,8 @@
                     next.purchase_unit !== it.purchase_unit ||
                     next.purchase_price !== (parseFloat(it.purchase_price) || 0);
       Object.assign(it, next);
-      next.price_per_gram = purchasedUnitCost(it).perGram;
+      // items에는 price_per_gram 컬럼이 없다 — 단가는 purchasedUnitCost()로 그때그때 계산하고,
+      // 그 시점 값의 보존은 item_price_history 쪽에서만 한다(appendPriceHistory).
       saveItemFields(it, next, { appendHistory: changed }).then(function(){ renderItemsList(); });
     }
     amt.addEventListener('change', commitPurchase);
@@ -7032,8 +7085,7 @@
     if (isEa){
       itemNumberRow(el, '1개당 사용 무게', it.usable_weight_g, function(v){
         it.usable_weight_g = v;
-        saveItemFields(it, { usable_weight_g: v, price_per_gram: purchasedUnitCost(it).perGram })
-          .then(function(){ renderItemsList(); });
+        saveItemFields(it, { usable_weight_g: v }).then(function(){ renderItemsList(); });
       }, 'g');
       var uh = document.createElement('p');
       uh.className = 'hint';
